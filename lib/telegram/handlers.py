@@ -218,7 +218,7 @@ class Handlers:
             chosen = route(context, st, ctx.registry)
             extra = []
             if st.post_to_groups and trig.private and post.wants_post(trig.text):
-                extra = [post.tool(ctx, msg.from_user.id)]
+                extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)

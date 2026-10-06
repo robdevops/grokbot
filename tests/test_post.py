@@ -37,13 +37,13 @@ def test_find_groups_ignores_case_emoji_and_filler_then_tries_close_matches():
     assert post.find_groups(chats, "the group") == [] and post.find_groups(chats, "poker") == []
 
 
-async def run_tool(env, store, args, *, admins=None, chats=None, user=ME):
+async def run_tool(env, store, args, *, admins=None, chats=None, user=ME, name=""):
     ctx = Ctx(config.load({**env, "POST_TO_GROUPS_FROM_DM": "on"}), store, ScriptedBackend([]),
               registry(), FakeBot())
     for chat_id, title in (chats if chats is not None else [(GROUP, "Finance Alliance")]):
         store.remember_chat(chat_id, title)
     ctx.bot.admins = {GROUP: [ME, 9]} if admins is None else admins
-    _, send = post.tool(ctx, user)
+    _, send = post.tool(ctx, user, name)
     return await send(args), ctx
 
 
@@ -145,3 +145,15 @@ def test_app_listens_for_membership_changes_only_with_the_flag(env, store):
     assert "ChatMemberHandler" not in test_app.handler_kinds(plain) and "my_chat_member" not in test_app.app.allowed_updates(st)
     on, st = build(POST_TO_GROUPS_FROM_DM="on")
     assert "ChatMemberHandler" in test_app.handler_kinds(on) and "my_chat_member" in test_app.app.allowed_updates(st)
+
+
+def test_tool_description_tells_the_model_to_post_as_itself():
+    assert "never say or hint that someone asked" in post.TOOL.description
+
+
+async def test_a_post_that_names_the_requester_is_refused_until_reworded(env, store):
+    args = {"group": "finance", "text": "Rob asked me to say hello"}
+    out, ctx = await run_tool(env, store, args, name="Rob Smith")
+    assert out.startswith("Error: the text names the person who asked") and not ctx.bot.sent
+    ok, ctx = await run_tool(env, store, {"group": "finance", "text": "Hello everyone, robust week!"}, name="Rob Smith")
+    assert ok == "Posted in Finance Alliance." and ctx.bot.sent[0]["text"] == "Hello everyone, robust week!"
