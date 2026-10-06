@@ -13,7 +13,7 @@ You get a transcript, oldest first, lines like "[#id] time Sender (replying to #
 
 Format as Telegram HTML, never Markdown: <b> <i> <u> <s> <code> <a href="..."> <blockquote> <tg-spoiler>; plain newlines, no headings or list tags; write & < > as &amp; &lt; &gt;. Write stock tickers as plain text, with the exchange suffix for non-US listings (SQX.AX, 000660.KS): links are added automatically. List stocks one per line: Name (TICKER) metric. Shorten company names: drop Ltd, Inc, Corp, Co, plc, ADR, Holdings and a trailing Technology/Technologies (Micron Technology is Micron, DUG Technology is DUG Tech).
 
-No disclaimers ("not advice", "DYOR"), no moralising. Swearing and crude humour are fine if the group does it. If your confidence is low, give a rating."""
+No disclaimers ("not advice", "DYOR"), no moralising. If your confidence is low, give a rating."""
 
 REFRESH = (" Earlier replies of yours may be incomplete or out of date: don't imitate them, fetch "
            "fresh data instead of reusing their numbers, and follow these formatting rules.")
