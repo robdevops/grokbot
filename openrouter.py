@@ -65,6 +65,7 @@ import random
 import re
 import sqlite3
 import tempfile
+import textwrap
 import time
 from contextlib import AsyncExitStack
 from datetime import datetime
@@ -132,7 +133,8 @@ ALERT_CHATS = {
 MAX_TG_MESSAGE = 4000  # Telegram's limit is 4096
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+# journald stamps every line with the time, so don't repeat it.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("bot")
 
@@ -685,10 +687,10 @@ class MCPServer:
                 },
             })
         enabled = set(self.fn_names.values())
-        log.info("MCP %s: enabled %s", self.label, sorted(enabled))
         skipped = sorted(t.name for t in listed if t.name not in enabled)
+        log_names(f"MCP {self.label}: {len(enabled)} tools:", sorted(enabled))
         if skipped:
-            log.info("MCP %s: skipped (not read-only or not allowed) %s", self.label, skipped)
+            log_names(f"MCP {self.label}: {len(skipped)} skipped:", skipped)
 
     async def call(self, tool: str, args: dict) -> str:
         if not self.session:
@@ -710,6 +712,13 @@ class MCPServer:
             log.warning("MCP %s.%s result truncated (%d chars)", self.label, tool, len(out))
             out = out[:MAX_TOOL_OUTPUT] + f"\n...[truncated; {len(out)} chars total]"
         return out
+
+
+def log_names(head: str, names: list[str], width: int = 80) -> None:
+    """Log a list of tool names on lines short enough not to wrap in a terminal or journal."""
+    lines = textwrap.wrap(", ".join(n.removeprefix("get_") for n in names), width - len(head))
+    for i, line in enumerate(lines):
+        log.info("%s %s", head if i == 0 else " " * len(head), line)
 
 
 def _leaf_errors(e: BaseException) -> list[BaseException]:
@@ -1012,18 +1021,6 @@ def call_query(call) -> str:
     return ""
 
 
-def rough_tokens(messages: list[dict]) -> int:
-    """Crude size of what we sent, to compare against the reported input tokens."""
-    total = 0
-    for m in messages:
-        c = m.get("content")
-        if isinstance(c, str):
-            total += len(c)
-        elif isinstance(c, list):
-            total += sum(len(p.get("text", "")) for p in c if isinstance(p, dict))
-    return total // 4
-
-
 def merge_reasoning(details: list[dict], new: list) -> None:
     """Append streamed reasoning_details, joining consecutive text fragments of one block."""
     for d in new:
@@ -1153,11 +1150,10 @@ async def ask_model(messages: list[dict], user_id: int | None = None, on_text=No
         tok["out"] += getattr(u, "completion_tokens", 0) or 0
         tok["cached"] += getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
         tok["cost"] += getattr(u, "cost", 0) or 0
-        # in >> sent means search results were injected; in ~= sent means nothing was searched.
-        log.info("Round %d: tokens sent~%s in=%s out=%s cost=%s cites=%s finish=%s",
-                 rounds, rough_tokens(conv), getattr(u, "prompt_tokens", "?"),
-                 getattr(u, "completion_tokens", "?"), getattr(u, "cost", "?"),
-                 len(r.cites), r.finish)
+        n_in = getattr(u, "prompt_tokens", 0) or 0
+        n_cached = getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
+        log.info("Round %d: in %d (%d cached) out %d, %s", rounds, n_in, n_cached,
+                 getattr(u, "completion_tokens", 0) or 0, r.finish)
         if final:
             log.warning("Hit MAX_TOOL_ROUNDS (%d); made the model answer with what it has",
                         MAX_TOOL_ROUNDS)
@@ -1183,7 +1179,7 @@ async def ask_model(messages: list[dict], user_id: int | None = None, on_text=No
             search_on = False
             continue
         break
-    log.info("%.1fs: %d rounds, %d tool calls | in %d (%.0f%% cached) out %d cost %.4f",
+    log.info("%.1fs, %d rounds, %d tools: in %d (%.0f%% cached) out %d, $%.4f",
              time.monotonic() - t0, rounds, tool_calls, tok["in"],
              100 * tok["cached"] / tok["in"] if tok["in"] else 0, tok["out"], tok["cost"])
     text = TOOL_SYNTAX_RE.sub("", r.text).strip()
@@ -1489,6 +1485,8 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def post_init(app: Application) -> None:
     if MCP_SERVERS:
         await asyncio.gather(*(s.start(app.bot) for s in MCP_SERVERS.values()))
+        schema = json.dumps([t for s in MCP_SERVERS.values() for t in s.tools])
+        log.info("MCP tool schemas: ~%d tokens, re-sent every round", len(schema) // 4)
 
 
 async def post_shutdown(app: Application) -> None:
