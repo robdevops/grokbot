@@ -12,7 +12,7 @@ NOT_TICKERS = {
     "USD", "AUD", "EUR", "GBP", "JPY", "CNY",
     "NOTE", "EDIT", "TLDR", "FYI", "IMO", "IMHO", "AKA", "ETA", "VS", "PS",
     "VR", "AR", "XR", "API", "GPU", "CPU", "TPU", "HBM", "DRAM", "NAND", "EUV", "OS",
-    "U.S", "U.K", "P.A", "E.G", "I.E",
+    "U.S", "U.K", "P.A", "E.G", "I.E", "SMSF", "SUPER", "PNL",
 }
 
 # Yahoo needs the exchange suffix in the URL, but it's noise in the chat: link SQX.AX, show SQX.

@@ -78,6 +78,18 @@ async def test_chit_chat_gets_no_tools_and_needs_tools_reruns_with_everything(en
     assert "NEEDS_TOOLS" not in m.replies[0]["text"]
 
 
+async def test_partial_route_that_needs_more_is_asked_again_with_everything(env, store):
+    yahoo, sharesight = FakeMcp("yahoo"), FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
+    ctx, backend, h = make_ctx(env, store, [step("NEEDS_TOOLS"), step("your portfolio is up")],
+                               servers=[yahoo, sharesight])
+    m = user_msg(ctx.bot, "@stockbot how is NVDA looking compared with what I hold?")
+    await run(h, m)
+    assert backend.seen[0]["tools"] == ["yahoo__get_quote"]  # partial: no Sharesight
+    assert sorted(backend.seen[1]["tools"]) == ["sharesight__list_portfolios", "yahoo__get_quote"]
+    assert m.replies[0]["text"] == "your portfolio is up"
+    assert "NEEDS_TOOLS" in backend.seen[0]["system"]  # the partial route told the model how to ask
+
+
 async def test_market_question_offers_tools_up_front(env, store):
     mcp = FakeMcp("yahoo")
     ctx, backend, h = make_ctx(env, store, [step("ok")], servers=[mcp])
@@ -129,7 +141,8 @@ async def test_error_becomes_a_visible_message(env, store):
 async def test_movers_list_off_by_default_then_answered_once_without_tagging(env, store):
     text = "≥ 5.0% at close (ASX):\nNVDA +6.1%\nAMD +5.5%"
     for flag, expect in (({}, 0), ({"MOVERS_EXPLAIN": "on"}, 1)):
-        ctx, backend, h = make_ctx(env, store, [step("NVDA up on news.\nAMD up too.\n\nSmall caps swing.")], **flag)
+        ctx, backend, h = make_ctx(env, store, [step("NVDA up on news.\nAMD up too.\n\nSmall caps swing.")],
+                                   MOVERS_BOTS="finbotibot", **flag)
         m = user_msg(ctx.bot, text, is_bot=True)
         m.from_user.is_bot, m.from_user.username = True, "finbotibot"
         m.parse_entities = lambda types=None: {"b": "≥ 5.0% at close (ASX):"}

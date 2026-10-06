@@ -114,13 +114,14 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
 ## Optional features (off by default)
 Each is a flag; with the flag off none of its code runs.
 - **Daily holding-news DM** (`SHARESIGHT_HOLDING_NEWS=on`, at `SHARESIGHT_HOLDING_NEWS_TIME` in
-  `BOT_TZ`, to the people in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`, `portfolio:username` pairs):
+  `BOT_TZ`, to the people in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`, `portfolio:username` pairs such as
+  `MyPortfolio:alice,MySMSF:alice`; there is no default, so it must be set):
   reads each person's current Sharesight holdings, searches for *major* news from the past 24 hours
   (a forced search), and DMs only what qualifies (most days: nothing). Stories already reported in
   the last 3 days are not repeated. Each message has an **Unsubscribe** button: per ticker, or all
   holding news, with an **Undo** button afterwards. People must have messaged the bot (or a group it
   is in) once so it knows their user ID. `/holdingnews` in a DM runs the check now and always replies.
-- **Reply to a movers bot** (`MOVERS_EXPLAIN=on`, `MOVERS_BOTS`, default `finbotibot`): when such a
+- **Reply to a movers bot** (`MOVERS_EXPLAIN=on` and `MOVERS_BOTS=<usernames>`, which has no default): when such a
   bot posts an end-of-day list ("≥ 5.0% at close (ASX):" followed by stocks with % changes) the bot
   explains each move with a forced search, once, without tagging the other bot, ignoring its image,
   and dropping the closing wrap-up paragraph.
@@ -148,10 +149,18 @@ tools (sorted), history (stepped window), and the volatile part last (time, down
 Each answer's log line shows the cached percentage.
 
 **`TOKEN_SAVER`** (on by default; set `off` to switch all of these off at once):
-- **Tool gate:** chit-chat gets no data tools and no search (the model answers on its own; if it
-  decides it needs live data it replies `NEEDS_TOOLS` and the bot asks again with everything on).
-  Market questions get the market servers plus search; portfolio questions add servers marked
-  `"gate": "portfolio"`.
+- **Tool gate:** chit-chat gets no data tools and no search (the model answers on its own). Market
+  questions (a ticker, or words like price, earnings, ETF, market) get the market servers plus search;
+  news-style questions ("latest", "today", "who won") get search. Servers marked `"gate": "portfolio"`
+  (Sharesight) are only offered for **portfolio questions**: portfolio, holdings, Sharesight, SMSF, super
+  fund, net worth, "what do I own", "how am I doing", "am I up or down", "what did I make"; "my" or "our"
+  followed by stocks, shares, positions, account, cash, balance, returns, gains, performance, dividends,
+  winners, losers, P&L, investments, funds, ETFs, trades or watchlist ("my biggest winner" counts);
+  weaker words (performance, gains, positions, winners, losers, P&L) when no ticker is named; and
+  any name in `PORTFOLIO_NAMES` (default: the portfolio names in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`),
+  matched as a whole word, so listing a first name makes every mention of it a portfolio question.
+  If a message got fewer tools than exist and the model needs more, it replies `NEEDS_TOOLS` and the
+  bot asks again with everything on (the marker is never shown to anyone).
 - **`FAST_MODEL`:** if set, used instead of `MODEL` for requests the gate judged simple.
 - **Smaller tool definitions:** descriptions cut to 220 characters, parameter descriptions to their
   first sentence, titles/defaults/examples dropped.
@@ -175,7 +184,7 @@ different label (`python bot.py grok`, `python bot.py mimo`) to tell them apart 
 
 ## Logs
 One line per event, without a timestamp when run under systemd (journald adds one):
-`[Rob (@rob_llama) 5467329077] first 60 characters of the message ...` (groups add ` @ <chat id>`),
+`[Jane Doe (@jane) 5467329077] first 60 characters of the message ...` (groups add ` @ <chat id>`),
 `Round 2: in 14158 (7400 cached) out 738, stop`, and a per-request summary with rounds, tool calls,
 tokens, cached % and cost. Tool servers log their tools in short wrapped lines; startup logs the
 token size of the tool definitions.
@@ -199,11 +208,12 @@ token size of the tool definitions.
 | `ALERT_CHAT_IDS` | Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts). |
 | `OWNER_USER_ID` | Telegram user ID allowed to use /credits and /usage. |
 | `MOVERS_EXPLAIN` | on|off. Explain another bot's end-of-day big-movers lists (default off). |
-| `MOVERS_BOTS` | Usernames of the bots whose movers lists are explained (default finbotibot). |
+| `MOVERS_BOTS` | Usernames of the bots whose movers lists are explained (no default; required for MOVERS_EXPLAIN). |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
 | `SHARESIGHT_HOLDING_NEWS` | on|off. Daily Sharesight holding-news DM (default off). |
 | `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
-| `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of Sharesight portfolio:telegram_username pairs to notify. |
+| `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify (no default; required for the digest). |
+| `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
 | `TOKEN_SAVER` | on|off. Master switch for the token-saving heuristics (default on). |
 
 ## Choosing a model

@@ -64,6 +64,19 @@ def test_main_accepts_and_ignores_a_label_and_unknown_args(monkeypatch, tmp_path
     assert started
 
 
+def test_warn_config_names_missing_settings(env, caplog):
+    import logging
+    with caplog.at_level(logging.WARNING, logger="bot"):
+        app.warn_config(config.load({**env, "SHARESIGHT_HOLDING_NEWS": "on", "MOVERS_EXPLAIN": "on"}))
+    assert "SHARESIGHT_HOLDING_NEWS_RECIPIENTS is empty" in caplog.text and "MOVERS_BOTS is empty" in caplog.text
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="bot"):
+        app.warn_config(config.load({**env, "SHARESIGHT_HOLDING_NEWS": "on", "MOVERS_EXPLAIN": "on",
+                                     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "A:b", "MOVERS_BOTS": "x"}))
+        app.warn_config(config.load(env))
+    assert caplog.text == ""
+
+
 async def test_alert_down_notifies_alert_chats_only(env, store):
     st = config.load({**env, "ALERT_CHAT_IDS": "-10 -11"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())

@@ -36,6 +36,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   each other. Provider differences live only in `llm/xai.py` and `llm/openrouter.py`.
 - Parts sent to the model are neutral dicts: `{"type": "text", ...}` / `{"type": "image", "url", "detail"}`;
   tools are `ToolDef`; each backend converts. Don't add `if provider ==` anywhere else.
+- No usernames, portfolio names or other personal names in code or docs: they come from env (README uses placeholders).
 - New env var: add it to `config.ENV_VARS`, `Settings`, and the README table. Optional features stay off by default.
 - Don't make a prompt change without checking `make prompt-report`; budgets are pinned in `tests/test_budgets.py`.
 

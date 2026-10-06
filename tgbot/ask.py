@@ -41,8 +41,8 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
               cache_key: str | None = None, on_text=None, kind: str = "chat",
               chat_id: int = 0) -> Answer:
     """Ask the configured provider and record the usage. `route` says which tools to offer;
-    must_search forces a search (and offers nothing else). A message the gate judged simple that
-    gets back NEEDS_TOOLS is asked again with everything on."""
+    must_search forces a search (and offers nothing else). A message the gate gave fewer tools
+    than exist that gets back NEEDS_TOOLS is asked again with everything on."""
     st = ctx.st
     if must_search:
         if not st.search:
@@ -56,13 +56,13 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         tools=[t for s in route.servers for t in s.tools],
         search=route.search, must_search=must_search, reasoning=st.reasoning,
         cache_id=cache_id(ctx.first_name, cache_key),
-        on_text=_hide_needs_tools(on_text) if route.simple else on_text,
+        on_text=_hide_needs_tools(on_text) if (route.simple or route.partial) else on_text,
         no_tools_system=no_tools_system(ctx.first_name, saver=saver),
     )
     answer = await policy.ask(ctx.backend, ctx.registry, req)
     await _record(ctx, req.model, kind, chat_id, answer)
-    if route.simple and wants_tools(answer.text):
-        log.info("Gate said simple, the model asked for tools: asking again with everything on")
+    if (route.simple or route.partial) and wants_tools(answer.text):
+        log.info("Gate offered fewer tools, the model asked for more: asking again with everything on")
         full = Route(ctx.registry.up(), st.search)
         req = dataclasses.replace(
             req, system=system_prompt(ctx.first_name, full, ctx.backend.search_what, saver=saver),

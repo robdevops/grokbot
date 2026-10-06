@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
@@ -26,15 +27,14 @@ ENV_VARS: dict[str, str] = {
     "ALERT_CHAT_IDS": "Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts).",
     "OWNER_USER_ID": "Telegram user ID allowed to use /credits and /usage.",
     "MOVERS_EXPLAIN": "on|off. Explain another bot's end-of-day big-movers lists (default off).",
-    "MOVERS_BOTS": "Usernames of the bots whose movers lists are explained (default finbotibot).",
+    "MOVERS_BOTS": "Usernames of the bots whose movers lists are explained (no default; required for MOVERS_EXPLAIN).",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
     "SHARESIGHT_HOLDING_NEWS": "on|off. Daily Sharesight holding-news DM (default off).",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
-    "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of Sharesight portfolio:telegram_username pairs to notify.",
+    "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify (no default; required for the digest).",
+    "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
     "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
 }
-
-DEFAULT_RECIPIENTS = "Sue:svs_fluffyegg,SueSMSF:svs_fluffyegg,Rob:rob_llama,RobSMSF:rob_llama"
 
 # Tuning constants (not configurable).
 MAX_TOOL_ROUNDS = 6  # model <-> tool round trips per answer
@@ -75,6 +75,7 @@ class Settings:
     holding_news: bool
     holding_news_time: str
     holding_news_recipients: dict[str, str]
+    portfolio_names: frozenset[str]
     token_saver: bool
 
     @property
@@ -110,6 +111,10 @@ def _pairs(text: str) -> dict[str, str]:
     }
 
 
+def _names(text: str) -> frozenset[str]:
+    return frozenset(n.strip().lower() for n in re.split(r"[,\n]", text) if n.strip())
+
+
 def load(env: Mapping[str, str] | None = None) -> Settings:
     """Build Settings from `env` (default: os.environ). Raises ConfigError if unusable."""
     env = os.environ if env is None else env
@@ -133,6 +138,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     search = env.get("SEARCH", "on").strip().lower() != "off"
     if provider == "openrouter" and not search_model:
         search = False  # nothing to run the searches with
+    recipients = _pairs(env.get("SHARESIGHT_HOLDING_NEWS_RECIPIENTS", ""))
     return Settings(
         telegram_token=token,
         provider=provider,
@@ -151,13 +157,12 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         owner_id=int(env.get("OWNER_USER_ID") or 0),
         movers_explain=_flag(env, "MOVERS_EXPLAIN"),
         movers_bots=frozenset(
-            u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "finbotibot").replace(",", " ").split()
+            u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "").replace(",", " ").split()
         ),
         dm_buttons=_flag(env, "TELEGRAM_DM_BUTTONS"),
         holding_news=_flag(env, "SHARESIGHT_HOLDING_NEWS"),
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
-        holding_news_recipients=_pairs(
-            env.get("SHARESIGHT_HOLDING_NEWS_RECIPIENTS", DEFAULT_RECIPIENTS)
-        ),
+        holding_news_recipients=recipients,
+        portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),
         token_saver=saver,
     )

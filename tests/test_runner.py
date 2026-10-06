@@ -199,5 +199,48 @@ def test_gate_full_when_forced_or_token_saver_off(settings, env):
     assert r.servers == [y, s] and r.search and not r.simple
 
 
+PORTFOLIO_PHRASES = [
+    "how is my portfolio doing", "what are my holdings", "show my performance this year", "what do I own",
+    "how are my stocks", "how is my smsf going", "what's in my SMSF", "how am I doing this year",
+    "what did I make this month", "my returns ytd?", "what's my biggest winner", "what's my cash balance",
+    "net worth update", "my super fund", "my watchlist", "who's my worst performer", "what's my P&L",
+    "my position in CBA", "am I up or down today", "show performance this year", "rob smsf vs rob personal",
+    "are my dividends coming",
+]
+
+
+@pytest.mark.parametrize("text", PORTFOLIO_PHRASES)
+def test_gate_recognises_portfolio_questions(text, settings):
+    y, s = servers()
+    assert s in route(text, settings, registry(y, s)).servers
+
+
+@pytest.mark.parametrize("text", [
+    "what is the performance of NVDA", "how is NVDA doing", "hello there", "what do you think of super mario",
+    "any news on the fed?", "who won the match last night",
+])
+def test_gate_keeps_sharesight_out_of_other_questions(text, settings):
+    y, s = servers()
+    assert s not in route(text, settings, registry(y, s)).servers
+
+
+def test_gate_matches_configured_portfolio_names_as_whole_words(env):
+    st = config.load({**env, "PORTFOLIO_NAMES": "Family Trust, RobSMSF"})
+    y, s = servers()
+    for text in ("how is the family trust going", "RobSMSF?", "robsmsf's returns"):
+        assert s in route(text, st, registry(y, s)).servers, text
+    assert s not in route("trustworthy family", st, registry(y, s)).servers
+
+
+def test_gate_marks_routes_that_offer_fewer_tools(settings):
+    y, s = servers()
+    reg = registry(y, s)
+    market = route("how is NVDA looking?", settings, reg)
+    assert market.partial and not market.simple  # Yahoo + search, but not Sharesight
+    assert not route("how is my portfolio and NVDA looking", settings, reg).partial
+    assert route("hello", settings, reg).simple and not route("hello", settings, reg).partial
+    assert not route("anything", settings, reg, force_full=True).partial
+
+
 def test_wants_tools():
     assert wants_tools("NEEDS_TOOLS") and wants_tools("  needs_tools.") and not wants_tools("Sure thing")
