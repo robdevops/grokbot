@@ -152,8 +152,8 @@ def test_tool_description_tells_the_model_to_post_as_itself():
 
 
 async def test_a_post_that_names_the_requester_is_refused_until_reworded(env, store):
-    args = {"group": "finance", "text": "Rob asked me to say hello"}
-    out, ctx = await run_tool(env, store, args, name="Rob Smith")
+    args = {"group": "finance", "text": "Alex asked me to say hello"}
+    out, ctx = await run_tool(env, store, args, name="Alex Smith")
     assert out.startswith("Error: the text names the person who asked") and not ctx.bot.sent
-    ok, ctx = await run_tool(env, store, {"group": "finance", "text": "Hello everyone, robust week!"}, name="Rob Smith")
-    assert ok == "Posted in Finance Alliance." and ctx.bot.sent[0]["text"] == "Hello everyone, robust week!"
+    ok, ctx = await run_tool(env, store, {"group": "finance", "text": "Hello everyone, alexandrite week!"}, name="Alex Smith")
+    assert ok == "Posted in Finance Alliance." and ctx.bot.sent[0]["text"] == "Hello everyone, alexandrite week!"

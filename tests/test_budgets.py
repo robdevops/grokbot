@@ -36,7 +36,7 @@ def test_tool_definition_diet():
 
 
 def test_volatile_text_comes_last_so_the_prefix_can_be_cached():
-    base = dict(transcript="[#1] hi", sender="Rob", private=False, reply_quote=None, msg_id=2)
+    base = dict(transcript="[#1] hi", sender="Alex", private=False, reply_quote=None, msg_id=2)
     a = chat_prompt(now="10:00", down="", **base)
     b = chat_prompt(now="10:01", down="\n\nThese data sources are DOWN right now", **base)
     prefix = a.split("It's now")[0]
