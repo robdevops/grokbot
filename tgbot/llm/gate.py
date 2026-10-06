@@ -22,12 +22,15 @@ MARKET_WORDS = re.compile(
 PORTFOLIO_STRONG = re.compile(
     r"\b(portfolios?|holdings?|sharesight|smsf|superannuation|super fund|net worth|"
     r"what do i (?:own|hold)|how am i doing|am i (?:up|down)|"
-    r"what (?:did|have) i (?:make|made|lose|lost))\b", re.I)
+    r"what (?:did|have) i (?:make|made|lose|lost)|how did i do|"
+    r"(?:i|we) (?:out|under)perform\w*|(?:out|under)perform\w* (?:me|my|us|our)|"
+    r"(?:beat|beating|beaten|lag|lagged|lagging) (?:me|my|us|our)|did i (?:beat|lag|trail))\b", re.I)
 PORTFOLIO_MY = re.compile(
     r"\b(?:my|our)\s+(?:\w+\s+){0,2}?(?:stocks?|shares|positions?|holdings?|portfolio|smsf|super|"
     r"account|cash|balance|returns?|gains?|performance|dividends?|winners?|losers?|performers?|"
     r"p&l|pnl|investments?|funds?|etfs?|trades?|watchlist)\b", re.I)
-PORTFOLIO_WEAK = re.compile(r"\b(performance|gains?|positions?|winners?|losers?|p&l|pnl)\b", re.I)
+PORTFOLIO_WEAK = re.compile(
+    r"\b(performance|gains?|positions?|winners?|losers?|p&l|pnl|(?:out|under)perform\w*|ahead of|behind)\b", re.I)
 LIVE_WORDS = re.compile(
     r"\b(news|today|latest|yesterday|tonight|this week|right now|breaking|announce\w*|who won|"
     r"score|weather|happening|headlines?|current\w*|updates?|recent\w*|just (now|in))\b", re.I)

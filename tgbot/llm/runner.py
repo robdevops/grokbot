@@ -67,7 +67,12 @@ async def _run_mcp(call: Call, registry: Registry) -> str:
         if not isinstance(args, dict):
             return f"Error: arguments for {tool} must be a JSON object."
         log.info("MCP %s.%s %s", server.label, tool, brief_args(args))
-        return await server.call(tool, args)
+        out = await server.call(tool, args)
+        # A tiny result is usually an empty list or an error: show it, so "why did it say
+        # nothing came back?" can be answered from the log.
+        log.info("MCP %s.%s -> %d chars%s", server.label, tool, len(out),
+                 f": {out}" if len(out) <= 120 else "")
+        return out
     except TimeoutError:
         return f"Error: {tool} timed out after {server.timeout:g}s."
     except Exception as e:

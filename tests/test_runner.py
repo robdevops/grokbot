@@ -74,6 +74,19 @@ async def test_search_cap_unknown_and_unoffered_tools_and_bad_arguments():
     assert all("no usable query" in r for r in b.results_log[0])
 
 
+async def test_tool_result_size_and_small_results_are_logged(caplog):
+    import logging
+    big, small = FakeMcp("yahoo", reply="x" * 500), FakeMcp("sharesight", tools=("list_portfolios",),
+                                                            reply='{"portfolios":[]}')
+    b = ScriptedBackend([step(calls=[("1", "yahoo__get_quote", "{}"), ("2", "sharesight__list_portfolios", "{}")],
+                              finish="tool_calls"), step("ok")])
+    with caplog.at_level(logging.INFO, logger="bot"):
+        await run(b, registry(big, small), req(tools=[ToolDef(n, "d") for m in (big, small) for n in m.fn_names]))
+    assert "MCP yahoo.get_quote -> 500 chars" in caplog.text
+    assert 'MCP sharesight.list_portfolios -> 17 chars: {"portfolios":[]}' in caplog.text
+    assert "x" * 200 not in caplog.text
+
+
 async def test_unoffered_mcp_tool_is_refused():
     mcp = FakeMcp()
     b = ScriptedBackend([step(calls=[("1", "yahoo__get_quote", "{}")], finish="tool_calls"), step("ok")])
@@ -205,7 +218,8 @@ PORTFOLIO_PHRASES = [
     "what did I make this month", "my returns ytd?", "what's my biggest winner", "what's my cash balance",
     "net worth update", "my super fund", "my watchlist", "who's my worst performer", "what's my P&L",
     "my position in CBA", "am I up or down today", "show performance this year", "rob smsf vs rob personal",
-    "are my dividends coming",
+    "are my dividends coming", "why did I outperform Sue over the past month?", "how did I do last month",
+    "did I beat Sue this year", "why did Sue underperform me", "who's ahead of who this quarter, me or Sue",
 ]
 
 

@@ -23,7 +23,8 @@ SEARCH_NOTE = ("You can search {what}: use it for news, prices, markets, current
                "briefly if you like, one link at most.\n")
 NO_SEARCH_NOTE = "You have no web search: say plainly what you can't check instead of guessing.\n"
 SIMPLE_NOTE = ("You have no live data tools for this message. If answering needs live prices, "
-               f"news or portfolio data, reply with exactly {NEEDS_TOOLS} and nothing else.\n")
+               f"news or portfolio data, reply with exactly {NEEDS_TOOLS} and nothing else. Never claim "
+               "to have looked something up.\n")
 PARTIAL_NOTE = ("If you need a data source or search you don't have this time, reply with exactly "
                 f"{NEEDS_TOOLS} and nothing else.\n")
 NO_TOOLS_NOTE = ("You have no web access and no tools this time. Answer from the chat history and "
