@@ -66,6 +66,7 @@ import re
 import sqlite3
 import tempfile
 import textwrap
+import threading
 import time
 from contextlib import AsyncExitStack
 from datetime import datetime
@@ -238,6 +239,9 @@ db.execute(
     )"""
 )
 db.commit()
+# DB calls run in worker threads (asyncio.to_thread) so a lock held by another bot sharing
+# the file can't freeze the event loop; one connection is shared, so serialise its use.
+db_lock = threading.Lock()
 
 MEDIA_KINDS = ("photo", "video", "animation", "voice", "video_note", "audio",
                "document", "sticker", "poll", "location", "contact")
@@ -283,22 +287,22 @@ def save(msg: Message, text: str | None = None) -> None:
     `Message.text_html`, which rebuilds the HTML that was actually displayed - the same
     syntax the prompt asks for, and the same syntax the other bot logs.
     """
-    db.execute(
-        "INSERT OR REPLACE INTO messages VALUES (?, ?, ?, ?, ?, ?)",
-        (msg.chat_id, msg.message_id, sender_name(msg), text or describe(msg),
-         int(msg.date.timestamp()),
-         msg.reply_to_message.message_id if msg.reply_to_message else None),
-    )
-    db.commit()
+    row = (msg.chat_id, msg.message_id, sender_name(msg), text or describe(msg),
+           int(msg.date.timestamp()),
+           msg.reply_to_message.message_id if msg.reply_to_message else None)
+    with db_lock:
+        db.execute("INSERT OR REPLACE INTO messages VALUES (?, ?, ?, ?, ?, ?)", row)
+        db.commit()
 
 
 def stored_text(chat_id: int, message_id: int) -> str | None:
     """The logged body of a message, which for the bot's own replies keeps the markdown
     Telegram strips from `Message.text`."""
-    row = db.execute(
-        "SELECT text FROM messages WHERE chat_id = ? AND message_id = ?",
-        (chat_id, message_id),
-    ).fetchone()
+    with db_lock:
+        row = db.execute(
+            "SELECT text FROM messages WHERE chat_id = ? AND message_id = ?",
+            (chat_id, message_id),
+        ).fetchone()
     return row[0] if row else None
 
 
@@ -310,14 +314,16 @@ def transcript(chat_id: int, own_name: str) -> str:
     the unchanged start). Instead the window's start only moves every HISTORY_LIMIT/2
     messages: it holds between HISTORY_LIMIT and 1.5 x HISTORY_LIMIT messages (20-29 by
     default) and in between only grows at the end."""
-    total = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)).fetchone()[0]
     step = max(1, HISTORY_LIMIT // 2)
-    start = max(0, (total - HISTORY_LIMIT) // step * step)
-    rows = db.execute(
-        "SELECT message_id, sender, text, ts, reply_to FROM messages "
-        "WHERE chat_id = ? ORDER BY message_id LIMIT -1 OFFSET ?",
-        (chat_id, start),
-    ).fetchall()
+    with db_lock:
+        total = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?",
+                           (chat_id,)).fetchone()[0]
+        start = max(0, (total - HISTORY_LIMIT) // step * step)
+        rows = db.execute(
+            "SELECT message_id, sender, text, ts, reply_to FROM messages "
+            "WHERE chat_id = ? ORDER BY message_id LIMIT -1 OFFSET ?",
+            (chat_id, start),
+        ).fetchall()
     lines = []
     for mid, sender, text, ts, reply_to in rows:  # oldest first
         when = datetime.fromtimestamp(ts, TZ).strftime("%a %H:%M")
@@ -380,6 +386,9 @@ ONE_LETTER_RE = re.compile(r"\b([A-Z])\b(?=\s*[-+\u2014:]?\s*(?:[-+]?\d|\$))")
 # Period and unit shorthand: FY26, Q3, H1, CY25, 2X, 10K, 200D
 NOT_TICKER_RE = re.compile(r"^(?:FY|CY|HY|H|Q|FQ)\d+$|^\d|^[A-Z]\d+$")
 SEGMENT_RE = re.compile(r"(<[^>]+>)")
+# One pass for both shapes: a second pass over text the first one had already wrapped
+# could match inside the inserted <a href> markup.
+COMBINED_TICKER_RE = re.compile(f"{TICKER_RE.pattern}|{ONE_LETTER_RE.pattern}")
 
 
 def is_ticker(word: str) -> bool:
@@ -429,9 +438,9 @@ def mark_tickers(out: str, wrap) -> str:
         if depth:  # already inside bold, a link or code
             pieces.append(seg)
             continue
-        seg = TICKER_RE.sub(
-            lambda m: wrap(m.group(1)) if is_ticker(m.group(1)) else m.group(1), seg)
-        seg = ONE_LETTER_RE.sub(lambda m: wrap(m.group(1)), seg)
+        seg = COMBINED_TICKER_RE.sub(
+            lambda m: wrap(m.group(0)) if len(m.group(0)) == 1 or is_ticker(m.group(0))
+            else m.group(0), seg)
         pieces.append(seg)
     return "".join(pieces)
 
@@ -480,14 +489,43 @@ def to_html(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", out).strip()
 
 
-def split_message(text: str, size: int = MAX_TG_MESSAGE) -> list[str]:
-    chunks = []
-    while len(text) > size:
-        cut = text.rfind("\n", 0, size)
-        cut = cut if cut > 0 else size
-        chunks.append(text[:cut])
-        text = text[cut:].lstrip()
-    return chunks + [text] if text else chunks
+HTML_TAG_RE = re.compile(r"<(/?)([a-z][a-z0-9-]*)\b[^>]*>", re.I)
+
+
+def split_html(text: str, size: int = MAX_TG_MESSAGE) -> list[str]:
+    """Split Telegram HTML into messages of at most `size` characters.
+
+    Cuts at a newline where it can, never inside a tag or an entity, and keeps every
+    message well-formed: tags still open at a cut are closed there and re-opened at the
+    start of the next message, so links and bold survive a split."""
+    chunks, reopen = [], ""  # reopen: opening tags carried over from the previous chunk
+    while len(reopen) + len(text) > size:
+        room = size - len(reopen) - 32  # headroom for the closing tags
+        cut = text.rfind("\n", 0, room)
+        if cut <= 0:
+            cut = room
+        if text.rfind("<", 0, cut) > text.rfind(">", 0, cut):  # inside a tag
+            cut = text.rfind("<", 0, cut)
+        amp = text.rfind("&", max(0, cut - 10), cut)
+        if amp != -1 and ";" not in text[amp:cut]:  # inside an entity
+            cut = amp
+        cut = max(cut, 1)
+        head, text = reopen + text[:cut], text[cut:].lstrip()
+        stack = []  # (name, opening tag) still open at the end of head
+        for m in HTML_TAG_RE.finditer(head):
+            name = m.group(2).lower()
+            if not m.group(1):
+                stack.append((name, m.group(0)))
+            else:
+                for i in range(len(stack) - 1, -1, -1):
+                    if stack[i][0] == name:
+                        del stack[i]
+                        break
+        chunks.append(head + "".join(f"</{n}>" for n, _ in reversed(stack)))
+        reopen = "".join(tag for _, tag in stack)
+    if text.strip():
+        chunks.append(reopen + text)
+    return chunks
 
 
 # ------------------------------------------------------------------- MCP ----
@@ -665,12 +703,13 @@ class MCPServer:
                 sent = await self.bot.send_message(
                     chat_id, text, parse_mode=ParseMode.HTML, disable_notification=True
                 )
-                save(sent)  # so it shows up in the transcript the model sees
+                await asyncio.to_thread(save, sent)  # so it shows up in the model's transcript
             except Exception:
                 log.exception("Couldn't send MCP alert to chat %s", chat_id)
 
     async def _load_tools(self, session: ClientSession) -> None:
         listed = (await session.list_tools()).tools
+        self.tools, self.fn_names = [], {}  # a restart must not append every tool twice
         allow = set(self.cfg.get("allowed_tools", []))
         blocked = set(self.cfg.get("blocked_tools", []))
         for t in listed:
@@ -1249,6 +1288,12 @@ async def start_typing(bot, chat_id: int) -> asyncio.Task:
     return asyncio.create_task(resend())
 
 
+# Telegram's own tags, plus one half-written tag at the end of the text. A bare "<" in the
+# model's prose ("<5% from ATH") is not a tag and must survive.
+TG_TAG_NAMES = r"(?:b|strong|i|em|u|s|code|pre|a|blockquote|tg-spoiler)"
+TG_TAG_RE = re.compile(rf"</?{TG_TAG_NAMES}\b[^>]*>|</?{TG_TAG_NAMES}\b[^>]*$", re.I)
+
+
 class Draft:
     """Streams a reply into a Telegram message draft (private chats only).
 
@@ -1287,7 +1332,7 @@ class Draft:
     def _render(self) -> str:
         # Half-written HTML would be rejected, so drafts are plain text; the final
         # message gets the real formatting.
-        plain = html.unescape(re.sub(r"<[^>]*>?", "", TOOL_SYNTAX_RE.sub("", self.text))).strip()
+        plain = html.unescape(TG_TAG_RE.sub("", TOOL_SYNTAX_RE.sub("", self.text))).strip()
         if len(plain) > MAX_TG_MESSAGE:
             plain = "..." + plain[-(MAX_TG_MESSAGE - 3):]
         return plain
@@ -1317,8 +1362,7 @@ class Draft:
 
 
 async def send_reply(msg: Message, text: str, quote: bool = True) -> None:
-    for chunk in split_message(text):
-        body = to_html(chunk)
+    for body in split_html(to_html(text)):  # convert once, so links/tags are judged whole
         try:
             sent = await msg.reply_text(
                 body, parse_mode=ParseMode.HTML, do_quote=quote,
@@ -1326,13 +1370,13 @@ async def send_reply(msg: Message, text: str, quote: bool = True) -> None:
                 link_preview_options=LinkPreviewOptions(is_disabled=not LINK_PREVIEW))
         except BadRequest:  # malformed tags: unformatted beats no reply at all
             log.warning("HTML parse failed, sending plain")
-            body = chunk
-            sent = await msg.reply_text(chunk, do_quote=quote, disable_notification=QUIET)
+            body = html.unescape(TG_TAG_RE.sub("", body))
+            sent = await msg.reply_text(body, do_quote=quote, disable_notification=QUIET)
         # Log the HTML that was sent. Telegram strips formatting from Message.text, and
         # Message.text_html only rebuilds it when the response carries entities - which it
         # doesn't always - so prefer our own copy and fall back to the rebuilt one.
         logged = sent.text_html or ""
-        save(sent, text=body if "<" in body else (logged or body))
+        await asyncio.to_thread(save, sent, text=body if "<" in body else (logged or body))
 
 
 def build_messages(bot, msg: Message, reply_target: Message | None,
@@ -1373,12 +1417,17 @@ def build_messages(bot, msg: Message, reply_target: Message | None,
     ]
 
 
+def mentions(text: str, username: str | None) -> bool:
+    """Whether text @mentions this bot: @stockbot2 is a different bot from @stockbot."""
+    return bool(username and re.search(rf"(?<![\w@])@{re.escape(username)}(?!\w)", text, re.I))
+
+
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
     if msg is None:
         return
 
-    save(msg)  # log everything, including edits (they overwrite the original)
+    await asyncio.to_thread(save, msg)  # log everything, incl. edits (they overwrite the original)
     if update.edited_message:
         return  # don't answer edited messages
     if msg.from_user and msg.from_user.is_bot:
@@ -1390,21 +1439,19 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     reply_target = msg.reply_to_message
     replied_to_bot = bool(reply_target and reply_target.from_user
                           and reply_target.from_user.id == bot.id)
-    if not (private or f"@{bot.username}".lower() in text.lower() or replied_to_bot):
+    if not (private or mentions(text, bot.username) or replied_to_bot):
         return
 
     log.info("Triggered in chat %s (%s) by %s", msg.chat_id, msg.chat.title, sender_name(msg))
     # Show we're working before any work: downloading images and reading the history
     # happen before the model call, and the chat sees nothing until this starts.
     # Private chats stream the reply into a draft (plus typing); groups get the typing
-    # indicator. The first indicator is sent directly rather than via a task, which
-    # wouldn't run until the next await point.
+    # indicator.
     draft = Draft(bot, msg.chat_id) if private else None
     if draft:
         await draft.start()
     else:
-        await bot.send_chat_action(msg.chat_id, ChatAction.TYPING)
-        typing = asyncio.create_task(keep_typing(bot, msg.chat_id))
+        typing = await start_typing(bot, msg.chat_id)  # guarded: a Telegram hiccup is not fatal
     try:
         answer = await answer_question(bot, msg, text, reply_target, replied_to_bot,
                                        on_text=draft.update if draft else None)
@@ -1432,7 +1479,8 @@ async def answer_question(bot, msg: Message, text: str, reply_target: Message | 
         log.info("Attached %d image(s)", len(content) - 1)
 
     own_name = bot.first_name + (f" (@{bot.username})" if bot.username else "")
-    messages = build_messages(bot, msg, reply_target, replied_to_bot, content, own_name)
+    messages = await asyncio.to_thread(
+        build_messages, bot, msg, reply_target, replied_to_bot, content, own_name)
     user_id = msg.from_user.id if msg.from_user else None
     session = f"{bot.username or bot.id}-chat-{msg.chat_id}"  # per bot and chat, <= 256 chars
 

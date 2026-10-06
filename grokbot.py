@@ -578,6 +578,7 @@ class MCPServer:
 
 	async def _load_tools(self, session: ClientSession) -> None:
 		listed = (await session.list_tools()).tools
+		self.tools, self.fn_names = [], {}	# a restart must not append every tool twice
 		allow = set(self.cfg.get("allowed_tools", []))
 		blocked = set(self.cfg.get("blocked_tools", []))
 		for t in listed:
@@ -1007,6 +1008,12 @@ async def ask_grok(
 
 # ---------------------------------------------------------------- drafts ----
 
+# Telegram's own tags, plus one half-written tag at the end of the text. A bare "<" in
+# Grok's prose ("<5% from ATH") is not a tag and must survive.
+TG_TAG_NAMES = r"(?:b|strong|i|em|u|s|code|pre|a|blockquote|tg-spoiler)"
+TG_TAG_RE = re.compile(rf"</?{TG_TAG_NAMES}\b[^>]*>|</?{TG_TAG_NAMES}\b[^>]*$", re.I)
+
+
 class Draft:
 	"""Streams a reply into a Telegram message draft (private chats only).
 
@@ -1045,7 +1052,7 @@ class Draft:
 	def _render(self) -> str:
 		# Half-written HTML would be rejected, so drafts are plain text; the
 		# final message gets the real formatting.
-		plain = html.unescape(re.sub(r"<[^>]*>?", "", self.text)).strip()
+		plain = html.unescape(TG_TAG_RE.sub("", self.text)).strip()
 		if len(plain) > MAX_TG_MESSAGE:
 			plain = "..." + plain[-(MAX_TG_MESSAGE - 3):]
 		return plain
@@ -1421,6 +1428,11 @@ def untag(text: str) -> str:
 	return text
 
 
+def mentions(text: str, username: str | None) -> bool:
+	"""Whether text @mentions this bot: @stockbot2 is a different bot from @stockbot."""
+	return bool(username and re.search(rf"(?<![\w@])@{re.escape(username)}(?!\w)", text, re.I))
+
+
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 	msg = update.effective_message
 	if msg is None:
@@ -1439,7 +1451,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	bot = context.bot
 	private = msg.chat.type == "private"
 	text = msg.text or msg.caption or ""
-	mentioned = private or f"@{bot.username}".lower() in text.lower()
+	mentioned = private or mentions(text, bot.username)
 
 	command = text.split()[0].split("@")[0].lower() if text.startswith("/") else ""
 	if private and command == "/start":
