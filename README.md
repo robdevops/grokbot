@@ -107,7 +107,11 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
   listings: `SQX.AX`, `000660.KS`) and the bot links each one to its Yahoo Finance page. The visible text drops the suffix (`SQX.AX` shows as `SQX`, `BRK.B` stays) while the URL
   keeps it; crypto gets `-USD` in the URL (`BTC` -> `BTC-USD`). Words like CEO, ETF, FY26 and Q3 are
   not linked, a lone letter only counts next to a price or move (`F 5.2`), and text already inside a
-  link, `<code>` or `<pre>` is left alone.
+  link, `<code>` or `<pre>` is left alone. A company name written as `Name (TICKER)` is bold,
+  name and ticker together (`Micron (MU)`), unless it is already bold.
+- **Citations:** a raw link in a reply (a bare URL, or a link labelled with its own URL) becomes a
+  numbered link, `[1]`, `[2]`, in order of appearance, the same URL keeping its number. Links with a
+  real label, and anything in `<code>` or `<pre>`, are left alone.
 - Long answers are split under Telegram's limit without cutting a tag or entity; tags still open at
   a split are closed and re-opened in the next message. If Telegram rejects the markup the reply is
   re-sent as plain text.
@@ -133,6 +137,12 @@ Each is off by default. The holding-news DM and the movers reply are switched on
   on startup**: if the button set changed since the last run, everyone the bot has a private chat
   with gets one short "Buttons updated." message carrying the new keyboard (nothing is sent when it
   is unchanged; people who blocked the bot are skipped).
+- **Post to a group from a DM** (`POST_TO_GROUPS_FROM_DM=on`): in a private chat, "say hello in the
+  <group name> group" makes the bot post there, but only if the person asking is the creator or an
+  admin of that group (checked with Telegram each time) and the bot is a member. Groups only, not
+  channels. Telegram can't list a bot's chats, so the bot learns them from the messages it sees and
+  from being added: a group it joined earlier is unknown until someone posts there. If the name
+  matches none of your groups the reply is the same whether or not the group exists.
 
 ## Commands
 | Command | Who | What |
@@ -209,6 +219,7 @@ token size of the tool definitions. The `Starting ...` line shows the git commit
 | `ADMIN_CHAT_IDS` | Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts). |
 | `OWNER_USER_ID` | Telegram user ID allowed to use /credits and /usage. |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
+| `POST_TO_GROUPS_FROM_DM` | on|off. A group admin can have the bot post in that group from a DM (default off). |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
 | `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |

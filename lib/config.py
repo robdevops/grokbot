@@ -27,6 +27,7 @@ ENV_VARS: dict[str, str] = {
     "ADMIN_CHAT_IDS": "Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts).",
     "OWNER_USER_ID": "Telegram user ID allowed to use /credits and /usage.",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
+    "POST_TO_GROUPS_FROM_DM": "on|off. Lets an admin of a group the bot is in make it post there from a DM (default off).",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
@@ -70,6 +71,7 @@ class Settings:
     owner_id: int
     movers_bots: frozenset[str]
     dm_buttons: bool
+    post_to_groups: bool
     holding_news_time: str
     holding_news_recipients: dict[str, str]
     portfolio_names: frozenset[str]
@@ -166,6 +168,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
             u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "").replace(",", " ").split()
         ),
         dm_buttons=_flag(env, "TELEGRAM_DM_BUTTONS"),
+        post_to_groups=_flag(env, "POST_TO_GROUPS_FROM_DM"),
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
         holding_news_recipients=recipients,
         portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),

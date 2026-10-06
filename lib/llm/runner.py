@@ -81,6 +81,18 @@ async def _run_mcp(call: Call, registry: Registry) -> str:
         return f"Error: {type(e).__name__}: {e}"
 
 
+async def _run_local(call: Call, fn) -> str:
+    try:
+        args = json.loads(call.arguments or "{}")
+        if not isinstance(args, dict):
+            return "Error: arguments must be a JSON object."
+        log.info("Local tool %s %s", call.name, brief_args({k: v for k, v in args.items() if k != "text"}))
+        return await fn(args)
+    except Exception as e:
+        log.exception("Local tool %s failed", call.name)
+        return f"Error: {type(e).__name__}: {e}"
+
+
 async def _run_search(call: Call, backend: Backend) -> str:
     query = call_query(call.arguments)
     if not query:
@@ -102,6 +114,8 @@ async def run_calls(calls: list[Call], backend: Backend, registry: Registry, req
         key = (c.name, c.arguments)
         if dedupe and key in seen:
             jobs.append(_note(SAME_AS_EARLIER))
+        elif c.name in req.local:
+            jobs.append(_run_local(c, req.local[c.name]))
         elif c.name in offered:
             jobs.append(_run_mcp(c, registry))
         elif registry.lookup(c.name) or not ("search" in c.name.lower() or call_query(c.arguments)):
