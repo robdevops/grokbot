@@ -162,3 +162,35 @@ async def test_start_is_idempotent():
     await asyncio.sleep(0)
     await s.stop()
     assert started == [1]
+
+
+async def test_wait_started_holds_requests_until_connecting_servers_are_up():
+    s = MCPServer("z", {"command": "sleep"}, timeout=5, max_output=100)
+    reg = Registry([s])
+    await reg.wait_started(1)  # not started: nothing to wait for
+
+    async def run():
+        await asyncio.sleep(0.05)
+        s.session = object()
+        s._ready.set()
+        await s._stop.wait()
+
+    s._run = run
+    s.start()
+    assert s.starting
+    await reg.wait_started(2)
+    assert not s.starting and reg.up() == [s]
+    await s.stop()
+
+
+async def test_wait_started_gives_up_after_the_timeout():
+    s = MCPServer("z", {"command": "sleep"}, timeout=5, max_output=100)
+
+    async def run():
+        await s._stop.wait()
+
+    s._run = run
+    s.start()
+    await Registry([s]).wait_started(0.05)
+    assert s.starting
+    await s.stop()

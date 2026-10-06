@@ -74,7 +74,8 @@ or `EnvironmentFile=` for the variables below.
 MCP servers listed in `mcp_servers.json` are started by the bot itself and their tools are offered
 to the model as function tools. The bot runs the calls locally, so servers never need to be
 reachable from the internet and credentials stay on the machine. Servers connect in the
-background: the bot starts answering immediately and each server's tools appear once it is up.
+background: the bot starts immediately, and a message that arrives while a server is still connecting
+waits for it (up to 30 s) so it isn't answered without its tools.
 ```json
 {"mcpServers": {"yahoo": {"command": "npx", "args": ["-y", "yahoo-finance-mcp-server@1.3.1"],
    "description": "what it is and how to use it (goes into the prompt)",

@@ -37,7 +37,8 @@ ENV_VARS: dict[str, str] = {
 # Tuning constants (not configurable).
 MAX_TOOL_ROUNDS = 6  # model <-> tool round trips per answer
 MCP_TIMEOUT = 60  # seconds per MCP tool call
-MAX_IMAGES = 2  # photos sent to the model per request
+MCP_STARTUP_WAIT = 30  # seconds a request waits for MCP servers that are still connecting
+MAX_IMAGES = 2 # photos sent to the model per request
 TEMPERATURE = 0.6
 SEARCH_ENGINE = "auto"
 SEARCH_RESULTS = 20

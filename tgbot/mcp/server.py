@@ -56,6 +56,11 @@ class MCPServer:
         self._stop.clear()
         self._task = asyncio.create_task(self._run(), name=f"mcp-{self.label}")
 
+    @property
+    def starting(self) -> bool:
+        """Started but not yet connected (or failed)."""
+        return self._task is not None and not self._ready.is_set()
+
     async def wait_ready(self, timeout: float = START_TIMEOUT) -> bool:
         try:
             await asyncio.wait_for(self._ready.wait(), timeout)
@@ -199,6 +204,14 @@ class Registry:
 
     async def stop(self) -> None:
         await asyncio.gather(*(s.stop() for s in self.servers.values()), return_exceptions=True)
+
+    async def wait_started(self, timeout: float) -> None:
+        """Hold a request until servers still connecting are up (or `timeout`), so a message that
+        arrives just after a restart doesn't get answered without its tools."""
+        starting = [s for s in self.servers.values() if s.starting]
+        if starting:
+            log.info("Waiting for MCP: %s", ", ".join(s.label for s in starting))
+            await asyncio.gather(*(s.wait_ready(timeout) for s in starting))
 
     def up(self) -> list[MCPServer]:
         return [s for s in self.servers.values() if s.session]

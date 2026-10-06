@@ -192,6 +192,7 @@ class Handlers:
 
     async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None) -> str:
         ctx, st = self.ctx, self.ctx.st
+        await ctx.registry.wait_started(config.MCP_STARTUP_WAIT)
         preset = dm_buttons.preset_for(trig.text) if trig.private and st.dm_buttons else None
         on_text = draft.update if draft else None
         chat_id = msg.chat_id
