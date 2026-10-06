@@ -31,6 +31,7 @@ Env vars:
   REASONING            low | medium | high; empty = model default
   MAX_TOKENS           reply cap, default 4000 (counts reasoning tokens too)
   TEMPERATURE          default 0.6
+  TRANSCRIPT_LINE_MAX  longer history lines are cut to this many chars, default 400
   HISTORY_LIMIT        messages of context, default 20 (the window is 20-29, see transcript())
   MCP_CONFIG           MCP server config, default mcp_servers.json (missing = no MCP tools)
   MCP_TIMEOUT          seconds per MCP tool call, default 60
@@ -100,6 +101,8 @@ SEARCH_TOKENS = int(os.getenv("SEARCH_TOKENS", "400"))
 REASONING = os.getenv("REASONING", "").strip().lower()
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4000"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.6"))
+# Longer transcript lines (usually the bot's own earlier answers) are cut to this.
+TRANSCRIPT_LINE_MAX = int(os.getenv("TRANSCRIPT_LINE_MAX", "400"))
 HISTORY_LIMIT = int(os.getenv("HISTORY_LIMIT", "20"))  # window is 20-29 messages, see transcript()
 MAX_IMAGES = int(os.getenv("MAX_IMAGES", "2"))
 QUIET = os.getenv("QUIET", "on").strip().lower() != "off"
@@ -148,7 +151,7 @@ SEARCH_TOOL = [{
 SYSTEM_PROMPT = """You are {bot_name}, a bot in a serious Telegram group chat about stocks
 and investing. You're a normal member of the group, not a character: don't roleplay a
 persona, don't give yourself a backstory, and don't invent facts about yourself or about
-people in the group. If you don't know something, say so. The current date and time is {now}.
+people in the group. If you don't know something, say so.
 
 The group covers tickers, earnings, macro, sector moves, crypto and trade ideas, with the
 usual off-topic banter in between. Assume that context when something is ambiguous: a bare
@@ -318,6 +321,8 @@ def transcript(chat_id: int, own_name: str) -> str:
         when = datetime.fromtimestamp(ts, TZ).strftime("%a %H:%M")
         reply = f" (replying to #{reply_to})" if reply_to else ""
         who = "You" if sender == own_name else sender
+        if len(text) > TRANSCRIPT_LINE_MAX:
+            text = text[:TRANSCRIPT_LINE_MAX].rstrip() + " …[cut]"
         lines.append(f"[#{mid}] {when} {who}{reply}: {text}")
     return "\n".join(lines)
 
@@ -1129,7 +1134,7 @@ async def ask_model(messages: list[dict], user_id: int | None = None, on_text=No
     servers = active_servers(user_id)[0] if tools_on else []
     conv = list(messages)
     rounds = tool_calls = 0
-    tok = {"in": 0, "out": 0, "cost": 0.0}
+    tok = {"in": 0, "cached": 0, "out": 0, "cost": 0.0}
     r = None
     while True:
         tools = (SEARCH_TOOL if search_on else []) + [t for s in servers for t in s.tools]
@@ -1139,6 +1144,7 @@ async def ask_model(messages: list[dict], user_id: int | None = None, on_text=No
         u = r.usage
         tok["in"] += getattr(u, "prompt_tokens", 0) or 0
         tok["out"] += getattr(u, "completion_tokens", 0) or 0
+        tok["cached"] += getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
         tok["cost"] += getattr(u, "cost", 0) or 0
         # in >> sent means search results were injected; in ~= sent means nothing was searched.
         log.info("Round %d: tokens sent~%s in=%s out=%s cost=%s cites=%s finish=%s",
@@ -1170,8 +1176,9 @@ async def ask_model(messages: list[dict], user_id: int | None = None, on_text=No
             search_on = False
             continue
         break
-    log.info("%.1fs: %d rounds, %d tool calls | in %d out %d cost %.4f", time.monotonic() - t0,
-             rounds, tool_calls, tok["in"], tok["out"], tok["cost"])
+    log.info("%.1fs: %d rounds, %d tool calls | in %d (%.0f%% cached) out %d cost %.4f",
+             time.monotonic() - t0, rounds, tool_calls, tok["in"],
+             100 * tok["cached"] / tok["in"] if tok["in"] else 0, tok["out"], tok["cost"])
     text = TOOL_SYNTAX_RE.sub("", r.text).strip()
     if not text:
         if r.finish == "length":
@@ -1339,7 +1346,11 @@ def build_messages(bot, msg: Message, reply_target: Message | None,
         body = stored_text(msg.chat_id, reply_target.message_id) or describe(reply_target)
         history += (f"\n\nThe incoming question is a reply to this message:\n"
                     f"[#{reply_target.message_id}] {who}: {body}")
-    history += f"\n\nThe question below was asked by {sender_name(msg)}."
+    # The time lives here, at the very end of the changing part of the prompt, not in
+    # the system prompt: a clock in the first lines would change every minute and defeat
+    # prompt caching for everything after it.
+    now = datetime.now(TZ).strftime("%A %d %B %Y, %H:%M %Z")
+    history += f"\n\nIt's now {now}. The question below was asked by {sender_name(msg)}."
 
     user_id = msg.from_user.id if msg.from_user else None
     servers, down = active_servers(user_id) if tools_on else ([], [])
@@ -1349,7 +1360,6 @@ def build_messages(bot, msg: Message, reply_target: Message | None,
         note = NO_SEARCH_NOTE
     system = SYSTEM_PROMPT.format(
         bot_name=bot.first_name,
-        now=datetime.now(TZ).strftime("%A %d %B %Y, %H:%M %Z"),
         search_note=note,
     )
     return [
