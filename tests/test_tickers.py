@@ -32,3 +32,20 @@ def test_stoplist_and_one_letter():
     assert link_tickers("AI and CEO, Q3 FY26") == "AI and CEO, Q3 FY26"
     assert 'quote/F"' in link_tickers("F 5.2 today")
     assert link_tickers("vitamin C helps") == "vitamin C helps"
+
+
+def test_company_name_and_ticker_are_bolded_together():
+    out = link_tickers("• Micron (MU) +3.1%\n1. Trade Desk (TTD) -5%")
+    assert '• <b>Micron (<a href="https://finance.yahoo.com/quote/MU">MU</a>)</b> +3.1%' in out
+    assert '1. <b>Trade Desk (<a href="https://finance.yahoo.com/quote/TTD">TTD</a>)</b> -5%' in out
+    ext = link_tickers("DUG Tech (DUG.AX) fell")
+    assert ext.startswith("<b>") and ">DUG</a>)</b> fell" in ext and 'quote/DUG.AX"' in ext
+
+
+def test_bolding_leaves_sentence_openers_existing_bold_and_non_tickers_alone():
+    assert link_tickers("Today Micron (MU) ripped").startswith("Today <b>Micron (")
+    assert link_tickers("<b>Micron (MU)</b> up").count("<b>") == 1
+    assert link_tickers("<b>Micron</b> (MU)").count("<b>") == 1
+    assert "<b>" not in link_tickers("the Fed (RBA) held and vitamin C (CEO)")
+    assert "<b>" not in link_tickers("<code>Micron (MU)</code>")
+    assert link_tickers("Micron (MU)\nNvidia (NVDA)").count("<b>") == 2  # a line break ends a name

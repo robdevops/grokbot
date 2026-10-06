@@ -107,7 +107,8 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
   listings: `SQX.AX`, `000660.KS`) and the bot links each one to its Yahoo Finance page. The visible text drops the suffix (`SQX.AX` shows as `SQX`, `BRK.B` stays) while the URL
   keeps it; crypto gets `-USD` in the URL (`BTC` -> `BTC-USD`). Words like CEO, ETF, FY26 and Q3 are
   not linked, a lone letter only counts next to a price or move (`F 5.2`), and text already inside a
-  link, `<code>` or `<pre>` is left alone.
+  link, `<code>` or `<pre>` is left alone. A company name written as `Name (TICKER)` is bold,
+  name and ticker together (`Micron (MU)`), unless it is already bold.
 - Long answers are split under Telegram's limit without cutting a tag or entity; tags still open at
   a split are closed and re-opened in the next message. If Telegram rejects the markup the reply is
   re-sent as plain text.
