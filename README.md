@@ -27,7 +27,7 @@ A systemd unit just needs `ExecStart=/usr/bin/python3 /path/to/bot.py mimo` and 
 or `EnvironmentFile=` for the variables below.
 
 ## Providers
-- `OPENROUTER_API_KEY` set -> OpenRouter (default model `xiaomi/mimo-v2.6-pro`).
+- `OPENROUTER_API_KEY` set -> OpenRouter (default model `x-ai/grok-4.3`).
 - `XAI_API_KEY` set -> xAI (default model `grok-4.7`).
 - **Both set, or neither: the bot refuses to start** with a message saying so.
 - `MODEL` and `REASONING` (low/medium/high) apply to either provider. `GROK_MODEL` and
@@ -199,7 +199,7 @@ token size of the tool definitions.
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
 | `XAI_API_KEY` | xAI key; selects the xAI provider. Set exactly one of the two keys. |
 | `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider. |
-| `MODEL` | Model ID (default grok-4.7 on xAI, xiaomi/mimo-v2.6-pro on OpenRouter). |
+| `MODEL` | Model ID (default grok-4.7 on xAI, x-ai/grok-4.3 on OpenRouter). |
 | `FAST_MODEL` | Optional cheaper/faster model used for simple requests (TOKEN_SAVER only). |
 | `REASONING` | Reasoning effort: low, medium or high; empty = the model's default. |
 | `SEARCH` | on|off. Web search (and X search on xAI). Default on. |
