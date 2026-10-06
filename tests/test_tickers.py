@@ -1,4 +1,4 @@
-from tgbot.tickers import link_tickers, ticker_label, yahoo_url
+from lib.tickers import link_tickers, ticker_label, yahoo_url
 
 
 def test_link_only_no_bold():

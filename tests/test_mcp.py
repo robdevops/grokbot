@@ -2,9 +2,9 @@ import asyncio
 import json
 from types import SimpleNamespace as N
 
-from tgbot.mcp.results import diet, slim_result, table_records, tidy_sharesight
-from tgbot.mcp.schema import ToolDef, compact_description, compact_schema, looks_read_only
-from tgbot.mcp.server import MCPServer, Registry
+from lib.mcp.results import diet, slim_result, table_records, tidy_sharesight
+from lib.mcp.schema import ToolDef, compact_description, compact_schema, looks_read_only
+from lib.mcp.server import MCPServer, Registry
 
 
 def test_compact_description_drops_return_docs():
@@ -96,7 +96,7 @@ async def test_unknown_blocked_names_are_warned_about_with_a_suggestion(caplog):
 def test_log_names_keeps_exact_names(caplog):
     import logging
 
-    from tgbot.mcp.server import log_names
+    from lib.mcp.server import log_names
     with caplog.at_level(logging.INFO, logger="bot"):
         log_names("MCP y: 2 tools:", ["get_analyst_estimates", "get_stock_quote"])
     assert "get_analyst_estimates" in caplog.text and "get_stock_quote" in caplog.text

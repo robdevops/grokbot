@@ -6,10 +6,10 @@ from zoneinfo import ZoneInfo
 import pytest
 from telegram.error import Forbidden
 
-from tgbot import config
-from tgbot.context import Ctx
-from tgbot.features import dm_buttons, holding_news, movers
-from tgbot.telegram import commands
+from lib import config
+from lib.context import Ctx
+from lib.features import dm_buttons, holding_news, movers
+from lib.telegram import commands
 
 from .conftest import FakeBot, make_msg, update_for, user_msg
 from .fakes import FakeMcp, ScriptedBackend, registry, step

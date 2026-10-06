@@ -3,10 +3,10 @@
 check: lint test
 
 lint:
-	ruff check tgbot tests bot.py
+	ruff check lib tests bot.py
 
 test:
 	python -m pytest
 
 prompt-report:
-	python -m tgbot.report
+	python -m lib.report

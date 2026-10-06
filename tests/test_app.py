@@ -1,11 +1,11 @@
 import pytest
 from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler
 
-from tgbot import app, config
-from tgbot.context import Ctx
-from tgbot.llm.openrouter import OpenRouterBackend
-from tgbot.llm.xai import XaiBackend
-from tgbot.mcp.server import MCPServer
+from lib import app, config
+from lib.context import Ctx
+from lib.llm.openrouter import OpenRouterBackend
+from lib.llm.xai import XaiBackend
+from lib.mcp.server import MCPServer
 
 from .conftest import FakeBot
 from .fakes import ScriptedBackend, registry

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace as N
 
-from tgbot.llm.base import Backend, Call, Request, Step, Usage
-from tgbot.mcp.schema import ToolDef
-from tgbot.mcp.server import MCPServer, Registry
+from lib.llm.base import Backend, Call, Request, Step, Usage
+from lib.mcp.schema import ToolDef
+from lib.mcp.server import MCPServer, Registry
 
 
 class ScriptedBackend(Backend):

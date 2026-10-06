@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from tgbot import config
+from lib import config
 
 
 def test_both_keys_refused():

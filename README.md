@@ -31,8 +31,8 @@ or `EnvironmentFile=` for the variables below.
 - `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
 - **Both set, or neither: the bot refuses to start** with a message saying so.
 - `MODEL` and `REASONING` (low/medium/high) apply to either provider.
-- The two providers share all code except one adapter each (`tgbot/llm/xai.py` on the Responses
-  API, `tgbot/llm/openrouter.py` on chat completions).
+- The two providers share all code except one adapter each (`lib/llm/xai.py` on the Responses
+  API, `lib/llm/openrouter.py` on chat completions).
 
 ## How it answers
 - **Groups:** the bot answers when it is @mentioned or when someone replies to one of its messages. Every message is logged;
@@ -235,7 +235,7 @@ pip install -r requirements-dev.txt
 make check          # ruff + pytest, a few seconds, no network
 make prompt-report  # token breakdown of a sample request
 ```
-The code is the `tgbot/` package (a map is in `CLAUDE.md`); `bot.py` is a thin entry point. Tests
+The code is the `lib/` package (a map is in `CLAUDE.md`); `bot.py` is a thin entry point. Tests
 use fakes for Telegram, both providers and MCP, so nothing in the suite touches the network.
 `tests/test_config.py` fails if an environment variable is missing from the table above.
 

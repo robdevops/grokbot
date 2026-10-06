@@ -9,7 +9,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - Tests use fakes (`tests/conftest.py`: FakeBot, user_msg; `tests/fakes.py`: ScriptedBackend,
   FakeMcp, fake SDK clients). Add a test next to the module you change; don't write scratch scripts.
 
-## Map (`tgbot/`, each module < ~300 lines)
+## Map (`lib/`, each module < ~300 lines)
 - `config.py`: `Settings` from env (`load()`), `ENV_VARS` registry, tuning constants. The only place that
   knows the provider. Every env var must appear in README.md (a test enforces it).
 - `store.py`: SQLite `Store`: history (`messages` shared by groups, `dm_messages` per bot), users, kv,

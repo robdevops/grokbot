@@ -1,6 +1,6 @@
 import pytest
 
-from tgbot.store import Store, is_dm
+from lib.store import Store, is_dm
 
 from .conftest import make_msg
 

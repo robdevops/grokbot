@@ -2,11 +2,11 @@ import httpx
 import pytest
 from openai import APIStatusError, BadRequestError
 
-from tgbot import config
-from tgbot.llm.gate import route, wants_tools
-from tgbot.llm.policy import ask
-from tgbot.llm.runner import call_query, run, run_calls
-from tgbot.mcp.schema import ToolDef
+from lib import config
+from lib.llm.gate import route, wants_tools
+from lib.llm.policy import ask
+from lib.llm.runner import call_query, run, run_calls
+from lib.mcp.schema import ToolDef
 
 from .fakes import FakeMcp, ScriptedBackend, registry, req, step
 
@@ -148,7 +148,7 @@ async def test_run_calls_reports_mcp_exceptions():
             raise RuntimeError("down")
 
     mcp = Boom()
-    out = await run_calls([__import__("tgbot.llm.base", fromlist=["Call"]).Call("1", "yahoo__get_quote", "{}")],
+    out = await run_calls([__import__("lib.llm.base", fromlist=["Call"]).Call("1", "yahoo__get_quote", "{}")],
                           ScriptedBackend([]), registry(mcp), with_tools(mcp), {}, True)
     assert out == ["Error: RuntimeError: down"]
 
