@@ -187,7 +187,7 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
         # from memory without them invents things): ask again with more room and less thinking.
         log.warning("Hit the token cap before writing an answer; asking again with more room")
         backend.add_user_message(conv, WRITE_NOW)
-        more = dataclasses.replace(req, max_tokens=(req.max_tokens or 1500) * 2, reasoning="low")
+        more = dataclasses.replace(req, max_tokens=(req.max_tokens or 3000) * 2, reasoning="low")
         step = await _step(backend, conv, more, "none")
         total.add(step.usage)
         log.info("Recovery round: in %d out %d, %s", step.usage.tokens_in, step.usage.tokens_out, step.finish)

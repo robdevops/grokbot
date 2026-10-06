@@ -46,7 +46,7 @@ def test_holding_news_and_movers_switch_on_by_listing_names(env):
 
 def test_token_saver_switches_defaults(env):
     on, off = config.load(env), config.load({**env, "TOKEN_SAVER": "off"})
-    assert (on.max_tokens, off.max_tokens) == (1500, 4000)
+    assert (on.max_tokens, off.max_tokens) == (3000, 3000)
     assert on.max_tool_output < off.max_tool_output
     assert config.load({**env, "FAST_MODEL": "f"}).fast_model == "f"
     assert config.load({**env, "FAST_MODEL": "f", "TOKEN_SAVER": "off"}).fast_model == ""

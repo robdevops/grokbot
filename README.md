@@ -176,8 +176,7 @@ Each answer's log line shows the cached percentage.
 - **Compact history:** stored HTML is shown to the model as plain text (ticker links become the
   symbol, tags and Yahoo URLs dropped), lines cut to 240 characters and the bot's own to 160.
 - **Smaller prompts:** the system prompt is about half its previous size, the repeated instruction
-  tail lives in the (cached) system prompt, `MAX_TOKENS` defaults to 1500 instead of 4000, images go
-  at low detail.
+  tail lives in the (cached) system prompt, images go at low detail.
 - **Measure it:** every request is recorded in the `usage` table (`/usage`), and
   `make prompt-report` prints where a typical request's tokens go.
 
@@ -205,7 +204,7 @@ token size of the tool definitions.
 | `REASONING` | Reasoning effort: low, medium or high; empty = the model's default. |
 | `SEARCH` | on|off. Web search (and X search on xAI). Default on. |
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
-| `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 1500, 4000 when TOKEN_SAVER=off). |
+| `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `BOT_TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
