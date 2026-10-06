@@ -22,7 +22,7 @@ Setup:
   2. pip install -r requirements.txt   (plus Node.js for npx-based MCP servers)
   3. export TELEGRAM_BOT_TOKEN=...	XAI_API_KEY=...
   4. Optional: edit mcp_servers.json
-  5. python bot.py
+  5. python grokbot.py
 """
 
 import asyncio
@@ -675,12 +675,12 @@ HOLDING_KEEP = (
 )
 
 
-# Trailing legal suffixes / share-class tags: "Arm Holdings plc. - ADR" -> "Arm Holdings"
 # Sharesight share-class tags: "Crowdstrike Holdings Inc - Ordinary Shares - Class A"
 SHARE_CLASS = re.compile(
 	r"(?:\s+-\s+(?:ordinary shares|class [a-z]|common stock|adr|ads|depositary receipts?))+\s*$",
 	re.IGNORECASE,
 )
+# Trailing legal suffixes: "Arm Holdings plc." -> "Arm Holdings"
 LEGAL_SUFFIX = re.compile(
 	r"(?:[\s,.\-]+(?:limited|ltd|incorporated|inc|corporation|corp|co|plc|sponsored adr|adr|ads)\.?)+\s*$",
 	re.IGNORECASE,
@@ -1352,27 +1352,24 @@ async def holding_news_loop(bot) -> None:
 
 # -------------------------------------------------------------- handlers ----
 
-async def keep_typing(bot, chat_id: int) -> None:
-	"""Telegram's typing indicator lasts ~5s, so resend it until cancelled."""
-	while True:
-		await bot.send_chat_action(chat_id, ChatAction.TYPING)
-		await asyncio.sleep(4)
-
-
 async def start_typing(bot, chat_id: int) -> asyncio.Task:
-	"""Send the typing indicator right now, then keep it going in the background.
-	(A task alone would only send its first one at the next await, which can be
-	after the prompt has been built.)"""
-	try:
-		await bot.send_chat_action(chat_id, ChatAction.TYPING)
-	except Exception as e:
-		log.warning("Typing indicator failed: %s", e)
+	"""Send the typing indicator right now, then keep it going until the task is
+	cancelled (Telegram's lasts ~5 s). The first one is sent directly rather than from
+	the task, which wouldn't run until the next await, possibly after the prompt has been
+	built. A failed send is logged, never fatal."""
+	async def send() -> None:
+		try:
+			await bot.send_chat_action(chat_id, ChatAction.TYPING)
+		except Exception as e:
+			log.warning("Typing indicator failed: %s", e)
 
-	async def resend() -> None:
-		await asyncio.sleep(4)
-		await keep_typing(bot, chat_id)
+	async def keep() -> None:
+		while True:
+			await asyncio.sleep(4)
+			await send()
 
-	return asyncio.create_task(resend())
+	await send()
+	return asyncio.create_task(keep())
 
 def photo_file_id(msg: Message) -> str | None:
 	if msg.photo:
