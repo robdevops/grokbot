@@ -2,10 +2,10 @@ import httpx
 import pytest
 from openai import BadRequestError
 
-from tgbot import config
-from tgbot.llm.openrouter import OpenRouterBackend
-from tgbot.llm.xai import XaiBackend
-from tgbot.mcp.schema import ToolDef
+from lib import config
+from lib.llm.openrouter import OpenRouterBackend
+from lib.llm.xai import XaiBackend
+from lib.mcp.schema import ToolDef
 
 from .fakes import (
     FakeOpenRouterClient,

@@ -31,8 +31,8 @@ or `EnvironmentFile=` for the variables below.
 - `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
 - **Both set, or neither: the bot refuses to start** with a message saying so.
 - `MODEL` and `REASONING` (low/medium/high) apply to either provider.
-- The two providers share all code except one adapter each (`tgbot/llm/xai.py` on the Responses
-  API, `tgbot/llm/openrouter.py` on chat completions).
+- The two providers share all code except one adapter each (`lib/llm/xai.py` on the Responses
+  API, `lib/llm/openrouter.py` on chat completions).
 
 ## How it answers
 - **Groups:** the bot answers when it is @mentioned or when someone replies to one of its messages. Every message is logged;
@@ -95,7 +95,7 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
 - **Everyone who can reach the bot can use every enabled tool**, including Sharesight portfolio
   data (there is no per-user tool restriction; Telegram/BotFather
   controls who may use the bot). Restrict the bot in BotFather, or leave Sharesight out.
-- **Down servers:** if a server dies, chats in `ALERT_CHAT_IDS` get a message with the error, and the
+- **Down servers:** if a server dies, chats in `ADMIN_CHAT_IDS` get a message with the error, and the
   model is told the source is down (and quotes the error) instead of claiming it has no access. A
   dead server is not restarted until the bot restarts.
 - **Slimming:** results are compacted before the model sees them (see token saving below).
@@ -104,8 +104,7 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
 - Replies are Telegram HTML. Markdown the model slips in (`**bold**`, links, backticks) is
   converted; trailing "not advice"/"NFA"/"DYOR" disclaimers are stripped.
 - **Yahoo Finance links:** the model writes plain tickers (with the exchange suffix for non-US
-  listings: `SQX.AX`, `000660.KS`) and the bot links each one to its Yahoo Finance page. Links only,
-  no bold. The visible text drops the suffix (`SQX.AX` shows as `SQX`, `BRK.B` stays) while the URL
+  listings: `SQX.AX`, `000660.KS`) and the bot links each one to its Yahoo Finance page. The visible text drops the suffix (`SQX.AX` shows as `SQX`, `BRK.B` stays) while the URL
   keeps it; crypto gets `-USD` in the URL (`BTC` -> `BTC-USD`). Words like CEO, ETF, FY26 and Q3 are
   not linked, a lone letter only counts next to a price or move (`F 5.2`), and text already inside a
   link, `<code>` or `<pre>` is left alone.
@@ -115,7 +114,7 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
 - Replies are sent silently, without link previews. The bot never @-tags the movers bots.
 
 ## Optional features (off by default)
-Each is off by default; with it off none of its code runs. The holding-news DM and the movers reply are switched on by setting the names they need (recipients, bots); the DM buttons have a flag.
+Each is off by default. The holding-news DM and the movers reply are switched on by setting the names they need (recipients, bots); the DM buttons have a flag.
 - **Daily holding-news DM** (switched on by listing recipients in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`, at `SHARESIGHT_HOLDING_NEWS_TIME` in
   `BOT_TZ`, `portfolio:username` pairs such as
   `MyPortfolio:alice,MySMSF:alice`; empty, the default, means off):
@@ -207,7 +206,7 @@ token size of the tool definitions.
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `BOT_TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
 | `MCP_CONFIG` | MCP server config file (default mcp_servers.json; missing = no MCP tools). |
-| `ALERT_CHAT_IDS` | Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts). |
+| `ADMIN_CHAT_IDS` | Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts). |
 | `OWNER_USER_ID` | Telegram user ID allowed to use /credits and /usage. |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
@@ -224,6 +223,8 @@ treat them as rough; speed varies by provider.
 |---|---|---|---|
 | `xiaomi/mimo-v2.6-pro` | 0.43 / 0.87 | ~28-46 tok/s | 46 (top open-weight model) |
 | `xiaomi/mimo-v2.6-flash` | 0.14 / 0.28 | ~56 tok/s | 38 |
+| `z-ai/glm-5.3-flash` (default on OpenRouter) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 |
+| `grok-4.3` / `x-ai/grok-4.3` (default on xAI) | 1.25 / 2.50 | ~105-146 tok/s | 25 (at high reasoning) |
 | `xiaomi/mimo-v2.5-pro` | 0.30 / 0.61 | ~29-46 tok/s | unreliable (retires 21 Oct 2026) |
 | `xiaomi/mimo-v2.5` | 0.12 / 0.24 | ~44-58 tok/s | not found (retires 21 Oct 2026) |
 
@@ -236,7 +237,7 @@ pip install -r requirements-dev.txt
 make check          # ruff + pytest, a few seconds, no network
 make prompt-report  # token breakdown of a sample request
 ```
-The code is the `tgbot/` package (a map is in `CLAUDE.md`); `bot.py` is a thin entry point. Tests
+The code is the `lib/` package (a map is in `CLAUDE.md`); `bot.py` is a thin entry point. Tests
 use fakes for Telegram, both providers and MCP, so nothing in the suite touches the network.
 `tests/test_config.py` fails if an environment variable is missing from the table above.
 
@@ -245,9 +246,6 @@ use fakes for Telegram, both providers and MCP, so nothing in the suite touches 
 - **The bot ignores messages in a group**: run `/setprivacy` -> Disable in @BotFather and re-add it.
 - **An MCP server shows as down**: the alert includes the server's own error (often a missing
   environment variable or `npx` not installed). Fix it and restart the bot.
-- **Wrong answers in a DM after an upgrade**: older versions stored DMs in the shared `messages`
-  table. To discard that history (all bots sharing the file; stop the services first):
-  `sqlite3 chat_log.db "DELETE FROM messages WHERE chat_id > 0; VACUUM;"`
 - **Holding news never arrives**: the recipient must have messaged the bot once (so their user ID
   is known), `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` must match the Sharesight portfolio names, and the
   Sharesight server must be connected.

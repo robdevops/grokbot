@@ -1,6 +1,6 @@
 import re
 
-from tgbot import textfmt as t
+from lib import textfmt as t
 
 
 def test_plain_text():

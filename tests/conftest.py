@@ -6,8 +6,8 @@ from types import SimpleNamespace as N
 
 import pytest
 
-from tgbot import config
-from tgbot.store import Store
+from lib import config
+from lib.store import Store
 
 BASE_ENV = {"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "key"}
 

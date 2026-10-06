@@ -1,7 +1,7 @@
 from zoneinfo import ZoneInfo
 
-from tgbot.history import compact, format_rows
-from tgbot.store import HistoryRow
+from lib.history import compact, format_rows
+from lib.store import HistoryRow
 
 UTC = ZoneInfo("UTC")
 
@@ -34,7 +34,7 @@ def test_latest_own_reply_is_kept_whole_older_ones_are_cut():
 
 
 def test_latest_own_reply_has_a_generous_cap_and_no_own_reply_is_fine():
-    from tgbot.history import LAST_REPLY_MAX
+    from lib.history import LAST_REPLY_MAX
     rows = [HistoryRow(1, "Bot (@b)", "y" * (LAST_REPLY_MAX + 500), 0, None)]
     assert format_rows(rows, "Bot (@b)", UTC, line_max=240, compact_text=True).endswith("…[cut]")
     people = [HistoryRow(1, "Rob (@rob)", "z" * 500, 0, None)]

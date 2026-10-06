@@ -2,12 +2,12 @@ import asyncio
 
 import pytest
 
-from tgbot import config
-from tgbot.context import Ctx
-from tgbot.features import dm_buttons
-from tgbot.llm.base import Usage
-from tgbot.telegram.handlers import Handlers, format_answer, mentions
-from tgbot.telegram.handlers import photo_file_id as pick_photo
+from lib import config
+from lib.context import Ctx
+from lib.features import dm_buttons
+from lib.llm.base import Usage
+from lib.telegram.handlers import Handlers, format_answer, mentions
+from lib.telegram.handlers import photo_file_id as pick_photo
 
 from .conftest import FakeBot, update_for, user_msg
 from .fakes import FakeMcp, ScriptedBackend, registry, step

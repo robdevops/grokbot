@@ -2,11 +2,11 @@
 
 import json
 
-from tgbot import report
-from tgbot.history import compact, format_rows
-from tgbot.llm.gate import Route
-from tgbot.mcp.schema import compact_description, compact_schema
-from tgbot.prompts import chat_prompt, system_prompt
+from lib import report
+from lib.history import compact, format_rows
+from lib.llm.gate import Route
+from lib.mcp.schema import compact_description, compact_schema
+from lib.prompts import chat_prompt, system_prompt
 
 
 def test_system_prompt_stays_small():
