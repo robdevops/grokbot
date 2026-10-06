@@ -316,6 +316,22 @@ db.execute(
 		PRIMARY KEY (chat_id, message_id)
 	)"""
 )
+# Private chats. A group's message IDs are shared by every bot in it, but each bot's DM
+# with a person is its own ID sequence and has the same chat ID (the person's user ID), so
+# two bots sharing this file would collide in `messages`: one overwriting the other's rows
+# and the history interleaving out of order. DMs are therefore keyed by bot as well.
+db.execute(
+	"""CREATE TABLE IF NOT EXISTS dm_messages (
+		bot_id     INTEGER,
+		chat_id    INTEGER,
+		message_id INTEGER,
+		sender     TEXT,
+		text       TEXT,
+		ts         INTEGER,
+		reply_to   INTEGER,
+		PRIMARY KEY (bot_id, chat_id, message_id)
+	)"""
+)
 # Telegram usernames -> user IDs, so the bot can DM people by username.
 db.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, user_id INTEGER)")
 # Holding-news notifications already sent, so the same story isn't repeated.
@@ -384,21 +400,22 @@ def describe(msg: Message) -> str:
 
 
 def save(msg: Message) -> None:
-	db.execute(
-		"INSERT OR REPLACE INTO messages VALUES (?, ?, ?, ?, ?, ?)",
-		(
-			msg.chat_id,
-			msg.message_id,
-			sender_name(msg),
-			describe(msg),
-			int(msg.date.timestamp()),
-			msg.reply_to_message.message_id if msg.reply_to_message else None,
-		),
+	row = (
+		msg.chat_id,
+		msg.message_id,
+		sender_name(msg),
+		describe(msg),
+		int(msg.date.timestamp()),
+		msg.reply_to_message.message_id if msg.reply_to_message else None,
 	)
+	if msg.chat.type == "private":
+		db.execute("INSERT OR REPLACE INTO dm_messages VALUES (?, ?, ?, ?, ?, ?, ?)", (msg.get_bot().id, *row))
+	else:
+		db.execute("INSERT OR REPLACE INTO messages VALUES (?, ?, ?, ?, ?, ?)", row)
 	db.commit()
 
 
-def recent_history(chat_id: int, limit: int) -> list[tuple]:
+def recent_history(chat_id: int, limit: int, dm_bot_id: int | None = None) -> list[tuple]:
 	"""Recent messages, oldest first, for the transcript sent to Grok.
 
 	A plain "last N messages" window drops its oldest line every time a
@@ -406,14 +423,20 @@ def recent_history(chat_id: int, limit: int) -> list[tuple]:
 	Grok's prompt cache (it caches the unchanged start of a prompt). Instead
 	the window's start only moves every limit/2 messages: the transcript holds
 	between limit and 1.5 x limit messages and in between only grows at the
-	end, so everything before the new messages stays cached."""
-	total = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)).fetchone()[0]
+	end, so everything before the new messages stays cached.
+
+	Private chats (dm_bot_id = this bot's ID) come from dm_messages, not messages."""
+	if dm_bot_id is None:
+		table, where, args = "messages", "chat_id = ?", (chat_id,)
+	else:
+		table, where, args = "dm_messages", "bot_id = ? AND chat_id = ?", (dm_bot_id, chat_id)
+	total = db.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}", args).fetchone()[0]
 	step = max(1, limit // 2)
 	start = max(0, (total - limit) // step * step)
 	return db.execute(
-		"SELECT message_id, sender, text, ts, reply_to FROM messages "
-		"WHERE chat_id = ? ORDER BY message_id LIMIT -1 OFFSET ?",
-		(chat_id, start),
+		f"SELECT message_id, sender, text, ts, reply_to FROM {table} "
+		f"WHERE {where} ORDER BY message_id LIMIT -1 OFFSET ?",
+		(*args, start),
 	).fetchall()
 
 
@@ -2071,8 +2094,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	user_id = msg.from_user.id if msg.from_user else None
 	# [sender user-id] start of the message; groups also show the chat id.
 	preview = " ".join(text.split())
-	if len(preview) > 80:
-		preview = preview[:80].rstrip() + " ..."
+	if len(preview) > 60:
+		preview = preview[:60].rstrip() + " ..."
 	log.info("[%s %s%s]%s %s", sender_name(msg), user_id, "" if private else f" @ {msg.chat_id}",
 			 " (movers list)" if movers else "", preview or f"[{describe(msg) or 'no text'}]")
 
@@ -2096,7 +2119,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		else:
 			# Must match what sender_name() produces for this bot's own messages.
 			self_name = f"{bot.first_name} (@{bot.username})"
-			history = await asyncio.to_thread(recent_history, msg.chat_id, HISTORY_LIMIT)
+			history = await asyncio.to_thread(
+				recent_history, msg.chat_id, HISTORY_LIMIT, bot.id if private else None)
 			transcript = "\n".join(format_row(r, self_name) for r in history)
 			if private:
 				prompt = (
