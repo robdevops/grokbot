@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Telegram group bot that answers @mentions using Grok (xAI), with the group's
-recent chat history as context.
+Telegram group bot that answers @mentions with an LLM, using the group's recent
+chat history as context. The LLM comes from xAI (Grok) or OpenRouter, whichever
+API key is set.
 
 Every message the bot sees is logged to SQLite. When someone @mentions the bot
-(or replies to one of its messages), the recent log is sent to Grok as a
+(or replies to one of its messages), the recent log is sent to the model as a
 transcript so it can answer questions like "what's with that last message?".
 
 The database can be shared by several bots in the same group: each bot's
@@ -12,7 +13,7 @@ replies are stored under its real name and relabelled "You" only when that
 bot builds its own transcript.
 
 MCP servers listed in mcp_servers.json (e.g. Yahoo Finance, Sharesight) are
-started by the bot itself and their tools are offered to Grok as function
+started by the bot itself and their tools are offered to the model as function
 tools. The bot runs the tool calls locally, so the servers never need to be
 reachable from the internet and credentials stay on this machine.
 
@@ -20,11 +21,23 @@ Setup:
   1. Create a bot with @BotFather, then /setprivacy -> Disable.
 	 (Remove and re-add the bot to any group it's already in.)
   2. pip install -r requirements.txt   (plus Node.js for npx-based MCP servers)
-  3. export TELEGRAM_BOT_TOKEN=...	XAI_API_KEY=...
+  3. export TELEGRAM_BOT_TOKEN=...
+     and exactly one of:  XAI_API_KEY=...  (xAI)   OPENROUTER_API_KEY=...  (OpenRouter)
+     (the bot refuses to start if both are set, or neither)
+     Optional: MODEL (default grok-4.7 on xAI, xiaomi/mimo-v2.6-pro on OpenRouter),
+     REASONING (low / medium / high)
   4. Optional: edit mcp_servers.json
-  5. python grokbot.py
+  5. python bot.py [label]
+     The label is ignored; it only shows in ps/top, to tell instances apart when
+     several run side by side with different environments.
+
+OpenRouter only: SEARCH (on/off), SEARCH_MODEL (runs the model's web searches, default
+xiaomi/mimo-v2.6-flash:online), SEARCH_ENGINE (auto/native/exa), MAX_RESULTS,
+SEARCH_TOKENS, MAX_TOKENS, TEMPERATURE, and OWNER_USER_ID (enables /credits).
+xAI only: SEARCH_TOOLS (default "web_search,x_search"; empty disables search).
 """
 
+import argparse
 import asyncio
 import base64
 import hashlib
@@ -35,48 +48,73 @@ import os
 import random
 import re
 import sqlite3
+import sys
 import tempfile
+import textwrap
+import threading
 import time
 from contextlib import AsyncExitStack
 from datetime import datetime, timedelta
+from urllib.parse import quote
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
-from openai import AsyncOpenAI, BadRequestError
+from openai import APIStatusError, AsyncOpenAI, BadRequestError
 from telegram import (
 	InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, Message, MessageEntity,
 	ReplyKeyboardMarkup, Update,
 )
 from telegram.constants import ChatAction, ParseMode
 from telegram.ext import (
-	Application, CallbackQueryHandler, ContextTypes, MessageHandler, TypeHandler, filters,
+	Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, TypeHandler,
+	filters,
 )
 from telegram.error import BadRequest, Forbidden, NetworkError
 
 # ---------------------------------------------------------------- config ----
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-XAI_API_KEY = os.environ["XAI_API_KEY"]
-MODEL = os.getenv("GROK_MODEL", "grok-4.7")
-REASONING = os.getenv("GROK_REASONING", "").strip().lower()  # low / medium / high; empty = model default
+XAI_API_KEY = os.getenv("XAI_API_KEY", "").strip()
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+if XAI_API_KEY and OPENROUTER_API_KEY:
+	sys.exit("Both XAI_API_KEY and OPENROUTER_API_KEY are set; set only one, to choose the backend.")
+if not (XAI_API_KEY or OPENROUTER_API_KEY):
+	sys.exit("Set XAI_API_KEY (xAI) or OPENROUTER_API_KEY (OpenRouter) to choose the backend.")
+BACKEND = "openrouter" if OPENROUTER_API_KEY else "xai"
+MODEL = os.getenv("MODEL", "").strip() or ("xiaomi/mimo-v2.6-pro" if BACKEND == "openrouter" else "grok-4.7")
+REASONING = os.getenv("REASONING", "").strip().lower()  # low / medium / high; empty = model default
 MAX_IMAGES = int(os.getenv("MAX_IMAGES", "2"))
 # Longer transcript lines (usually the bot's own earlier answers) are cut to this.
 TRANSCRIPT_LINE_MAX = int(os.getenv("TRANSCRIPT_LINE_MAX", "400"))
 HISTORY_LIMIT = int(os.getenv("HISTORY_LIMIT", "20"))  # messages of context (window is 20-29, see recent_history)
 DB_PATH = os.getenv("DB_PATH", "chat_log.db")
 TZ = ZoneInfo(os.getenv("BOT_TZ", "UTC"))  # e.g. "Europe/London"
-# Grok's server-side search tools. Set SEARCH_TOOLS="" to disable.
+# xAI only: Grok's server-side search tools. Set SEARCH_TOOLS="" to disable.
 SEARCH_TOOLS = [
 	{"type": t} for t in os.getenv("SEARCH_TOOLS", "web_search,x_search").replace(",", " ").split()
-]
+] if BACKEND == "xai" else []
+# OpenRouter only: its web_search tool, and the model that runs the searches it hands back.
+SEARCH = os.getenv("SEARCH", "on").strip().lower() != "off"
+SEARCH_MODEL = os.getenv("SEARCH_MODEL", "xiaomi/mimo-v2.6-flash:online").strip()
+SEARCH_ENGINE = os.getenv("SEARCH_ENGINE", "auto").strip().lower()
+MAX_RESULTS = int(os.getenv("MAX_RESULTS", "20"))
+SEARCH_TOKENS = int(os.getenv("SEARCH_TOKENS", "400"))  # cap on each search write-up
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4000"))  # reply cap; counts reasoning tokens too
+TEMPERATURE = float(os.getenv("TEMPERATURE", "0.6"))
+OWNER_ID = int(os.getenv("OWNER_USER_ID", "0"))  # who may use /credits
+SEARCH_ON = bool(SEARCH_TOOLS) if BACKEND == "xai" else SEARCH
+SEARCH_WHAT = "the web and X (Twitter)" if BACKEND == "xai" else "the web"
+OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
 # MCP servers (see mcp_servers.json). Missing file = no MCP tools.
 MCP_CONFIG = os.getenv("MCP_CONFIG", "mcp_servers.json")
 MCP_TIMEOUT = int(os.getenv("MCP_TIMEOUT", "60"))  # seconds per tool call
-MAX_TOOL_ROUNDS = int(os.getenv("MAX_TOOL_ROUNDS", "6"))  # Grok <-> tools round trips per answer
-MAX_TOOL_OUTPUT = int(os.getenv("MAX_TOOL_OUTPUT", "50000"))  # chars per tool result sent to Grok
+MAX_TOOL_ROUNDS = int(os.getenv("MAX_TOOL_ROUNDS", "6"))  # model <-> tools round trips per answer
+MAX_TOOL_OUTPUT = int(os.getenv("MAX_TOOL_OUTPUT", "50000"))  # chars per tool result sent to the model
 # Chats that get a message when an MCP server goes down. Empty = no alerts.
 ALERT_CHATS = {
 	int(x) for x in os.getenv("ALERT_CHAT_IDS", "").replace(",", " ").split()
@@ -145,10 +183,16 @@ logging.basicConfig(
 	else "%(asctime)s %(levelname)s %(message)s",
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
-log = logging.getLogger("grokbot")
+log = logging.getLogger("bot")
 
 # Searches (especially X search) can take a while, so allow a generous timeout.
-grok = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1", timeout=180)
+if BACKEND == "xai":
+	llm = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1", timeout=180)
+else:
+	llm = AsyncOpenAI(
+		api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE, timeout=180,
+		default_headers={"X-Title": "Telegram group bot"},
+	)
 
 SYSTEM_PROMPT = """You are {bot_name}, a bot taking part in a serious Telegram group chat about stocks and investing.
 
@@ -164,7 +208,7 @@ Lines from "You" are your own earlier replies. Other bots may also be in the cha
 lines appear under their own names, and they are not you. Media appears as [photo],
 [voice] etc.; you can't see its contents, only any caption.
 
-You can search the web and X (Twitter). Use them whenever a question involves news, prices,
+You can search {search_what}. Use search whenever a question involves news, prices,
 markets, current events, or what people are saying, instead of saying you lack live data.
 If you use a source, you may mention it briefly or include one link, but keep it light.
 
@@ -236,7 +280,32 @@ def tools_prompt(servers: list["MCPServer"], down: list["MCPServer"]) -> str:
 
 # The DB may be shared with other bot processes: WAL mode lets readers and a
 # writer work at the same time, and the timeout waits out brief write locks.
-db = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
+class LockedDB:
+	"""One SQLite connection shared by the event loop and worker threads (asyncio.to_thread
+	keeps a blocked write from freezing the loop). Calls are serialised by a lock and
+	results are fetched under it, so callers can use .execute(...).fetchone() as usual."""
+
+	class Rows(list):
+		def fetchone(self):
+			return self[0] if self else None
+
+		def fetchall(self):
+			return list(self)
+
+	def __init__(self, conn: sqlite3.Connection):
+		self._conn = conn
+		self._lock = threading.RLock()
+
+	def execute(self, sql: str, params=()) -> "LockedDB.Rows":
+		with self._lock:
+			return self.Rows(self._conn.execute(sql, params).fetchall())
+
+	def commit(self) -> None:
+		with self._lock:
+			self._conn.commit()
+
+
+db = LockedDB(sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30))
 db.execute("PRAGMA journal_mode=WAL")
 db.execute(
 	"""CREATE TABLE IF NOT EXISTS messages (
@@ -360,14 +429,43 @@ def format_row(row: tuple, self_name: str) -> str:
 	return f"[#{mid}] {when} {who}{reply}: {text}"
 
 
-def split_message(text: str, size: int = MAX_TG_MESSAGE) -> list[str]:
-	chunks = []
-	while len(text) > size:
-		cut = text.rfind("\n", 0, size)
-		cut = cut if cut > 0 else size
-		chunks.append(text[:cut])
-		text = text[cut:].lstrip()
-	return chunks + [text] if text else chunks
+HTML_TAG_RE = re.compile(r"<(/?)([a-z][a-z0-9-]*)\b[^>]*>", re.I)
+
+
+def split_html(text: str, size: int = MAX_TG_MESSAGE - 96) -> list[str]:
+	"""Split Telegram HTML into messages of at most `size` characters.
+
+	Cuts at a newline where it can, never inside a tag or an entity, and keeps every
+	message well-formed: tags still open at a cut are closed there and re-opened at the
+	start of the next message, so links and bold survive a split."""
+	chunks, reopen = [], ""  # reopen: opening tags carried over from the previous chunk
+	while len(reopen) + len(text) > size:
+		room = size - len(reopen) - 32  # headroom for the closing tags
+		cut = text.rfind("\n", 0, room)
+		if cut <= 0:
+			cut = room
+		if text.rfind("<", 0, cut) > text.rfind(">", 0, cut):  # inside a tag
+			cut = text.rfind("<", 0, cut)
+		amp = text.rfind("&", max(0, cut - 10), cut)
+		if amp != -1 and ";" not in text[amp:cut]:  # inside an entity
+			cut = amp
+		cut = max(cut, 1)
+		head, text = reopen + text[:cut], text[cut:].lstrip()
+		stack = []  # (name, opening tag) still open at the end of head
+		for m in HTML_TAG_RE.finditer(head):
+			name = m.group(2).lower()
+			if not m.group(1):
+				stack.append((name, m.group(0)))
+			else:
+				for i in range(len(stack) - 1, -1, -1):
+					if stack[i][0] == name:
+						del stack[i]
+						break
+		chunks.append(head + "".join(f"</{n}>" for n, _ in reversed(stack)))
+		reopen = "".join(tag for _, tag in stack)
+	if text.strip():
+		chunks.append(reopen + text)
+	return chunks
 
 
 # [label](url), where label may itself be bracketed, as in Grok's [[1]](url) citations
@@ -407,6 +505,118 @@ def md_to_html(text: str) -> str:
 	text = MD_LINK.sub(link, text)
 	text = MD_BOLD.sub(lambda m: f"<b>{m.group(1) or m.group(2)}</b>", text)
 	return MD_CODE.sub(r"<code>\1</code>", text)
+
+# ---------------------------------------------------------------- tickers --
+
+# Optional deterministic ticker formatting (off by default: the model is told to bold and
+# link tickers itself). AUTO_LINK links ticker-shaped words to Yahoo Finance; AUTO_BOLD
+# bolds them instead (and wins if both are on). Text already inside <a>, <b> or <code>
+# is left alone, so the model's own links are never doubled.
+AUTO_LINK = _flag("AUTO_LINK")
+AUTO_BOLD = _flag("AUTO_BOLD")
+EXTRA_TICKERS = {t.upper() for t in os.getenv("EXTRA_TICKERS", "").replace(",", " ").split()}
+EXTRA_NOT_TICKERS = {t.upper() for t in os.getenv("NOT_TICKERS", "").replace(",", " ").split()}
+# Yahoo quotes crypto as BTC-USD, not BTC.
+CRYPTO = {"BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "BNB", "LTC", "DOT", "AVAX",
+		  "LINK", "TRX", "SHIB", "PEPE", "WLFI", "USDT", "USDC"} | {
+	t.upper() for t in os.getenv("CRYPTO_TICKERS", "").replace(",", " ").split()}
+
+# Words shaped like tickers that aren't tickers.
+NOT_TICKERS = {
+	"AI", "AM", "PM", "AND", "THE", "NOT", "BUT", "FOR", "ALL", "NEW", "OLD", "OK",
+	"US", "USA", "UK", "EU", "AU", "CN", "UTC", "AEST", "AEDT", "GMT",
+	"CEO", "CFO", "COO", "CTO", "IPO", "ETF", "ETN", "REIT", "SPAC", "LLC", "INC",
+	"GDP", "CPI", "PPI", "FED", "FOMC", "ECB", "RBA", "BOJ", "SEC", "ASIC", "ATO",
+	"ASX", "NYSE", "LSE", "TSX", "OTC", "CBOE", "CME",
+	"EPS", "PE", "PEG", "DCF", "FCF", "EBIT", "ROE", "ROI", "ROIC", "TAM", "YOY",
+	"YTD", "LTM", "TTM", "FY", "HY", "QOQ", "MOM", "EOD", "ATH", "ATL", "MA", "RSI",
+	"USD", "AUD", "EUR", "GBP", "JPY", "CNY",
+	"NOTE", "EDIT", "TLDR", "FYI", "IMO", "IMHO", "AKA", "ETA", "VS", "PS",
+	"VR", "AR", "XR", "API", "GPU", "CPU", "TPU", "HBM", "DRAM", "NAND", "EUV", "OS",
+	"U.S", "U.K", "P.A", "E.G", "I.E",
+} | EXTRA_NOT_TICKERS
+TICKER_RE = re.compile(
+	r"\b([A-Z0-9]{1,6}\.[A-Z]{1,2}|[A-Z][A-Z0-9]{1,5})\b")  # 9988.HK, SQX.AX, ACMR
+# Single-letter tickers (U, F, X, T) only count next to a move or a price, so "vitamin C"
+# and "A big move" are left alone.
+ONE_LETTER_RE = re.compile(r"\b([A-Z])\b(?=\s*[-+\u2014:]?\s*(?:[-+]?\d|\$))")
+# Period and unit shorthand: FY26, Q3, H1, CY25, 2X, 10K, 200D
+NOT_TICKER_RE = re.compile(r"^(?:FY|CY|HY|H|Q|FQ)\d+$|^\d|^[A-Z]\d+$")
+SEGMENT_RE = re.compile(r"(<[^>]+>)")
+# One pass for both shapes: a second pass over text the first one had already wrapped
+# could match inside the inserted <a href> markup.
+COMBINED_TICKER_RE = re.compile(f"{TICKER_RE.pattern}|{ONE_LETTER_RE.pattern}")
+
+
+def is_ticker(word: str) -> bool:
+	if word in EXTRA_TICKERS:
+		return True
+	base, _, suffix = word.partition(".")
+	if suffix in EXCHANGE_SUFFIXES and base not in NOT_TICKERS:
+		return True  # an exchange suffix settles it, even for numeric codes like 9988.HK
+	if word in NOT_TICKERS or NOT_TICKER_RE.match(word):
+		return False
+	return True
+
+
+# Yahoo needs the exchange suffix in the URL, but it's noise in the chat: link SQX.AX,
+# show SQX. Share classes like BRK.B are not suffixes, so they stay as written.
+EXCHANGE_SUFFIXES = {"AX", "L", "TO", "V", "NZ", "HK", "SS", "SZ", "T", "KS", "DE",
+					 "PA", "AS", "MI", "MC", "ST", "OL", "SI", "BO", "NS", "SA", "MX"}
+
+
+def yahoo_url(symbol: str) -> str:
+	sym = f"{symbol}-USD" if symbol in CRYPTO else symbol
+	return "https://finance.yahoo.com/quote/" + quote(sym, safe="")
+
+
+def ticker_label(symbol: str) -> str:
+	"""What the reader sees: SQX.AX becomes SQX, BRK.B stays BRK.B."""
+	base, _, suffix = symbol.partition(".")
+	return base if suffix in EXCHANGE_SUFFIXES else symbol
+
+
+def mark_tickers(out: str, wrap) -> str:
+	"""Apply `wrap` to ticker-shaped words, outside tags and outside existing markup.
+
+	The model is asked to format tickers itself, but it imitates its own plain history
+	and drifts back, so do it deterministically instead.
+	"""
+	pieces, depth = [], 0
+	for seg in SEGMENT_RE.split(out):
+		if seg.startswith("<"):
+			tag = seg.lower()
+			if tag.startswith(("<b", "<a", "<code")) and not tag.startswith("</"):
+				depth += 1
+			elif tag.startswith(("</b", "</a", "</code")):
+				depth = max(0, depth - 1)
+			pieces.append(seg)
+			continue
+		if depth:  # already inside bold, a link or code
+			pieces.append(seg)
+			continue
+		seg = COMBINED_TICKER_RE.sub(
+			lambda m: wrap(m.group(0)) if len(m.group(0)) == 1 or is_ticker(m.group(0))
+			else m.group(0), seg)
+		pieces.append(seg)
+	return "".join(pieces)
+
+
+def bold_tickers(out: str) -> str:
+	"""Kept for when bolding is wanted instead of linking: AUTO_BOLD=on."""
+	return mark_tickers(out, lambda w: f"<b>{w}</b>")
+
+
+def link_tickers(out: str) -> str:
+	return mark_tickers(out, lambda w: f'<a href="{yahoo_url(w)}">{ticker_label(w)}</a>')
+
+
+def auto_mark_tickers(text: str) -> str:
+	"""Apply AUTO_BOLD / AUTO_LINK to a finished reply (neither on: unchanged)."""
+	if AUTO_BOLD:
+		return bold_tickers(text)
+	return link_tickers(text) if AUTO_LINK else text
+
 
 # ------------------------------------------------------------------- MCP ----
 
@@ -487,6 +697,13 @@ def _looks_read_only(tool) -> bool:
 	if hint is not None:
 		return hint
 	return tool.name.lower().startswith(READ_ONLY_PREFIXES)
+
+
+def function_tool(name: str, description: str, parameters: dict) -> dict:
+	"""A function tool in the request format of the chosen backend: flat for xAI's
+	Responses API, nested under "function" for OpenRouter's chat completions."""
+	fn = {"name": name, "description": description, "parameters": parameters}
+	return {"type": "function", **fn} if BACKEND == "xai" else {"type": "function", "function": fn}
 
 
 class MCPServer:
@@ -583,7 +800,7 @@ class MCPServer:
 				sent = await self.bot.send_message(
 					chat_id, text, parse_mode=ParseMode.HTML, disable_notification=True
 				)
-				save(sent)  # so it shows up in the transcript Grok sees
+				await asyncio.to_thread(save, sent)  # so it shows up in the transcript the model sees
 			except Exception:
 				log.exception("Couldn't send MCP alert to chat %s", chat_id)
 
@@ -597,17 +814,15 @@ class MCPServer:
 				continue
 			fn = f"{self.label}__{t.name}"[:64]
 			self.fn_names[fn] = t.name
-			self.tools.append({
-				"type": "function",
-				"name": fn,
-				"description": compact_description(t.description or ""),
-				"parameters": compact_schema(t.inputSchema or {"type": "object", "properties": {}}),
-			})
+			self.tools.append(function_tool(
+				fn, compact_description(t.description or ""),
+				compact_schema(t.inputSchema or {"type": "object", "properties": {}}),
+			))
 		enabled = set(self.fn_names.values())
-		log.info("MCP %s: enabled %s", self.label, sorted(enabled))
 		skipped = sorted(t.name for t in listed if t.name not in enabled)
+		log_names(f"MCP {self.label}: {len(enabled)} tools:", sorted(enabled))
 		if skipped:
-			log.info("MCP %s: skipped (not read-only or not allowed) %s", self.label, skipped)
+			log_names(f"MCP {self.label}: {len(skipped)} skipped:", skipped)
 
 	async def call(self, tool: str, args: dict) -> str:
 		if not self.session:
@@ -629,6 +844,13 @@ class MCPServer:
 			log.warning("MCP %s.%s result truncated (%d chars)", self.label, tool, len(out))
 			out = out[:MAX_TOOL_OUTPUT] + f"\n...[truncated; {len(out)} chars total]"
 		return out
+
+
+def log_names(head: str, names: list[str], width: int = 80) -> None:
+	"""Log a list of tool names on lines short enough not to wrap in a terminal or journal."""
+	lines = textwrap.wrap(", ".join(n.removeprefix("get_") for n in names), width - len(head))
+	for i, line in enumerate(lines):
+		log.info("%s %s", head if i == 0 else " " * len(head), line)
 
 
 def _leaf_errors(e: BaseException) -> list[BaseException]:
@@ -895,12 +1117,14 @@ def token_usage(responses) -> dict[str, int]:
 	return tok
 
 
-async def grok_create(on_text=None, **kwargs):
+# ------------------------------------------------------------------ xAI ----
+
+async def xai_create(on_text=None, **kwargs):
 	"""One Responses API call. With on_text, stream it, calling on_text(text so far)
 	as text arrives, and return the final response object."""
 	if on_text is None:
-		return await grok.responses.create(**kwargs)
-	stream = await grok.responses.create(stream=True, **kwargs)
+		return await llm.responses.create(**kwargs)
+	stream = await llm.responses.create(stream=True, **kwargs)
 	text, final = "", None
 	async for event in stream:
 		if event.type == "response.output_text.delta":
@@ -909,28 +1133,21 @@ async def grok_create(on_text=None, **kwargs):
 		elif event.type in ("response.completed", "response.incomplete", "response.failed"):
 			final = event.response
 	if final is None:
-		raise RuntimeError("Grok's stream ended without a final response")
+		raise RuntimeError("The stream ended without a final response")
 	if final.status == "failed":
-		raise RuntimeError(f"Grok response failed: {final.error}")
+		raise RuntimeError(f"xAI response failed: {final.error}")
 	return final
 
 
-async def ask_grok(
-	content: list[dict], user_id: int | None, bot_name: str, on_text=None,
-	must_search: bool = False, cache_key: str | None = None,
+async def ask_xai(
+	content: list[dict], system: str, servers: list["MCPServer"], must_search: bool,
+	on_text=None, cache_key: str | None = None, bot_name: str = "", user_id: int | None = None,
 ) -> str:
-	"""Ask Grok, running any MCP tool calls it makes, until it produces an answer.
-	With on_text, responses are streamed and on_text gets the text so far.
-	With must_search, Grok only gets web/X search and has to use it at least once."""
-	if must_search and SEARCH_TOOLS:
-		servers, down = [], []
-		tools = list(SEARCH_TOOLS)
-	else:
-		must_search = False
-		servers = [s for s in MCP_SERVERS.values() if s.session and s.permits(user_id)]
-		down = [s for s in MCP_SERVERS.values() if s.error and s.permits(user_id)]
-		tools = SEARCH_TOOLS + [t for s in servers for t in s.tools]
-	system = SYSTEM_PROMPT.format(bot_name=bot_name) + tools_prompt(servers, down)
+	"""Ask Grok through xAI's Responses API, running any MCP tool calls it makes, until
+	it produces an answer. With on_text, responses are streamed and on_text gets the
+	text so far. With must_search, Grok only gets web/X search and has to use it at
+	least once."""
+	tools = list(SEARCH_TOOLS) if must_search else SEARCH_TOOLS + [t for s in servers for t in s.tools]
 	kwargs = {
 		"model": MODEL,
 		**({"tools": tools} if tools else {}),
@@ -958,12 +1175,12 @@ async def ask_grok(
 		)
 	if must_search:
 		try:
-			resp = await grok_create(on_text, input=first_input, tool_choice="required", **kwargs)
+			resp = await xai_create(on_text, input=first_input, tool_choice="required", **kwargs)
 		except BadRequestError as e:
 			log.warning("xAI rejected tool_choice=required (%s); retrying without it", e)
-			resp = await grok_create(on_text, input=first_input, **kwargs)
+			resp = await xai_create(on_text, input=first_input, **kwargs)
 	else:
-		resp = await grok_create(on_text, input=first_input, **kwargs)
+		resp = await xai_create(on_text, input=first_input, **kwargs)
 	responses = [resp]	# every round, for the search and token totals
 	tool_calls = 0
 	# Follow-up rounds re-send the whole conversation, which starts with exactly
@@ -990,13 +1207,13 @@ async def ask_grok(
 			conversation += [_as_input(item) for item in resp.output if item.type in REPLAY_TYPES]
 			conversation += results
 			try:
-				resp = await grok_create(on_text, input=conversation, **kwargs, **extra)
+				resp = await xai_create(on_text, input=conversation, **kwargs, **extra)
 			except BadRequestError as e:
 				log.warning("xAI rejected the replayed conversation (%s); "
 							"using previous_response_id from now on", e)
 				STATELESS_ROUNDS = False
 		if not STATELESS_ROUNDS:
-			resp = await grok_create(
+			resp = await xai_create(
 				on_text, previous_response_id=resp.id, input=results, **kwargs, **extra
 			)
 		responses.append(resp)
@@ -1016,6 +1233,304 @@ async def ask_grok(
 		100 * tok["cached"] / tok["in"] if tok["in"] else 0, tok["out"], tok["reasoning"],
 	)
 	return (resp.output_text or "").strip()
+
+
+
+# ------------------------------------------------------------ openrouter ----
+
+# MiMo sometimes prints a tool call as plain text instead of calling the tool. The
+# queries are usually fine, so pull them out and run them rather than binning them.
+FAKE_CALL_RE = re.compile(
+	r"<parameter=query>(.*?)(?:</parameter>|</tool_call>|<|$)", re.DOTALL | re.IGNORECASE)
+TOOL_SYNTAX_RE = re.compile(
+	r"<tool_call>.*?(?:</tool_call>|$)|<function=.*?(?:</function>|$)|<\|?tool_calls?\|?>",
+	re.DOTALL | re.IGNORECASE)
+
+SEARCH_TOOL = [{
+	"type": "openrouter:web_search",
+	"parameters": {"engine": SEARCH_ENGINE, "max_total_results": MAX_RESULTS},
+}]
+
+NO_TOOLS_NOTE = (
+	"\n\nYou have no web access and no tools this time. Answer from the chat history and "
+	"your own knowledge, say plainly what you can't check, and never output tool-call "
+	"syntax or JSON as text."
+)
+
+
+def chat_content(parts: list[dict]) -> list[dict]:
+	"""Message content in chat-completions format; callers build it in Responses format."""
+	out = []
+	for p in parts:
+		if p["type"] == "input_text":
+			out.append({"type": "text", "text": p["text"]})
+		elif p["type"] == "input_image":
+			out.append({"type": "image_url", "image_url": {"url": p["image_url"]}})
+	return out
+
+
+async def run_query(query: str) -> str:
+	"""Run one search through a cheap ':online' model and return what it found."""
+	log.info("Search: %s", query)
+	resp = await llm.chat.completions.create(
+		model=SEARCH_MODEL,
+		max_tokens=SEARCH_TOKENS,
+		temperature=0.2,
+		messages=[
+			{"role": "system", "content": (
+				"Answer from web search results only, as terse bullet points: the figure "
+				"or fact, then source and date in brackets. No sentences, no preamble, no "
+				"advice, no repetition. If the results don't cover it, reply exactly: "
+				"NOT FOUND."
+			)},
+			{"role": "user", "content": query},
+		],
+	)
+	return (resp.choices[0].message.content or "").strip() or "No results found."
+
+
+def call_query(arguments: str) -> str:
+	"""Pull the search string out of a tool call's JSON arguments, whatever the model
+	named the field."""
+	try:
+		args = json.loads(arguments or "{}")
+	except ValueError:
+		return ""
+	for key in ("query", "q", "search_query", "keywords", "input"):
+		if args.get(key):
+			return str(args[key])
+	return ""
+
+
+def merge_reasoning(details: list[dict], new: list) -> None:
+	"""Append streamed reasoning_details, joining consecutive text fragments of one block."""
+	for d in new:
+		d = dict(d)
+		last = details[-1] if details else None
+		if (last and d.get("text") and last.get("text") is not None
+				and last.get("type") == d.get("type") and last.get("index") == d.get("index")):
+			last["text"] += d["text"]
+			if d.get("signature"):
+				last["signature"] = d["signature"]
+		else:
+			details.append(d)
+
+
+async def complete(messages: list[dict], tools: list[dict], on_text=None,
+				   tool_choice: str | None = None, session: str | None = None):
+	"""One chat-completions call. With on_text, stream it, calling on_text(text so far)
+	as text arrives. Returns text, any tool calls the model handed back, the assistant
+	message to replay into the next round, and the finish reason, usage and citations."""
+	kwargs = dict(
+		model=MODEL,
+		max_tokens=MAX_TOKENS,  # without this, OpenRouter reserves credit for the model's max
+		temperature=TEMPERATURE,
+		messages=messages,
+		extra_body={
+			**({"reasoning": {"effort": REASONING}} if REASONING else {}),
+			"usage": {"include": True},  # ask OpenRouter for the real cost
+			# Sticky routing: keep a chat's requests on the provider endpoint that holds
+			# its cached prompt (session_id, sent as a header too), with prompt_cache_key
+			# as the weaker fallback some providers read.
+			**({"session_id": session, "prompt_cache_key": session} if session else {}),
+		},
+		**({"extra_headers": {"x-session-id": session}} if session else {}),
+	)
+	if tools:
+		kwargs["tools"] = tools
+		if tool_choice:
+			kwargs["tool_choice"] = tool_choice
+	if on_text is None:
+		resp = await llm.chat.completions.create(**kwargs)
+		# OpenRouter reports provider failures inside a normal HTTP 200 body.
+		err = (getattr(resp, "model_extra", None) or {}).get("error")
+		if err:
+			raise RuntimeError(f"provider error {err.get('code', '')}: {err.get('message', err)}")
+		if not resp.choices:
+			log.warning("Bad payload: %s", resp.model_dump_json()[:800])
+			raise RuntimeError("no choices in response")
+		choice = resp.choices[0]
+		extra = getattr(choice.message, "model_extra", None) or {}
+		return SimpleNamespace(
+			text=(choice.message.content or "").strip(),
+			calls=[SimpleNamespace(id=c.id, name=c.function.name, arguments=c.function.arguments)
+				   for c in choice.message.tool_calls or []],
+			assistant=choice.message.model_dump(exclude_none=True),
+			finish=choice.finish_reason, usage=resp.usage,
+			cites=extra.get("annotations") or extra.get("citations") or [],
+		)
+
+	stream = await llm.chat.completions.create(
+		stream=True, stream_options={"include_usage": True}, **kwargs)
+	text, finish, usage, cites = "", None, None, []
+	calls: dict[int, dict] = {}
+	details: list[dict] = []
+	async for chunk in stream:
+		err = (getattr(chunk, "model_extra", None) or {}).get("error")
+		if err:
+			raise RuntimeError(f"provider error {err.get('code', '')}: {err.get('message', err)}")
+		if chunk.usage:
+			usage = chunk.usage
+		if not chunk.choices:
+			continue
+		choice = chunk.choices[0]
+		delta = choice.delta
+		if delta.content:
+			text += delta.content
+			on_text(text)
+		for c in delta.tool_calls or []:
+			slot = calls.setdefault(c.index, {"id": "", "name": "", "arguments": ""})
+			slot["id"] = c.id or slot["id"]
+			if c.function:
+				slot["name"] += c.function.name or ""
+				slot["arguments"] += c.function.arguments or ""
+		extra = getattr(delta, "model_extra", None) or {}
+		merge_reasoning(details, extra.get("reasoning_details") or [])
+		cites += extra.get("annotations") or []
+		finish = choice.finish_reason or finish
+	done = [SimpleNamespace(**calls[i]) for i in sorted(calls)]
+	assistant = {"role": "assistant", "content": text or None}
+	if done:
+		assistant["tool_calls"] = [
+			{"id": c.id, "type": "function", "function": {"name": c.name, "arguments": c.arguments}}
+			for c in done
+		]
+	if details:
+		assistant["reasoning_details"] = details
+	return SimpleNamespace(text=text.strip(), calls=done, assistant=assistant,
+						   finish=finish, usage=usage, cites=cites)
+
+
+def usage_numbers(u) -> tuple[int, int, int, float]:
+	"""(input, cached input, output tokens, cost) from a usage object; zeros if absent."""
+	cached = getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0)
+	return (getattr(u, "prompt_tokens", 0) or 0, cached or 0,
+			getattr(u, "completion_tokens", 0) or 0, getattr(u, "cost", 0) or 0)
+
+
+MAX_SEARCHES = 5  # search calls run per round; the rest are told to try later
+
+
+def is_mcp_tool(name: str) -> bool:
+	return any(name in s.fn_names for s in MCP_SERVERS.values())
+
+
+async def run_search(arguments: str) -> str:
+	query = call_query(arguments)
+	if not query or not SEARCH_MODEL:
+		return "Search isn't available."
+	try:
+		return await run_query(query)
+	except Exception as e:
+		return f"Search failed: {e}"
+
+
+async def run_calls(calls: list, user_id: int | None) -> list[str]:
+	"""Run the tool calls the model handed back: MCP data tools, or else web searches
+	(all of them concurrently). Every call needs a reply, so searches past MAX_SEARCHES
+	get a note instead of being dropped."""
+	searches = 0
+	jobs = []
+	for c in calls:
+		if is_mcp_tool(c.name):
+			jobs.append(run_tool(c, user_id))
+			continue
+		searches += 1
+		if searches > MAX_SEARCHES:
+			jobs.append(asyncio.sleep(0, "Skipped: too many searches at once. Use what you already have."))
+		else:
+			jobs.append(run_search(c.arguments))
+	return list(await asyncio.gather(*jobs))
+
+
+async def ask_openrouter(
+	content: list[dict], system: str, servers: list["MCPServer"], user_id: int | None,
+	on_text=None, session: str | None = None, tools_on: bool = True,
+) -> str:
+	"""Ask the model, running the tool calls it makes (MCP data tools here, searches via
+	SEARCH_MODEL) for up to MAX_TOOL_ROUNDS rounds, until it produces an answer.
+	With on_text, replies are streamed and on_text gets the text so far."""
+	t0 = time.monotonic()
+	search_on = tools_on and SEARCH
+	servers = servers if tools_on else []
+	conv = [{"role": "system", "content": system}, {"role": "user", "content": chat_content(content)}]
+	rounds = tool_calls = 0
+	tok = {"in": 0, "cached": 0, "out": 0, "cost": 0.0}
+	r = None
+	while True:
+		tools = (SEARCH_TOOL if search_on else []) + [t for s in servers for t in s.tools]
+		final = rounds >= MAX_TOOL_ROUNDS
+		r = await complete(conv, tools, on_text, tool_choice="none" if final else None,
+						   session=session)
+		rounds += 1
+		n_in, n_cached, n_out, cost = usage_numbers(r.usage)
+		tok["in"] += n_in
+		tok["cached"] += n_cached
+		tok["out"] += n_out
+		tok["cost"] += cost
+		log.info("Round %d: in %d (%d cached) out %d, %s", rounds, n_in, n_cached, n_out, r.finish)
+		if final:
+			log.warning("Hit MAX_TOOL_ROUNDS (%d); made the model answer with what it has",
+						MAX_TOOL_ROUNDS)
+			break
+		if r.calls:
+			tool_calls += len(r.calls)
+			outputs = await run_calls(r.calls, user_id)
+			conv.append(r.assistant)
+			conv += [{"role": "tool", "tool_call_id": c.id, "content": out}
+					 for c, out in zip(r.calls, outputs)]
+			continue
+		# MiMo sometimes prints a search call as text instead of making it: run the query
+		# and hand the results back, once.
+		fake = [q.strip() for q in FAKE_CALL_RE.findall(r.text) if q.strip()]
+		if fake and search_on and SEARCH_MODEL:
+			results = await asyncio.gather(*(run_query(q) for q in fake[:5]),
+										   return_exceptions=True)
+			found = "\n\n".join(f'Results for "{q}":\n{x}' for q, x in zip(fake, results)
+								if not isinstance(x, Exception))
+			conv.append({"role": "user", "content":
+						 f"{found}\n\nAnswer the question now using these results."})
+			search_on = False
+			continue
+		break
+	log.info("%.1fs, %d rounds, %d tools: in %d (%.0f%% cached) out %d, $%.4f",
+			 time.monotonic() - t0, rounds, tool_calls, tok["in"],
+			 100 * tok["cached"] / tok["in"] if tok["in"] else 0, tok["out"], tok["cost"])
+	text = TOOL_SYNTAX_RE.sub("", r.text).strip()
+	if not text:
+		if r.finish == "length":
+			raise RuntimeError(f"hit the {MAX_TOKENS}-token cap before writing an answer")
+		raise RuntimeError(f"empty reply (finish_reason={r.finish})")
+	return text
+
+
+async def ask_llm(
+	content: list[dict], user_id: int | None, bot_name: str, on_text=None,
+	must_search: bool = False, cache_key: str | None = None,
+) -> str:
+	"""Ask the configured backend (xAI or OpenRouter), running any MCP tool calls the
+	model makes, until it produces an answer. With on_text, the reply is streamed and
+	on_text gets the text so far. With must_search, the model only gets web search."""
+	must_search = must_search and SEARCH_ON
+	if must_search:
+		servers, down = [], []
+	else:
+		servers = [s for s in MCP_SERVERS.values() if s.session and s.permits(user_id)]
+		down = [s for s in MCP_SERVERS.values() if s.error and s.permits(user_id)]
+	system = SYSTEM_PROMPT.format(bot_name=bot_name, search_what=SEARCH_WHAT) + tools_prompt(servers, down)
+	if BACKEND == "xai":
+		return await ask_xai(content, system, servers, must_search, on_text, cache_key, bot_name, user_id)
+	# Sticky routing: keep a chat's requests on the provider that holds its cached prompt.
+	session = f"{bot_name}-{cache_key}" if cache_key else None
+	try:
+		return await ask_openrouter(content, system, servers, user_id, on_text, session)
+	except (APIStatusError, RuntimeError):
+		if not (SEARCH_ON or servers):
+			raise
+		log.warning("Retrying without tools", exc_info=True)
+		return await ask_openrouter(content, system + NO_TOOLS_NOTE, [], user_id, on_text,
+									session, tools_on=False)
+
 
 # ---------------------------------------------------------------- drafts ----
 
@@ -1063,7 +1578,7 @@ class Draft:
 	def _render(self) -> str:
 		# Half-written HTML would be rejected, so drafts are plain text; the
 		# final message gets the real formatting.
-		plain = html.unescape(TG_TAG_RE.sub("", self.text)).strip()
+		plain = html.unescape(TG_TAG_RE.sub("", TOOL_SYNTAX_RE.sub("", self.text))).strip()
 		if len(plain) > MAX_TG_MESSAGE:
 			plain = "..." + plain[-(MAX_TG_MESSAGE - 3):]
 		return plain
@@ -1099,7 +1614,7 @@ HOLDING_NEWS_PROMPT = """This is an automated daily check, not a chat message.
 Holdings:
 {holdings}
 
-Search the web and X for MAJOR news about these companies published in the past 24 hours.
+Search {search_what} for MAJOR news about these companies published in the past 24 hours.
 The bar is high. Only material, price-moving events count: results or earnings, guidance
 changes, takeover or merger news, capital raisings, major contract wins or losses, regulatory
 or clinical-trial decisions, trading halts or suspensions, CEO or CFO departures, dividend
@@ -1149,11 +1664,11 @@ async def holding_news_text(bot, username: str, holdings: dict[str, str]) -> str
 		"genuinely new development:\n" + "\n".join(r[0] for r in recent) + "\n"
 	) if recent else ""
 	prompt = HOLDING_NEWS_PROMPT.format(
-		now=now_str(),
+		now=now_str(), search_what=SEARCH_WHAT,
 		holdings="\n".join(f"- {k}: {v}" for k, v in sorted(holdings.items())),
 		already=already,
 	)
-	raw = strip_disclaimer(await ask_grok(
+	raw = strip_disclaimer(await ask_llm(
 		[{"type": "input_text", "text": prompt}], None, bot.first_name, must_search=True,
 		cache_key=f"holding-news-{username}",
 	))
@@ -1239,7 +1754,7 @@ def undo_button(code: str) -> InlineKeyboardMarkup:
 
 async def send_holding_news(bot, chat_id: int, news: str, codes: list[str]) -> None:
 	"""Send a holding-news message with its Unsubscribe button on the last part."""
-	chunks = split_message(f"📰 <b>Holding news</b> (past 24h)\n\n{news}")
+	chunks = split_html(f"📰 <b>Holding news</b> (past 24h)\n\n{news}")
 	for i, chunk in enumerate(chunks):
 		last = i == len(chunks) - 1
 		sent = await send_html(bot, chat_id, chunk, reply_markup=UNSUBSCRIBE_BUTTON if last else None)
@@ -1446,9 +1961,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	if msg is None:
 		return
 	if HOLDING_NEWS:
-		remember_user(msg)	# username -> ID, for holding-news DMs
+		await asyncio.to_thread(remember_user, msg)	# username -> ID, for holding-news DMs
 
-	save(msg)  # log everything, including edits (they overwrite the original)
+	await asyncio.to_thread(save, msg)  # log everything, incl. edits (they overwrite the original)
 	if update.edited_message:
 		return	# don't answer edited messages
 	# Other bots are logged but never answered (avoids bot-to-bot loops),
@@ -1502,14 +2017,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 			prompt = (
 				f"This is a private chat with {sender_name(msg)}. They tapped the "
 				f"\"{text.strip()}\" button, which asks for: {preset}. It's now {now_str()}. "
-				"Search the web and X for current information, and do the whole job before replying."
+				f"Search {SEARCH_WHAT} for current information, and do the whole job before replying."
 			)
 		else:
 			# Must match what sender_name() produces for this bot's own messages.
 			self_name = f"{bot.first_name} (@{bot.username})"
-			transcript = "\n".join(
-				format_row(r, self_name) for r in recent_history(msg.chat_id, HISTORY_LIMIT)
-			)
+			history = await asyncio.to_thread(recent_history, msg.chat_id, HISTORY_LIMIT)
+			transcript = "\n".join(format_row(r, self_name) for r in history)
 			if private:
 				prompt = (
 					f"This is a private one-to-one chat with {sender_name(msg)}, not the group. "
@@ -1532,7 +2046,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 				listing = msg.text_html if msg.text else (msg.caption_html or "")	# caption only, no [photo] tag
 				prompt += f"\n\n{listing}\n\nexplain. one blank line after each news item and nothing else"
 			prompt += (
-				f"\n\nRespond to the last message (#{msg.message_id}). Do the whole job with your "
+				f"\n\nIt's now {now_str()}. "
+				f"Respond to the last message (#{msg.message_id}). Do the whole job with your "
 				"tools before replying: don't do part of it and offer to do the rest, and don't ask "
 				"whether to continue. Don't imitate earlier replies of yours that did either. "
 				"Fetch fresh data rather than reusing numbers from earlier replies, and follow the "
@@ -1544,17 +2059,18 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		# Movers lists are explained from their caption alone; finbot's image adds
 		# nothing Grok needs and costs a lot of tokens.
 		image_sources = () if movers else (reply_target, msg)
-		for candidate in image_sources:  # replied-to photo first, then the mention itself
-			if candidate and len(content) <= MAX_IMAGES:
-				fid = photo_file_id(candidate)
-				if fid:
-					try:
-						content.append(await image_part(bot, fid))
-					except Exception:
-						log.exception("Couldn't download image")
+		# replied-to photo first, then the mention itself; downloaded concurrently
+		file_ids = [fid for m in image_sources if m and (fid := photo_file_id(m))]
+		images = await asyncio.gather(*(image_part(bot, f) for f in file_ids[:MAX_IMAGES]),
+									  return_exceptions=True)
+		for img in images:
+			if isinstance(img, BaseException):
+				log.error("Couldn't download image", exc_info=img)
+			else:
+				content.append(img)
 		if len(content) > 1:
 			log.info("Attached %d image(s)", len(content) - 1)
-		raw = await ask_grok(
+		raw = await ask_llm(
 			content, user_id, bot.first_name,
 			on_text=draft.update if draft else None,
 			must_search=movers or bool(preset),
@@ -1563,7 +2079,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		answer = md_to_html(untag(strip_disclaimer(raw)))
 		if movers:
 			answer = strip_summary(answer)
-		answer = answer or "(no response)"
+		answer = auto_mark_tickers(answer) or "(no response)"
 	except Exception as e:
 		log.exception("Reply failed")
 		answer = (
@@ -1576,11 +2092,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		else:
 			typing.cancel()
 
-	chunks = split_message(answer)
+	chunks = split_html(answer)
 	for i, chunk in enumerate(chunks):
 		buttons = DM_KEYBOARD if private and DM_BUTTONS and i == len(chunks) - 1 else None
 		sent = await send_formatted(msg, chunk, quote=not private, reply_markup=buttons)
-		save(sent)  # bots don't receive their own messages, so log manually
+		await asyncio.to_thread(save, sent)  # bots don't receive their own messages, so log manually
 
 # Otherwise a list of Yahoo-linked tickers gets a big Yahoo preview card under it.
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
@@ -1614,6 +2130,24 @@ async def log_stopped_generation(update: Update, context: ContextTypes.DEFAULT_T
 		log.info("User stopped message generation (ignored): %s", stopped)
 
 
+async def credits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+	"""/credits - owner only (OWNER_USER_ID), OpenRouter backend only: credit left."""
+	if not update.effective_user or update.effective_user.id != OWNER_ID:
+		return
+	try:
+		async with httpx.AsyncClient(timeout=15) as client:
+			r = await client.get(f"{OPENROUTER_BASE}/credits",
+								 headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"})
+			r.raise_for_status()
+		d = r.json()["data"]
+		total, used = float(d["total_credits"]), float(d["total_usage"])
+		text = f"OpenRouter: ${total - used:.2f} left (${used:.2f} used of ${total:.2f})"
+	except Exception as e:
+		log.exception("Credit check failed")
+		text = f"Couldn't fetch credits: {e}"
+	await update.effective_message.reply_text(text, disable_notification=True)
+
+
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
 	if isinstance(context.error, NetworkError):
 		log.warning("Telegram network hiccup (retrying automatically): %s", context.error)
@@ -1626,6 +2160,8 @@ BACKGROUND: list[asyncio.Task] = []
 async def post_init(app: Application) -> None:
 	if MCP_SERVERS:
 		await asyncio.gather(*(s.start(app.bot) for s in MCP_SERVERS.values()))
+		schema = json.dumps([t for s in MCP_SERVERS.values() for t in s.tools])
+		log.info("MCP tool schemas: ~%d tokens, re-sent every round", len(schema) // 4)
 	if HOLDING_NEWS:
 		BACKGROUND.append(asyncio.create_task(holding_news_loop(app.bot)))
 
@@ -1635,6 +2171,11 @@ async def post_shutdown(app: Application) -> None:
 	await asyncio.gather(*(s.stop() for s in MCP_SERVERS.values()), return_exceptions=True)
 
 def main() -> None:
+	# The label does nothing: it's only there to tell instances apart in ps/top when
+	# several run side by side with different environments (python bot.py mimo).
+	parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+	parser.add_argument("label", nargs="?", help="ignored; identifies this instance in ps/top")
+	args, _ = parser.parse_known_args()
 	app = (
 		Application.builder()
 		.token(TELEGRAM_TOKEN)
@@ -1643,6 +2184,8 @@ def main() -> None:
 		.post_shutdown(post_shutdown)
 		.build()
 	)
+	if BACKEND == "openrouter" and OWNER_ID:	# must come before the catch-all handler
+		app.add_handler(CommandHandler("credits", credits))
 	app.add_handler(
 		MessageHandler(
 			(filters.ChatType.GROUPS | filters.ChatType.PRIVATE)
@@ -1659,7 +2202,9 @@ def main() -> None:
 		app.add_handler(CallbackQueryHandler(on_holding_news_button, pattern=r"^hn:"))
 		updates.append("callback_query")
 	app.add_error_handler(on_error)
-	log.info("Starting bot with model %s; MCP servers: %s", MODEL, ", ".join(MCP_SERVERS) or "none")
+	log.info("Starting%s: %s on %s, reasoning %s, MCP servers: %s",
+			 f" instance {args.label}" if args.label else "", MODEL, BACKEND,
+			 REASONING or "default", ", ".join(MCP_SERVERS) or "none")
 	app.run_polling(allowed_updates=updates)
 
 if __name__ == "__main__":
