@@ -24,6 +24,7 @@ FAKE_CALL_RE = re.compile(
 NOISY_ARGS = {"consolidated", "report_combined", "grouping", "include_limited",
               "include_sales", "response_format"}
 SAME_AS_EARLIER = "Same call as one already answered in this conversation; use that result."
+WRITE_NOW = "Write the answer now, from the tool results above. Keep any thinking brief."
 TOO_MANY_SEARCHES = "Skipped: too many searches at once. Use what you already have."
 
 
@@ -181,6 +182,16 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
              time.monotonic() - t0, rounds, tool_calls, total.tokens_in, total.cached_pct,
              total.tokens_out, total.cost)
     text = TOOL_SYNTAX_RE.sub("", step.text).strip()
+    if not text and step.finish == "length" and tool_calls:
+        # The model spent the whole cap thinking about the tool results. Keep them (answering
+        # from memory without them invents things): ask again with more room and less thinking.
+        log.warning("Hit the token cap before writing an answer; asking again with more room")
+        backend.add_user_message(conv, WRITE_NOW)
+        more = dataclasses.replace(req, max_tokens=(req.max_tokens or 1500) * 2, reasoning="low")
+        step = await _step(backend, conv, more, "none")
+        total.add(step.usage)
+        log.info("Recovery round: in %d out %d, %s", step.usage.tokens_in, step.usage.tokens_out, step.finish)
+        text = TOOL_SYNTAX_RE.sub("", step.text).strip()
     if not text:
         if step.finish == "length":
             raise RuntimeError("hit the token cap before writing an answer")

@@ -47,6 +47,8 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   the down-servers note last. Changing the system prompt or tool order invalidates every cached prefix.
 - xAI must stay on the Responses API (X search); it replays the conversation each round and falls back to
   `previous_response_id` if replay is rejected. OpenRouter errors can arrive inside a 200 body or stream chunk.
+- A reply that hits MAX_TOKENS while thinking about tool results is re-asked in the same conversation (2x cap, low
+  reasoning), not retried without tools: that would answer from memory and deny having any data.
 - `must_search` requests are never retried without tools (answering from memory would invent news).
 - Telegram HTML: only b/i/u/s/code/pre/a/blockquote/tg-spoiler. `Draft` strips tags (half-written HTML is rejected).
 - No live Telegram/xAI/OpenRouter/MCP access in tests or in this sandbox; say so when behaviour can't be checked.

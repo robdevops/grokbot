@@ -132,6 +132,16 @@ async def test_empty_reply_and_token_cap_errors():
         await run(ScriptedBackend([step("", finish="length")]), registry(), req())
 
 
+async def test_token_cap_after_tool_results_is_retried_with_the_data_not_without_tools():
+    mcp = FakeMcp()
+    b = ScriptedBackend([step(calls=[("1", "yahoo__get_quote", "{}")], finish="tool_calls"),
+                         step("", finish="length"), step("the answer")])
+    ans = await run(b, registry(mcp), with_tools(mcp, max_tokens=1500, reasoning="high"))
+    assert ans.text == "the answer" and ans.tool_calls == 1
+    assert b.seen[-1]["max_tokens"] == 3000 and b.seen[-1]["reasoning"] == "low"
+    assert b.seen[-1]["choice"] == "none" and b.results_log == [["price 5"]]
+
+
 async def test_run_calls_reports_mcp_exceptions():
     class Boom(FakeMcp):
         async def call(self, tool, args):

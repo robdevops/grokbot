@@ -82,7 +82,7 @@ class OpenRouterBackend(Backend):
             extra_body["reasoning"] = {"effort": req.reasoning}
         kw: dict = {
             "model": req.model, "stream": True, "stream_options": {"include_usage": True},
-            "max_tokens": self.st.max_tokens,  # without it OpenRouter reserves credit for the model's max
+            "max_tokens": req.max_tokens or self.st.max_tokens,  # without it OpenRouter reserves credit for the model's max
             "temperature": config.TEMPERATURE, "extra_body": extra_body,
         }
         if req.cache_id:

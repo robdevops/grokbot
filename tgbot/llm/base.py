@@ -63,6 +63,7 @@ class Request:
     cache_id: str | None = None  # keeps a chat's requests on the server holding its cached prompt
     on_text: Callable[[str], None] | None = None  # streaming callback, gets the text so far
     no_tools_system: str = ""  # system prompt for the retry without tools
+    max_tokens: int | None = None  # reply cap incl. reasoning; None = the provider's setting
 
 
 @dataclass
