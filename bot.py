@@ -316,10 +316,10 @@ db.execute(
 		PRIMARY KEY (chat_id, message_id)
 	)"""
 )
-# Private chats. A group's message IDs are shared by every bot in it, but each bot's DM
-# with a person is its own ID sequence and has the same chat ID (the person's user ID), so
-# two bots sharing this file would collide in `messages`: one overwriting the other's rows
-# and the history interleaving out of order. DMs are therefore keyed by bot as well.
+# Private chats (chat_id > 0), keyed by bot. A group's message IDs are shared by every bot in
+# it, but each bot's DM with a person is its own ID sequence and has the same chat ID (the
+# person's user ID), so two bots sharing this file would collide in `messages`: one
+# overwriting the other's rows and the history interleaving out of order.
 db.execute(
 	"""CREATE TABLE IF NOT EXISTS dm_messages (
 		bot_id     INTEGER,
@@ -399,6 +399,21 @@ def describe(msg: Message) -> str:
 	return f"[{kind}] {text}".strip() if kind else text
 
 
+BOT_ID: int | None = None	# this bot's Telegram ID; set in post_init, before any update arrives
+
+
+def is_dm(chat_id: int) -> bool:
+	"""Private chat IDs are the person's user ID (positive); groups and supergroups are negative.
+	The one rule for choosing between dm_messages and messages, for writers and readers."""
+	return chat_id > 0
+
+
+def own_bot_id() -> int:
+	if BOT_ID is None:
+		raise RuntimeError("bot id not known yet (private chats are stored per bot)")
+	return BOT_ID
+
+
 def save(msg: Message) -> None:
 	row = (
 		msg.chat_id,
@@ -408,14 +423,14 @@ def save(msg: Message) -> None:
 		int(msg.date.timestamp()),
 		msg.reply_to_message.message_id if msg.reply_to_message else None,
 	)
-	if msg.chat.type == "private":
-		db.execute("INSERT OR REPLACE INTO dm_messages VALUES (?, ?, ?, ?, ?, ?, ?)", (msg.get_bot().id, *row))
+	if is_dm(msg.chat_id):
+		db.execute("INSERT OR REPLACE INTO dm_messages VALUES (?, ?, ?, ?, ?, ?, ?)", (own_bot_id(), *row))
 	else:
 		db.execute("INSERT OR REPLACE INTO messages VALUES (?, ?, ?, ?, ?, ?)", row)
 	db.commit()
 
 
-def recent_history(chat_id: int, limit: int, dm_bot_id: int | None = None) -> list[tuple]:
+def recent_history(chat_id: int, limit: int) -> list[tuple]:
 	"""Recent messages, oldest first, for the transcript sent to Grok.
 
 	A plain "last N messages" window drops its oldest line every time a
@@ -425,11 +440,11 @@ def recent_history(chat_id: int, limit: int, dm_bot_id: int | None = None) -> li
 	between limit and 1.5 x limit messages and in between only grows at the
 	end, so everything before the new messages stays cached.
 
-	Private chats (dm_bot_id = this bot's ID) come from dm_messages, not messages."""
-	if dm_bot_id is None:
-		table, where, args = "messages", "chat_id = ?", (chat_id,)
+	Private chats come from dm_messages (this bot's own), everything else from messages."""
+	if is_dm(chat_id):
+		table, where, args = "dm_messages", "bot_id = ? AND chat_id = ?", (own_bot_id(), chat_id)
 	else:
-		table, where, args = "dm_messages", "bot_id = ? AND chat_id = ?", (dm_bot_id, chat_id)
+		table, where, args = "messages", "chat_id = ?", (chat_id,)
 	total = db.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}", args).fetchone()[0]
 	step = max(1, limit // 2)
 	start = max(0, (total - limit) // step * step)
@@ -2119,8 +2134,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		else:
 			# Must match what sender_name() produces for this bot's own messages.
 			self_name = f"{bot.first_name} (@{bot.username})"
-			history = await asyncio.to_thread(
-				recent_history, msg.chat_id, HISTORY_LIMIT, bot.id if private else None)
+			history = await asyncio.to_thread(recent_history, msg.chat_id, HISTORY_LIMIT)
 			transcript = "\n".join(format_row(r, self_name) for r in history)
 			if private:
 				prompt = (
@@ -2259,6 +2273,8 @@ BACKGROUND: list[asyncio.Task] = []
 
 
 async def post_init(app: Application) -> None:
+	global BOT_ID
+	BOT_ID = app.bot.id
 	if MCP_SERVERS:
 		await asyncio.gather(*(s.start(app.bot) for s in MCP_SERVERS.values()))
 		schema = json.dumps([t for s in MCP_SERVERS.values() for t in s.tools])
