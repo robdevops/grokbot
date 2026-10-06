@@ -2,11 +2,11 @@
 
 import json
 
-from lib import report
 from lib.history import compact, format_rows
 from lib.llm.gate import Route
 from lib.mcp.schema import compact_description, compact_schema
 from lib.prompts import chat_prompt, system_prompt
+from tools import report
 
 
 def test_system_prompt_stays_small():

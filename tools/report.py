@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 from zoneinfo import ZoneInfo
 
-from .history import format_rows
-from .llm.gate import Route
-from .mcp.schema import ToolDef, compact_description, compact_schema
-from .prompts import chat_prompt, system_prompt
-from .store import HistoryRow
+from lib.history import format_rows
+from lib.llm.gate import Route
+from lib.mcp.schema import ToolDef, compact_description, compact_schema
+from lib.prompts import chat_prompt, system_prompt
+from lib.store import HistoryRow
 
 LINK = '<a href="https://finance.yahoo.com/quote/{t}"><b>{t}</b></a>'
 SAMPLE_TOOL = {
