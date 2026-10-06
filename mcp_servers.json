@@ -16,7 +16,7 @@
       "cache_ttl": 30
     },
     "sharesight": {
-      "description": "Sharesight portfolios. To get what someone currently holds, use get_performance_report for their portfolio: its holdings list is exactly their current positions, with quantity, value and gains.",
+      "description": "Sharesight portfolios. Never ask the user for portfolio IDs or holdings: call list_portfolios first (it names every portfolio and its owner), then get_performance_report for the ones involved. A report's holdings list is exactly their current positions, with quantity, value and gains.",
       "command": "node",
       "args": [
         "/home/rob/sharesight-mcp/dist/index.js",
