@@ -86,7 +86,8 @@ def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str
                  "where your earlier replies didn't.")
     if fresh:  # a portfolio question: stale numbers and refusals in the history must not be reused
         tail += (" Get current figures with your portfolio tools before answering; don't reuse "
-                 "numbers or refusals from earlier replies.")
+                 "numbers or refusals from earlier replies. For a comparison or a \"why\", write 2-3 "
+                 "short paragraphs on the tailwinds and headwinds of each portfolio, not a summary.")
     return head + tail + down
 
 
