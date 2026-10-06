@@ -246,9 +246,6 @@ use fakes for Telegram, both providers and MCP, so nothing in the suite touches 
 - **The bot ignores messages in a group**: run `/setprivacy` -> Disable in @BotFather and re-add it.
 - **An MCP server shows as down**: the alert includes the server's own error (often a missing
   environment variable or `npx` not installed). Fix it and restart the bot.
-- **Wrong answers in a DM after an upgrade**: older versions stored DMs in the shared `messages`
-  table. To discard that history (all bots sharing the file; stop the services first):
-  `sqlite3 chat_log.db "DELETE FROM messages WHERE chat_id > 0; VACUUM;"`
 - **Holding news never arrives**: the recipient must have messaged the bot once (so their user ID
   is known), `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` must match the Sharesight portfolio names, and the
   Sharesight server must be connected.
