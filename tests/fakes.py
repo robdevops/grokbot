@@ -26,7 +26,8 @@ class ScriptedBackend(Backend):
 
     async def step(self, conv, req, *, tool_choice):
         self.seen.append({"choice": tool_choice, "tools": [t.name for t in req.tools],
-                          "search": req.search, "system": req.system, "model": req.model})
+                          "search": req.search, "system": req.system, "model": req.model,
+                          "prompt": req.parts[0].get("text", "") if req.parts else ""})
         item = self.script.pop(0)
         if isinstance(item, Exception):
             raise item
