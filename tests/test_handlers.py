@@ -107,6 +107,19 @@ async def test_portfolio_question_reminds_the_model_to_fetch_fresh_figures(env, 
     assert "portfolio tools before answering" not in backend.seen[1]["prompt"]
 
 
+async def test_typing_starts_while_the_bot_waits_for_mcp(env, store):
+    mcp = FakeMcp("yahoo")
+    mcp._task = object()  # started, not yet connected
+    ctx, backend, h = make_ctx(env, store, [step("ok")], servers=[mcp])
+    m = user_msg(ctx.bot, "@stockbot how is NVDA looking?")
+    job = asyncio.create_task(run(h, m))
+    await asyncio.sleep(0.05)
+    assert ctx.bot.actions and not job.done()  # typing shown, still waiting
+    mcp._ready.set()
+    await job
+    assert m.replies[0]["text"] == "ok"
+
+
 async def test_fast_model_used_for_simple_requests_only(env, store):
     ctx, backend, h = make_ctx(env, store, [step("hi"), step("hi")], FAST_MODEL="fast/one")
     await run(h, user_msg(ctx.bot, "@stockbot hello there", mid=1))
