@@ -64,6 +64,28 @@ def test_main_accepts_and_ignores_a_label_and_unknown_args(monkeypatch, tmp_path
     assert started
 
 
+def test_startup_logs_the_git_hash_and_survives_without_git(monkeypatch, tmp_path, caplog):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "1:x")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "b")
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "x.db"))
+    monkeypatch.setenv("MCP_CONFIG", str(tmp_path / "none.json"))
+    monkeypatch.setattr(app.Application, "run_polling", lambda self, **kw: None)
+    caplog.set_level("INFO", logger="bot")
+    monkeypatch.setattr(app.subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "abc1234\n"})())
+    app.main(["grokbot"])
+    assert "Starting instance grokbot (abc1234): " in caplog.text
+    caplog.clear()
+
+    def no_git(*a, **kw):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(app.subprocess, "run", no_git)
+    assert app.git_hash() == ""
+    app.main(["grokbot"])
+    assert "Starting instance grokbot: " in caplog.text
+
+
 async def test_alert_down_notifies_admin_chats_only(env, store):
     st = config.load({**env, "ADMIN_CHAT_IDS": "-10 -11"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())

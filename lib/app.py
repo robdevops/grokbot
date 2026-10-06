@@ -8,8 +8,10 @@ import html
 import json
 import logging
 import os
+import subprocess
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -136,6 +138,16 @@ def allowed_updates(st: config.Settings) -> list[str]:
     return ["message", "edited_message"] + (["callback_query"] if st.holding_news else [])
 
 
+def git_hash() -> str:
+    """Short hash of the commit this checkout is on, or "" if it can't be read (no git, no checkout)."""
+    try:
+        done = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).resolve().parent.parent,
+                              capture_output=True, text=True, timeout=2)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     # The label does nothing: it only shows in ps/top, to tell instances apart when several run
     # side by side with different environments (python bot.py mimo).
@@ -149,7 +161,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     setup_logging()
     ctx = build_ctx(st)
     app = build_app(ctx)
-    log.info("Starting%s: %s on %s, reasoning %s, MCP servers: %s",
-             f" instance {args.label}" if args.label else "", st.model, st.provider,
+    commit = git_hash()
+    log.info("Starting%s%s: %s on %s, reasoning %s, MCP servers: %s",
+             f" instance {args.label}" if args.label else "", f" ({commit})" if commit else "", st.model, st.provider,
              st.reasoning or "default", ", ".join(ctx.registry.servers) or "none")
     app.run_polling(allowed_updates=allowed_updates(st))

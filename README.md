@@ -188,7 +188,7 @@ One line per event, without a timestamp when run under systemd (journald adds on
 `[Jane Doe (@jane) 5467329077] first 60 characters of the message ...` (groups add ` @ <chat id>`),
 `Round 2: in 14158 (7400 cached) out 738, stop`, and a per-request summary with rounds, tool calls,
 tokens, cached % and cost. Tool servers log their tools in short wrapped lines; startup logs the
-token size of the tool definitions.
+token size of the tool definitions. The `Starting ...` line shows the git commit the checkout is on.
 
 ## Environment variables
 | Variable | Meaning |
