@@ -67,11 +67,6 @@ TRANSCRIPT_LINE_MAX = int(os.getenv("TRANSCRIPT_LINE_MAX", "400"))
 HISTORY_LIMIT = int(os.getenv("HISTORY_LIMIT", "20"))  # messages of context (window is 20-29, see recent_history)
 DB_PATH = os.getenv("DB_PATH", "chat_log.db")
 TZ = ZoneInfo(os.getenv("BOT_TZ", "UTC"))  # e.g. "Europe/London"
-# Comma-separated chat IDs. If set, the bot ignores every other chat, so
-# strangers can't add it to their groups and spend your API credits.
-ALLOWED_CHATS = {
-	int(x) for x in os.getenv("ALLOWED_CHAT_IDS", "").replace(",", " ").split()
-}
 # Grok's server-side search tools. Set SEARCH_TOOLS="" to disable.
 SEARCH_TOOLS = [
 	{"type": t} for t in os.getenv("SEARCH_TOOLS", "web_search,x_search").replace(",", " ").split()
@@ -82,10 +77,9 @@ MCP_CONFIG = os.getenv("MCP_CONFIG", "mcp_servers.json")
 MCP_TIMEOUT = int(os.getenv("MCP_TIMEOUT", "60"))  # seconds per tool call
 MAX_TOOL_ROUNDS = int(os.getenv("MAX_TOOL_ROUNDS", "6"))  # Grok <-> tools round trips per answer
 MAX_TOOL_OUTPUT = int(os.getenv("MAX_TOOL_OUTPUT", "50000"))  # chars per tool result sent to Grok
-# Chats that get a message when an MCP server goes down. Defaults to
-# ALLOWED_CHAT_IDS; set ALERT_CHAT_IDS="" to turn alerts off.
+# Chats that get a message when an MCP server goes down. Empty = no alerts.
 ALERT_CHATS = {
-	int(x) for x in os.getenv("ALERT_CHAT_IDS", os.getenv("ALLOWED_CHAT_IDS", "")).replace(",", " ").split()
+	int(x) for x in os.getenv("ALERT_CHAT_IDS", "").replace(",", " ").split()
 }
 
 # Bots whose end-of-day "big movers" lists get an automatic news explanation
@@ -1432,8 +1426,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	if msg is None:
 		return
 	remember_user(msg)	# username -> ID, for holding-news DMs
-	if ALLOWED_CHATS and msg.chat_id not in ALLOWED_CHATS:
-		return
 
 	save(msg)  # log everything, including edits (they overwrite the original)
 	if update.edited_message:
