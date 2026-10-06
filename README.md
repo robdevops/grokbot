@@ -86,6 +86,9 @@ request hammering Yahoo); `cache_ttl` seconds during which identical calls share
 off); `slim` (result slimming, defaults to the server's name; `sharesight` flattens holdings);
 `gate` (`portfolio` = only offered when the question is about portfolios/holdings);
 `current_holdings_only` (Sharesight: never include sold holdings).
+- **Tool names are exact:** `blocked_tools` and `allowed_tools` take the server's real tool names, as
+  printed in the startup log (`get_analyst_estimates`, not `analyst_estimates`). An entry that matches
+  no tool is ignored, with a warning that suggests the closest real name.
 - **Read-only by default:** tools are only offered if the server marks them read-only or their name
   starts with get/list/search/fetch/find/lookup/show/read, so nobody in the group can talk the bot
   into changing your data. Use `allowed_tools` to opt others in.

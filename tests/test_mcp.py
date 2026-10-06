@@ -78,6 +78,30 @@ async def test_load_tools_sorted_and_not_duplicated_on_restart():
     assert isinstance(s.tools[0], ToolDef)
 
 
+async def test_unknown_blocked_names_are_warned_about_with_a_suggestion(caplog):
+    import logging
+    s = make_server(blocked_tools=["b", "get_a", "nope"])  # 'b' is missing the get_ prefix
+    with caplog.at_level(logging.INFO, logger="bot"):
+        await s._load_tools(s.session)
+    assert "entry 'b' matches no tool (did you mean 'get_b'?)" in caplog.text
+    assert "entry 'nope' matches no tool" in caplog.text and "did you mean" not in caplog.text.split("'nope'")[1]
+    assert [t.name for t in s.tools] == ["yahoo__get_b"]  # get_a was blocked correctly; b blocked nothing
+    caplog.clear()
+    ok = make_server(blocked_tools=["get_b"])
+    with caplog.at_level(logging.INFO, logger="bot"):
+        await ok._load_tools(ok.session)
+    assert "matches no tool" not in caplog.text
+
+
+def test_log_names_keeps_exact_names(caplog):
+    import logging
+
+    from tgbot.mcp.server import log_names
+    with caplog.at_level(logging.INFO, logger="bot"):
+        log_names("MCP y: 2 tools:", ["get_analyst_estimates", "get_stock_quote"])
+    assert "get_analyst_estimates" in caplog.text and "get_stock_quote" in caplog.text
+
+
 async def test_call_slims_and_caches_identical_concurrent_calls():
     s = make_server(cache_ttl=30)
     a, b = await asyncio.gather(s.call("get_a", {"t": "X"}), s.call("get_a", {"t": "X"}))

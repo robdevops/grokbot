@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import re
@@ -110,11 +111,22 @@ class MCPServer:
             self.tools.append(ToolDef(
                 fn, compact_description(t.description or ""),
                 compact_schema(t.inputSchema or {"type": "object", "properties": {}})))
+        self._warn_unknown_names(listed, allow | blocked)
         enabled = sorted(self.fn_names.values())
         skipped = sorted(t.name for t in listed if t.name not in enabled)
         log_names(f"MCP {self.label}: {len(enabled)} tools:", enabled)
         if skipped:
             log_names(f"MCP {self.label}: {len(skipped)} skipped:", skipped)
+
+    def _warn_unknown_names(self, listed, configured: set[str]) -> None:
+        """A blocked/allowed name that matches no tool does nothing; say so (and what was meant)."""
+        real = [t.name for t in listed]
+        for name in sorted(configured - set(real)):
+            close = difflib.get_close_matches(name, real, n=1, cutoff=0.5) \
+                or [r for r in real if name in r]
+            hint = f" (did you mean '{close[0]}'?)" if close else ""
+            log.warning("MCP %s: blocked_tools/allowed_tools entry '%s' matches no tool%s",
+                        self.label, name, hint)
 
     async def call(self, tool: str, args: dict) -> str:
         """Run one tool and return its (slimmed, size-capped) text. Identical concurrent or
@@ -203,7 +215,7 @@ class Registry:
 
 def log_names(head: str, names: list[str], width: int = 80) -> None:
     """Log a list of tool names on lines short enough not to wrap in a terminal or journal."""
-    lines = textwrap.wrap(", ".join(n.removeprefix("get_") for n in names), width - len(head))
+    lines = textwrap.wrap(", ".join(names), width - len(head))
     for i, line in enumerate(lines):
         log.info("%s %s", head if i == 0 else " " * len(head), line)
 
