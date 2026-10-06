@@ -39,7 +39,8 @@
         "get_portfolio_user_setting"
       ],
       "slim": "sharesight",
-      "gate": "portfolio"
+      "gate": "portfolio",
+      "max_concurrent": 1
     }
   }
 }
