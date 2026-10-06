@@ -251,6 +251,7 @@ make prompt-report  # token breakdown of a sample request
 The code is the `lib/` package (a map is in `CLAUDE.md`); `bot.py` is a thin entry point. Tests
 use fakes for Telegram, both providers and MCP, so nothing in the suite touches the network.
 `tests/test_config.py` fails if an environment variable is missing from the table above.
+GitHub Actions (`.github/workflows/check.yml`) runs `make check` on every pull request and push to `main`.
 
 ## Troubleshooting
 - **"Both XAI_API_KEY and OPENROUTER_API_KEY are set"**: set only one.
