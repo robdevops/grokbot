@@ -14,7 +14,7 @@ ENV_VARS: dict[str, str] = {
     "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
     "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the two keys.",
     "OPENROUTER_API_KEY": "OpenRouter key; selects the OpenRouter provider.",
-    "MODEL": "Model ID (default grok-4.3 on xAI, x-ai/grok-4.3 on OpenRouter).",
+    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter).",
     "FAST_MODEL": "Optional cheaper/faster model used for simple requests (TOKEN_SAVER only).",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
     "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
@@ -139,7 +139,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     provider = "openrouter" if openrouter else "xai"
     saver = _flag(env, "TOKEN_SAVER", default=True)
     model = env.get("MODEL", "").strip() or (
-        "x-ai/grok-4.3" if provider == "openrouter" else "grok-4.3"
+        "z-ai/glm-5.3-flash" if provider == "openrouter" else "grok-4.3"
     )
     search_model = env.get("SEARCH_MODEL", "xiaomi/mimo-v2.6-flash:online").strip()
     search = env.get("SEARCH", "on").strip().lower() != "off"
