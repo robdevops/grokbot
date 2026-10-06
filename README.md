@@ -104,8 +104,7 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
 - Replies are Telegram HTML. Markdown the model slips in (`**bold**`, links, backticks) is
   converted; trailing "not advice"/"NFA"/"DYOR" disclaimers are stripped.
 - **Yahoo Finance links:** the model writes plain tickers (with the exchange suffix for non-US
-  listings: `SQX.AX`, `000660.KS`) and the bot links each one to its Yahoo Finance page. Links only,
-  no bold. The visible text drops the suffix (`SQX.AX` shows as `SQX`, `BRK.B` stays) while the URL
+  listings: `SQX.AX`, `000660.KS`) and the bot links each one to its Yahoo Finance page. The visible text drops the suffix (`SQX.AX` shows as `SQX`, `BRK.B` stays) while the URL
   keeps it; crypto gets `-USD` in the URL (`BTC` -> `BTC-USD`). Words like CEO, ETF, FY26 and Q3 are
   not linked, a lone letter only counts next to a price or move (`F 5.2`), and text already inside a
   link, `<code>` or `<pre>` is left alone.
