@@ -36,9 +36,9 @@ Env vars:
   MCP_TIMEOUT          seconds per MCP tool call, default 60
   MAX_TOOL_ROUNDS      model <-> tool round trips per answer, default 6
   MAX_TOOL_OUTPUT      chars of one tool result sent to the model, default 50000
-  ALERT_CHAT_IDS       chats told when an MCP server goes down; default ALLOWED_CHAT_IDS
+  ALERT_CHAT_IDS       comma- or space-separated chat IDs told when an MCP server goes down;
+                       empty = no alerts
   MAX_IMAGES           images per request, default 2 (0 disables vision)
-  ALLOWED_CHAT_IDS     comma- or space-separated group IDs; empty = all chats
   OWNER_USER_ID        your Telegram user ID, for /credits
   QUIET                on | off (default on) - send replies without a notification sound
   EXTRA_TICKERS        extra symbols to always bold, e.g. "BRK.B ^SIL-IV"
@@ -116,20 +116,14 @@ SPACE_ITEMS = os.getenv("SPACE_ITEMS", "on").strip().lower() != "off"
 DB_PATH = os.getenv("DB_PATH", "chat_log.db")
 TZ = ZoneInfo(os.getenv("BOT_TZ", "UTC"))
 OWNER_ID = int(os.getenv("OWNER_USER_ID", "0"))
-# If set, every other chat is ignored entirely: no logging, no replies, no API calls.
-ALLOWED_CHATS = {
-    int(x) for x in os.getenv("ALLOWED_CHAT_IDS", "").replace(",", " ").split()
-}
-
 # MCP servers (see mcp_servers.json). Missing file = no MCP tools.
 MCP_CONFIG = os.getenv("MCP_CONFIG", "mcp_servers.json")
 MCP_TIMEOUT = int(os.getenv("MCP_TIMEOUT", "60"))  # seconds per tool call
 MAX_TOOL_ROUNDS = int(os.getenv("MAX_TOOL_ROUNDS", "6"))  # model <-> tools round trips per answer
 MAX_TOOL_OUTPUT = int(os.getenv("MAX_TOOL_OUTPUT", "50000"))  # chars per tool result sent to the model
-# Chats that get a message when an MCP server goes down. Defaults to
-# ALLOWED_CHAT_IDS; set ALERT_CHAT_IDS="" to turn alerts off.
+# Chats that get a message when an MCP server goes down. Empty = no alerts.
 ALERT_CHATS = {
-    int(x) for x in os.getenv("ALERT_CHAT_IDS", os.getenv("ALLOWED_CHAT_IDS", "")).replace(",", " ").split()
+    int(x) for x in os.getenv("ALERT_CHAT_IDS", "").replace(",", " ").split()
 }
 
 MAX_TG_MESSAGE = 4000  # Telegram's limit is 4096
@@ -1369,8 +1363,6 @@ def build_messages(bot, msg: Message, reply_target: Message | None,
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
     if msg is None:
-        return
-    if ALLOWED_CHATS and msg.chat_id not in ALLOWED_CHATS:
         return
 
     save(msg)  # log everything, including edits (they overwrite the original)
