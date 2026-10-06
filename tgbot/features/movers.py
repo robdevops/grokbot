@@ -1,4 +1,4 @@
-"""MOVERS_EXPLAIN: explain another bot's end-of-day "big movers" list, once, without tagging it."""
+"""MOVERS_BOTS: explain another bot's end-of-day "big movers" list, once, without tagging it."""
 
 from __future__ import annotations
 

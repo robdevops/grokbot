@@ -26,12 +26,10 @@ ENV_VARS: dict[str, str] = {
     "MCP_CONFIG": "MCP server config file (default mcp_servers.json; missing = no MCP tools).",
     "ALERT_CHAT_IDS": "Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts).",
     "OWNER_USER_ID": "Telegram user ID allowed to use /credits and /usage.",
-    "MOVERS_EXPLAIN": "on|off. Explain another bot's end-of-day big-movers lists (default off).",
-    "MOVERS_BOTS": "Usernames of the bots whose movers lists are explained (no default; required for MOVERS_EXPLAIN).",
+    "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
-    "SHARESIGHT_HOLDING_NEWS": "on|off. Daily Sharesight holding-news DM (default off).",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
-    "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify (no default; required for the digest).",
+    "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
     "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
 }
@@ -69,14 +67,22 @@ class Settings:
     mcp_config: str
     alert_chats: frozenset[int]
     owner_id: int
-    movers_explain: bool
     movers_bots: frozenset[str]
     dm_buttons: bool
-    holding_news: bool
     holding_news_time: str
     holding_news_recipients: dict[str, str]
     portfolio_names: frozenset[str]
     token_saver: bool
+
+    @property
+    def holding_news(self) -> bool:
+        """The daily holding-news DM is on when someone is listed to receive it."""
+        return bool(self.holding_news_recipients)
+
+    @property
+    def movers_explain(self) -> bool:
+        """Explaining another bot's movers lists is on when a bot is listed."""
+        return bool(self.movers_bots)
 
     @property
     def max_tool_output(self) -> int:
@@ -155,12 +161,10 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         mcp_config=env.get("MCP_CONFIG", "mcp_servers.json"),
         alert_chats=_ids(env.get("ALERT_CHAT_IDS", "")),
         owner_id=int(env.get("OWNER_USER_ID") or 0),
-        movers_explain=_flag(env, "MOVERS_EXPLAIN"),
         movers_bots=frozenset(
             u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "").replace(",", " ").split()
         ),
         dm_buttons=_flag(env, "TELEGRAM_DM_BUTTONS"),
-        holding_news=_flag(env, "SHARESIGHT_HOLDING_NEWS"),
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
         holding_news_recipients=recipients,
         portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),

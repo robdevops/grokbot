@@ -112,16 +112,16 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
 - Replies are sent silently, without link previews. The bot never @-tags the movers bots.
 
 ## Optional features (off by default)
-Each is a flag; with the flag off none of its code runs.
-- **Daily holding-news DM** (`SHARESIGHT_HOLDING_NEWS=on`, at `SHARESIGHT_HOLDING_NEWS_TIME` in
-  `BOT_TZ`, to the people in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`, `portfolio:username` pairs such as
-  `MyPortfolio:alice,MySMSF:alice`; there is no default, so it must be set):
+Each is off by default; with it off none of its code runs. The holding-news DM and the movers reply are switched on by setting the names they need (recipients, bots); the DM buttons have a flag.
+- **Daily holding-news DM** (switched on by listing recipients in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`, at `SHARESIGHT_HOLDING_NEWS_TIME` in
+  `BOT_TZ`, `portfolio:username` pairs such as
+  `MyPortfolio:alice,MySMSF:alice`; empty, the default, means off):
   reads each person's current Sharesight holdings, searches for *major* news from the past 24 hours
   (a forced search), and DMs only what qualifies (most days: nothing). Stories already reported in
   the last 3 days are not repeated. Each message has an **Unsubscribe** button: per ticker, or all
   holding news, with an **Undo** button afterwards. People must have messaged the bot (or a group it
   is in) once so it knows their user ID. `/holdingnews` in a DM runs the check now and always replies.
-- **Reply to a movers bot** (`MOVERS_EXPLAIN=on` and `MOVERS_BOTS=<usernames>`, which has no default): when such a
+- **Reply to a movers bot** (switched on by listing the bots in `MOVERS_BOTS`; empty, the default, means off): when such a
   bot posts an end-of-day list ("≥ 5.0% at close (ASX):" followed by stocks with % changes) the bot
   explains each move with a forced search, once, without tagging the other bot, ignoring its image,
   and dropping the closing wrap-up paragraph.
@@ -207,12 +207,10 @@ token size of the tool definitions.
 | `MCP_CONFIG` | MCP server config file (default mcp_servers.json; missing = no MCP tools). |
 | `ALERT_CHAT_IDS` | Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts). |
 | `OWNER_USER_ID` | Telegram user ID allowed to use /credits and /usage. |
-| `MOVERS_EXPLAIN` | on|off. Explain another bot's end-of-day big-movers lists (default off). |
-| `MOVERS_BOTS` | Usernames of the bots whose movers lists are explained (no default; required for MOVERS_EXPLAIN). |
+| `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
-| `SHARESIGHT_HOLDING_NEWS` | on|off. Daily Sharesight holding-news DM (default off). |
 | `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
-| `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify (no default; required for the digest). |
+| `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |
 | `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
 | `TOKEN_SAVER` | on|off. Master switch for the token-saving heuristics (default on). |
 

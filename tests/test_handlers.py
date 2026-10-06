@@ -140,9 +140,9 @@ async def test_error_becomes_a_visible_message(env, store):
 
 async def test_movers_list_off_by_default_then_answered_once_without_tagging(env, store):
     text = "≥ 5.0% at close (ASX):\nNVDA +6.1%\nAMD +5.5%"
-    for flag, expect in (({}, 0), ({"MOVERS_EXPLAIN": "on"}, 1)):
+    for flag, expect in (({}, 0), ({"MOVERS_BOTS": "finbotibot"}, 1)):
         ctx, backend, h = make_ctx(env, store, [step("NVDA up on news.\nAMD up too.\n\nSmall caps swing.")],
-                                   MOVERS_BOTS="finbotibot", **flag)
+                                   **flag)
         m = user_msg(ctx.bot, text, is_bot=True)
         m.from_user.is_bot, m.from_user.username = True, "finbotibot"
         m.parse_entities = lambda types=None: {"b": "≥ 5.0% at close (ASX):"}

@@ -48,7 +48,7 @@ class Sharesight(FakeMcp):
 
 
 def holding_ctx(env, store, script):
-    st = config.load({**env, "SHARESIGHT_HOLDING_NEWS": "on", "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Rob:rob_llama"})
+    st = config.load({**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Rob:rob_llama"})
     ss = Sharesight("sharesight", tools=("list_portfolios",))
     ctx = Ctx(st, store, ScriptedBackend(script), registry(ss), FakeBot())
     store.remember_user(make_msg(1, "x", username="rob_llama", chat_id=-1))

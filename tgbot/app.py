@@ -41,15 +41,6 @@ def build_backend(st: config.Settings) -> Backend:
     return OpenRouterBackend(st) if st.provider == "openrouter" else XaiBackend(st)
 
 
-def warn_config(st: config.Settings) -> None:
-    """Features switched on without the names they need do nothing; say so once at startup."""
-    if st.holding_news and not st.holding_news_recipients:
-        log.warning("SHARESIGHT_HOLDING_NEWS is on but SHARESIGHT_HOLDING_NEWS_RECIPIENTS is empty: "
-                    "no one will be notified")
-    if st.movers_explain and not st.movers_bots:
-        log.warning("MOVERS_EXPLAIN is on but MOVERS_BOTS is empty: no bot's lists will be explained")
-
-
 def setup_logging() -> None:
     # Under systemd, journald already stamps every line with the time, so don't repeat it.
     logging.basicConfig(
@@ -156,7 +147,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     except config.ConfigError as e:
         sys.exit(str(e))
     setup_logging()
-    warn_config(st)
     ctx = build_ctx(st)
     app = build_app(ctx)
     log.info("Starting%s: %s on %s, reasoning %s, MCP servers: %s",

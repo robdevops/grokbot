@@ -37,6 +37,13 @@ def test_features_off_by_default(settings):
     assert not (settings.movers_explain or settings.dm_buttons or settings.holding_news)
 
 
+def test_holding_news_and_movers_switch_on_by_listing_names(env):
+    on = config.load({**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Pf:alice", "MOVERS_BOTS": "otherbot"})
+    assert on.holding_news and on.movers_explain
+    assert not config.load({**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "", "MOVERS_BOTS": " "}).holding_news
+    assert not config.load({**env, "MOVERS_BOTS": ","}).movers_explain
+
+
 def test_token_saver_switches_defaults(env):
     on, off = config.load(env), config.load({**env, "TOKEN_SAVER": "off"})
     assert (on.max_tokens, off.max_tokens) == (1500, 4000)
