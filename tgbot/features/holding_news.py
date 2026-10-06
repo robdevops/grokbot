@@ -1,4 +1,4 @@
-"""SHARESIGHT_HOLDING_NEWS: a daily DM about major news on each person's Sharesight holdings,
+"""SHARESIGHT_HOLDING_NEWS_RECIPIENTS: a daily DM about major news on each person's Sharesight holdings,
 with per-ticker mute/undo buttons, plus the /holdingnews on-demand check."""
 
 from __future__ import annotations
