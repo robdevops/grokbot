@@ -49,6 +49,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   `previous_response_id` if replay is rejected. OpenRouter errors can arrive inside a 200 body or stream chunk.
 - A reply that hits MAX_TOKENS while thinking about tool results is re-asked in the same conversation (2x cap, low
   reasoning), not retried without tools: that would answer from memory and deny having any data.
+- `mcp` is capped below 2: 2.x dropped `streamablehttp_client`, which `mcp/server.py` uses (CI caught it). Raise the cap only with a port.
 - `must_search` requests are never retried without tools (answering from memory would invent news).
 - Telegram HTML: only b/i/u/s/code/pre/a/blockquote/tg-spoiler. `Draft` strips tags (half-written HTML is rejected).
 - No live Telegram/xAI/OpenRouter/MCP access in tests or in this sandbox; say so when behaviour can't be checked.
