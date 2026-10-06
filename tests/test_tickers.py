@@ -49,3 +49,16 @@ def test_bolding_leaves_sentence_openers_existing_bold_and_non_tickers_alone():
     assert "<b>" not in link_tickers("the Fed (RBA) held and vitamin C (CEO)")
     assert "<b>" not in link_tickers("<code>Micron (MU)</code>")
     assert link_tickers("Micron (MU)\nNvidia (NVDA)").count("<b>") == 2  # a line break ends a name
+
+
+def test_raw_links_go_behind_citation_numbers():
+    out = link_tickers("see https://a.com/x/NVDA. And (https://b.com/y?q=1&amp;z=2) plus https://a.com/x/NVDA again")
+    assert out.count('<a href="https://a.com/x/NVDA">[1]</a>') == 2  # same URL, same number
+    assert '(<a href="https://b.com/y?q=1&amp;z=2">[2]</a>)' in out and "[1]</a>. And" in out
+    assert "quote/NVDA" not in out  # the ticker inside the URL is not linked
+
+
+def test_link_labelled_with_its_own_url_is_numbered_but_named_links_and_code_are_not():
+    assert link_tickers('<a href="https://y.com/p">https://y.com/p…</a> ok') == '<a href="https://y.com/p">[1]</a> ok'
+    assert link_tickers('<a href="https://y.com/p">Reuters</a>') == '<a href="https://y.com/p">Reuters</a>'
+    assert link_tickers("<code>https://x.com</code>") == "<code>https://x.com</code>"

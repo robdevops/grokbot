@@ -109,6 +109,9 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
   not linked, a lone letter only counts next to a price or move (`F 5.2`), and text already inside a
   link, `<code>` or `<pre>` is left alone. A company name written as `Name (TICKER)` is bold,
   name and ticker together (`Micron (MU)`), unless it is already bold.
+- **Citations:** a raw link in a reply (a bare URL, or a link labelled with its own URL) becomes a
+  numbered link, `[1]`, `[2]`, in order of appearance, the same URL keeping its number. Links with a
+  real label, and anything in `<code>` or `<pre>`, are left alone.
 - Long answers are split under Telegram's limit without cutting a tag or entity; tags still open at
   a split are closed and re-opened in the next message. If Telegram rejects the markup the reply is
   re-sent as plain text.

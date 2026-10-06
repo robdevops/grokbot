@@ -1,4 +1,4 @@
-"""Link ticker symbols in a reply to Yahoo Finance (the label hides the exchange suffix) and bold "Name (TICKER)"."""
+"""Reply filter: Yahoo links on tickers (the label hides the exchange suffix), bold "Name (TICKER)", raw links as [n]."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ SEGMENT_RE = re.compile(r"(<[^>]+>)")
 COMBINED_RE = re.compile(f"{TICKER_RE.pattern}|{ONE_LETTER_RE.pattern}")
 PROTECTED_TAG_RE = re.compile(r"<(/?)(a|code|pre)\b", re.I)
 BOLD_TAG_RE = re.compile(r"<(/?)(b|strong)\b", re.I)
+URL_RE = re.compile(r'https?://[^\s<>"]+')
+RAW_ANCHOR_RE = re.compile(r'<a href="(https?://[^"]+)">\s*https?://[^<]*</a>')
 # "Micron (MU)": up to four capitalised words (or a number) right before a parenthesised ticker.
 _WORD = r"[A-Z0-9][\w&'’-]*(?:\.[\w&'’-]+)*"
 NAME_TICKER_RE = re.compile(
@@ -61,16 +63,9 @@ def bold_names(text: str) -> str:
     return NAME_TICKER_RE.sub(wrap, text)
 
 
-def link_tickers(text: str) -> str:
-    """Wrap ticker-shaped words in Yahoo links and bold "Name (TICKER)", leaving tags and anything
-    inside <a>, <code> or <pre> alone (so a link the model already wrote is never doubled), and
-    adding no bold inside text that is already bold."""
-    def wrap(m: re.Match) -> str:
-        word = m.group(0)
-        if len(word) > 1 and not is_ticker(word):
-            return word
-        return f'<a href="{yahoo_url(word)}">{ticker_label(word)}</a>'
-
+def _rewrite(text: str, fn) -> str:
+    """Apply fn(plain_text, inside_bold) to the text between tags, leaving tags and everything
+    inside <a>, <code> or <pre> alone."""
     pieces, depth, bold = [], 0, 0
     for seg in SEGMENT_RE.split(text):
         if seg.startswith("<"):
@@ -81,8 +76,35 @@ def link_tickers(text: str) -> str:
             if b:
                 bold = max(0, bold - 1) if b.group(1) else bold + 1
             pieces.append(seg)
-        elif depth:
-            pieces.append(seg)
         else:
-            pieces.append(COMBINED_RE.sub(wrap, seg if bold else bold_names(seg)))
+            pieces.append(seg if depth else fn(seg, bool(bold)))
     return "".join(pieces)
+
+
+def number_links(text: str) -> str:
+    """Put each raw link (a bare URL, or an <a> whose label is a URL) behind a citation number:
+    <a href="url">[1]</a>. The same URL keeps its number; numbering runs through the whole text."""
+    numbers: dict[str, int] = {}
+
+    def cite(m: re.Match) -> str:
+        url, tail = m.group(0), ""
+        while url and (url[-1] in ".,;:!?" or (url[-1] == ")" and url.count(")") > url.count("("))):
+            url, tail = url[:-1], url[-1] + tail
+        n = numbers.setdefault(url, len(numbers) + 1)
+        return f'<a href="{url}">[{n}]</a>{tail}'
+
+    text = RAW_ANCHOR_RE.sub(lambda m: m.group(1), text)
+    return _rewrite(text, lambda seg, bold: URL_RE.sub(cite, seg))
+
+
+def link_tickers(text: str) -> str:
+    """Number raw links, wrap ticker-shaped words in Yahoo links and bold "Name (TICKER)", leaving
+    tags and anything inside <a>, <code> or <pre> alone (so a link the model already wrote is
+    never doubled), and adding no bold inside text that is already bold."""
+    def wrap(m: re.Match) -> str:
+        word = m.group(0)
+        if len(word) > 1 and not is_ticker(word):
+            return word
+        return f'<a href="{yahoo_url(word)}">{ticker_label(word)}</a>'
+
+    return _rewrite(number_links(text), lambda seg, bold: COMBINED_RE.sub(wrap, seg if bold else bold_names(seg)))
