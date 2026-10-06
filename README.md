@@ -114,7 +114,7 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
 - Replies are sent silently, without link previews. The bot never @-tags the movers bots.
 
 ## Optional features (off by default)
-Each is off by default; with it off none of its code runs. The holding-news DM and the movers reply are switched on by setting the names they need (recipients, bots); the DM buttons have a flag.
+Each is off by default. The holding-news DM and the movers reply are switched on by setting the names they need (recipients, bots); the DM buttons have a flag.
 - **Daily holding-news DM** (switched on by listing recipients in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`, at `SHARESIGHT_HOLDING_NEWS_TIME` in
   `BOT_TZ`, `portfolio:username` pairs such as
   `MyPortfolio:alice,MySMSF:alice`; empty, the default, means off):
