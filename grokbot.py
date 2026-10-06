@@ -513,6 +513,12 @@ class MCPServer:
 
 	async def start(self, bot) -> None:
 		self.bot = bot
+		if self._task and not self._task.done():	# already started: don't spawn a second copy
+			log.info("MCP %s is already running", self.label)
+			await self._ready.wait()
+			return
+		self._ready.clear()
+		self._stop.clear()
 		self._task = asyncio.create_task(self._run(), name=f"mcp-{self.label}")
 		try:
 			# Generous: the first npx run downloads the package.
