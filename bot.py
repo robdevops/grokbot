@@ -2069,11 +2069,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		return
 
 	user_id = msg.from_user.id if msg.from_user else None
-	log.info(
-		"%s in chat %s (%s) by %s [user id %s]",
-		"Movers list" if movers else "Triggered",
-		msg.chat_id, msg.chat.title, sender_name(msg), user_id,
-	)
+	# [sender user-id] start of the message; groups also show the chat id.
+	preview = " ".join(text.split())
+	if len(preview) > 80:
+		preview = preview[:80].rstrip() + " ..."
+	log.info("[%s %s%s]%s %s", sender_name(msg), user_id, "" if private else f" @ {msg.chat_id}",
+			 " (movers list)" if movers else "", preview or f"[{describe(msg) or 'no text'}]")
 
 	# Show we're working straight away, before building the prompt or calling Grok.
 	# Private chats stream into a draft (plus typing); groups get the typing indicator.
