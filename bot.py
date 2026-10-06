@@ -208,9 +208,7 @@ Lines from "You" are your own earlier replies. Other bots may also be in the cha
 lines appear under their own names, and they are not you. Media appears as [photo],
 [voice] etc.; you can't see its contents, only any caption.
 
-You can search {search_what}. Use search whenever a question involves news, prices,
-markets, current events, or what people are saying, instead of saying you lack live data.
-If you use a source, you may mention it briefly or include one link, but keep it light.
+{search_note}
 
 Each reply you write is final: you can't come back later with more. Never say you're
 checking, will check, or ask people to stand by. If you need data, call the tool first,
@@ -261,7 +259,7 @@ def tools_prompt(servers: list["MCPServer"], down: list["MCPServer"]) -> str:
 			f"{lines}\n"
 			"You can call many tools at once in a single step; looking up 20 or 30 stocks is "
 			"normal work, not too many. "
-			"Prefer these over web search for quotes, price history, fundamentals and portfolio "
+			"Prefer these over searching for quotes, price history, fundamentals and portfolio "
 			"questions, and don't guess a number you could look up. Summarise what the tools "
 			"return; never paste raw tool output into the chat. If a tool returns an error, "
 			"say which tool failed and quote the error briefly.\n"
@@ -438,20 +436,26 @@ def split_html(text: str, size: int = MAX_TG_MESSAGE - 96) -> list[str]:
 	Cuts at a newline where it can, never inside a tag or an entity, and keeps every
 	message well-formed: tags still open at a cut are closed there and re-opened at the
 	start of the next message, so links and bold survive a split."""
-	chunks, reopen = [], ""  # reopen: opening tags carried over from the previous chunk
-	while len(reopen) + len(text) > size:
-		room = size - len(reopen) - 32  # headroom for the closing tags
+	chunks, stack = [], []  # stack: (name, opening tag) still open at the end of the last chunk
+	while True:
+		reopen = "".join(tag for _, tag in stack)  # carried over into this chunk
+		if len(reopen) + len(text) <= size:
+			break
+		# Room for the text: what's left after the re-opened tags and the closing tags
+		# this chunk will need (the carried ones, plus a little for any it opens).
+		room = max(size - len(reopen) - sum(len(n) + 3 for n, _ in stack) - 32, 200)
 		cut = text.rfind("\n", 0, room)
 		if cut <= 0:
 			cut = room
-		if text.rfind("<", 0, cut) > text.rfind(">", 0, cut):  # inside a tag
-			cut = text.rfind("<", 0, cut)
+		lt = text.rfind("<", 0, cut)
+		if lt > text.rfind(">", 0, cut) and re.match(r"</?[a-zA-Z]", text[lt:lt + 3]):  # inside a tag
+			cut = lt  # (a bare "<" in prose, as in "<5% from ATH", is not a tag)
 		amp = text.rfind("&", max(0, cut - 10), cut)
 		if amp != -1 and ";" not in text[amp:cut]:  # inside an entity
 			cut = amp
 		cut = max(cut, 1)
 		head, text = reopen + text[:cut], text[cut:].lstrip()
-		stack = []  # (name, opening tag) still open at the end of head
+		stack = []
 		for m in HTML_TAG_RE.finditer(head):
 			name = m.group(2).lower()
 			if not m.group(1):
@@ -462,7 +466,6 @@ def split_html(text: str, size: int = MAX_TG_MESSAGE - 96) -> list[str]:
 						del stack[i]
 						break
 		chunks.append(head + "".join(f"</{n}>" for n, _ in reversed(stack)))
-		reopen = "".join(tag for _, tag in stack)
 	if text.strip():
 		chunks.append(reopen + text)
 	return chunks
@@ -586,9 +589,9 @@ def mark_tickers(out: str, wrap) -> str:
 	for seg in SEGMENT_RE.split(out):
 		if seg.startswith("<"):
 			tag = seg.lower()
-			if tag.startswith(("<b", "<a", "<code")) and not tag.startswith("</"):
+			if tag.startswith(("<b", "<a", "<code", "<pre")) and not tag.startswith("</"):
 				depth += 1
-			elif tag.startswith(("</b", "</a", "</code")):
+			elif tag.startswith(("</b", "</a", "</code", "</pre")):
 				depth = max(0, depth - 1)
 			pieces.append(seg)
 			continue
@@ -1141,7 +1144,7 @@ async def xai_create(on_text=None, **kwargs):
 
 async def ask_xai(
 	content: list[dict], system: str, servers: list["MCPServer"], must_search: bool,
-	on_text=None, cache_key: str | None = None, bot_name: str = "", user_id: int | None = None,
+	on_text=None, cache_key: str | None = None, user_id: int | None = None,
 ) -> str:
 	"""Ask Grok through xAI's Responses API, running any MCP tool calls it makes, until
 	it produces an answer. With on_text, responses are streamed and on_text gets the
@@ -1157,7 +1160,6 @@ async def ask_xai(
 		# Send a conversation's requests to the same xAI server, where its cached
 		# prompt lives: prompt_cache_key for the Responses API, plus the
 		# equivalent x-grok-conv-id header.
-		cache_key = f"{bot_name}-{cache_key}"
 		kwargs["extra_body"] = {"prompt_cache_key": cache_key}
 		kwargs["extra_headers"] = {"x-grok-conv-id": cache_key}
 	# The system prompt goes in as a message rather than `instructions`: xAI
@@ -1242,8 +1244,11 @@ async def ask_xai(
 # queries are usually fine, so pull them out and run them rather than binning them.
 FAKE_CALL_RE = re.compile(
 	r"<parameter=query>(.*?)(?:</parameter>|</tool_call>|<|$)", re.DOTALL | re.IGNORECASE)
+# A closed block is removed whole; an unclosed one only to the end of its paragraph, so a
+# stray tag early in a reply can't delete the answer after it.
 TOOL_SYNTAX_RE = re.compile(
-	r"<tool_call>.*?(?:</tool_call>|$)|<function=.*?(?:</function>|$)|<\|?tool_calls?\|?>",
+	r"<tool_call>.*?</tool_call>|<tool_call>.*?(?:\n\s*\n|\Z)"
+	r"|<function=.*?</function>|<function=.*?(?:\n\s*\n|\Z)|<\|?tool_calls?\|?>",
 	re.DOTALL | re.IGNORECASE)
 
 SEARCH_TOOL = [{
@@ -1286,7 +1291,12 @@ async def run_query(query: str) -> str:
 			{"role": "user", "content": query},
 		],
 	)
-	return (resp.choices[0].message.content or "").strip() or "No results found."
+	text = (resp.choices[0].message.content or "").strip()
+	if not text:
+		log.warning("Search model returned no text for %r (finish_reason=%s)",
+					query, resp.choices[0].finish_reason)
+		return "The search returned no text (the search model may have run out of tokens)."
+	return text
 
 
 def call_query(arguments: str) -> str:
@@ -1295,6 +1305,8 @@ def call_query(arguments: str) -> str:
 	try:
 		args = json.loads(arguments or "{}")
 	except ValueError:
+		return ""
+	if not isinstance(args, dict):
 		return ""
 	for key in ("query", "q", "search_query", "keywords", "input"):
 		if args.get(key):
@@ -1379,7 +1391,9 @@ async def complete(messages: list[dict], tools: list[dict], on_text=None,
 			text += delta.content
 			on_text(text)
 		for c in delta.tool_calls or []:
-			slot = calls.setdefault(c.index, {"id": "", "name": "", "arguments": ""})
+			# Some providers omit the index: an id starts a new call, no id continues the last.
+			key = c.index if c.index is not None else (len(calls) if c.id or not calls else max(calls))
+			slot = calls.setdefault(key, {"id": "", "name": "", "arguments": ""})
 			slot["id"] = c.id or slot["id"]
 			if c.function:
 				slot["name"] += c.function.name or ""
@@ -1417,7 +1431,9 @@ def is_mcp_tool(name: str) -> bool:
 
 async def run_search(arguments: str) -> str:
 	query = call_query(arguments)
-	if not query or not SEARCH_MODEL:
+	if not query:
+		return "Search call had no usable query (expected JSON with a 'query' field)."
+	if not SEARCH_MODEL:
 		return "Search isn't available."
 	try:
 		return await run_query(query)
@@ -1425,27 +1441,30 @@ async def run_search(arguments: str) -> str:
 		return f"Search failed: {e}"
 
 
-async def run_calls(calls: list, user_id: int | None) -> list[str]:
-	"""Run the tool calls the model handed back: MCP data tools, or else web searches
-	(all of them concurrently). Every call needs a reply, so searches past MAX_SEARCHES
-	get a note instead of being dropped."""
+async def run_calls(calls: list, user_id: int | None, servers: list["MCPServer"]) -> list[str]:
+	"""Run the tool calls the model handed back: the MCP tools offered this request, or
+	web searches (all concurrently). Every call needs a reply, so searches past
+	MAX_SEARCHES and tools that weren't offered get a note instead of being dropped."""
+	offered = {name for s in servers for name in s.fn_names}
 	searches = 0
 	jobs = []
 	for c in calls:
-		if is_mcp_tool(c.name):
+		if c.name in offered:
 			jobs.append(run_tool(c, user_id))
-			continue
-		searches += 1
-		if searches > MAX_SEARCHES:
-			jobs.append(asyncio.sleep(0, "Skipped: too many searches at once. Use what you already have."))
+		elif is_mcp_tool(c.name) or not ("search" in c.name.lower() or call_query(c.arguments)):
+			jobs.append(asyncio.sleep(0, f"Error: tool {c.name} isn't available."))
 		else:
-			jobs.append(run_search(c.arguments))
+			searches += 1
+			if searches > MAX_SEARCHES:
+				jobs.append(asyncio.sleep(0, "Skipped: too many searches at once. Use what you already have."))
+			else:
+				jobs.append(run_search(c.arguments))
 	return list(await asyncio.gather(*jobs))
 
 
 async def ask_openrouter(
 	content: list[dict], system: str, servers: list["MCPServer"], user_id: int | None,
-	on_text=None, session: str | None = None, tools_on: bool = True,
+	on_text=None, session: str | None = None, tools_on: bool = True, must_search: bool = False,
 ) -> str:
 	"""Ask the model, running the tool calls it makes (MCP data tools here, searches via
 	SEARCH_MODEL) for up to MAX_TOOL_ROUNDS rounds, until it produces an answer.
@@ -1454,15 +1473,23 @@ async def ask_openrouter(
 	search_on = tools_on and SEARCH
 	servers = servers if tools_on else []
 	conv = [{"role": "system", "content": system}, {"role": "user", "content": chat_content(content)}]
-	rounds = tool_calls = 0
+	rounds = tool_calls = cites = 0
 	tok = {"in": 0, "cached": 0, "out": 0, "cost": 0.0}
 	r = None
 	while True:
 		tools = (SEARCH_TOOL if search_on else []) + [t for s in servers for t in s.tools]
 		final = rounds >= MAX_TOOL_ROUNDS
-		r = await complete(conv, tools, on_text, tool_choice="none" if final else None,
-						   session=session)
+		# must_search: force a search on the first round, as the xAI path does.
+		choice = "none" if final else ("required" if must_search and rounds == 0 else None)
+		try:
+			r = await complete(conv, tools, on_text, tool_choice=choice, session=session)
+		except APIStatusError as e:
+			if choice != "required" or e.status_code not in (400, 422):
+				raise
+			log.warning("OpenRouter rejected tool_choice=required (%s); retrying without it", e)
+			r = await complete(conv, tools, on_text, session=session)
 		rounds += 1
+		cites += len(r.cites)
 		n_in, n_cached, n_out, cost = usage_numbers(r.usage)
 		tok["in"] += n_in
 		tok["cached"] += n_cached
@@ -1475,7 +1502,7 @@ async def ask_openrouter(
 			break
 		if r.calls:
 			tool_calls += len(r.calls)
-			outputs = await run_calls(r.calls, user_id)
+			outputs = await run_calls(r.calls, user_id, servers)
 			conv.append(r.assistant)
 			conv += [{"role": "tool", "tool_call_id": c.id, "content": out}
 					 for c, out in zip(r.calls, outputs)]
@@ -1486,13 +1513,19 @@ async def ask_openrouter(
 		if fake and search_on and SEARCH_MODEL:
 			results = await asyncio.gather(*(run_query(q) for q in fake[:5]),
 										   return_exceptions=True)
-			found = "\n\n".join(f'Results for "{q}":\n{x}' for q, x in zip(fake, results)
-								if not isinstance(x, Exception))
+			for q, x in zip(fake, results):
+				if isinstance(x, Exception):
+					log.warning("Search for %r failed: %s", q, x)
+			found = "\n\n".join(
+				f'Results for "{q}":\n' + (f"Search failed: {x}" if isinstance(x, Exception) else x)
+				for q, x in zip(fake, results))
 			conv.append({"role": "user", "content":
 						 f"{found}\n\nAnswer the question now using these results."})
 			search_on = False
 			continue
 		break
+	if must_search and not (tool_calls or cites):
+		log.warning("This request needed a search, but the answer shows no sign of one")
 	log.info("%.1fs, %d rounds, %d tools: in %d (%.0f%% cached) out %d, $%.4f",
 			 time.monotonic() - t0, rounds, tool_calls, tok["in"],
 			 100 * tok["cached"] / tok["in"] if tok["in"] else 0, tok["out"], tok["cost"])
@@ -1504,32 +1537,58 @@ async def ask_openrouter(
 	return text
 
 
+SEARCH_NOTE = """You can search {search_what}. Use search whenever a question involves news, prices,
+markets, current events, or what people are saying, instead of saying you lack live data.
+If you use a source, you may mention it briefly or include one link, but keep it light."""
+
+NO_SEARCH_NOTE = """You have no web search. Answer from the chat history, your data tools and what you
+know, and say plainly what you can't check instead of guessing."""
+
+
+def system_prompt(bot_name: str, servers: list["MCPServer"], down: list["MCPServer"],
+				  search: bool) -> str:
+	note = SEARCH_NOTE.format(search_what=SEARCH_WHAT) if search else NO_SEARCH_NOTE
+	return SYSTEM_PROMPT.format(bot_name=bot_name, search_note=note) + tools_prompt(servers, down)
+
+
 async def ask_llm(
 	content: list[dict], user_id: int | None, bot_name: str, on_text=None,
 	must_search: bool = False, cache_key: str | None = None,
 ) -> str:
 	"""Ask the configured backend (xAI or OpenRouter), running any MCP tool calls the
 	model makes, until it produces an answer. With on_text, the reply is streamed and
-	on_text gets the text so far. With must_search, the model only gets web search."""
-	must_search = must_search and SEARCH_ON
+	on_text gets the text so far. With must_search, the model only gets web search and
+	has to use it; if search is switched off that is an error, not a silent downgrade."""
+	if must_search and not SEARCH_ON:
+		raise RuntimeError("search is disabled, but this request needs it")
 	if must_search:
 		servers, down = [], []
 	else:
 		servers = [s for s in MCP_SERVERS.values() if s.session and s.permits(user_id)]
 		down = [s for s in MCP_SERVERS.values() if s.error and s.permits(user_id)]
-	system = SYSTEM_PROMPT.format(bot_name=bot_name, search_what=SEARCH_WHAT) + tools_prompt(servers, down)
+	system = system_prompt(bot_name, servers, down, SEARCH_ON)
+	# Keeps a chat's requests on the server holding its cached prompt. Goes into HTTP
+	# headers, so ASCII only (bot names can hold anything), and short.
+	cache_id = f"{re.sub(r'[^A-Za-z0-9_.-]', '', bot_name) or 'bot'}-{cache_key}"[:128] if cache_key else None
 	if BACKEND == "xai":
-		return await ask_xai(content, system, servers, must_search, on_text, cache_key, bot_name, user_id)
-	# Sticky routing: keep a chat's requests on the provider that holds its cached prompt.
-	session = f"{bot_name}-{cache_key}" if cache_key else None
+		return await ask_xai(content, system, servers, must_search, on_text, cache_id, user_id)
 	try:
-		return await ask_openrouter(content, system, servers, user_id, on_text, session)
-	except (APIStatusError, RuntimeError):
-		if not (SEARCH_ON or servers):
+		return await ask_openrouter(content, system, servers, user_id, on_text, cache_id,
+									must_search=must_search)
+	except (APIStatusError, RuntimeError) as first:
+		# Retry without tools only when they could be the cause (a provider error, an empty
+		# reply, a 400/422), never for 401/402/429/5xx, and never when a search is required.
+		retriable = isinstance(first, RuntimeError) or first.status_code in (400, 422)
+		if must_search or not retriable or not (SEARCH_ON or servers):
 			raise
-		log.warning("Retrying without tools", exc_info=True)
-		return await ask_openrouter(content, system + NO_TOOLS_NOTE, [], user_id, on_text,
-									session, tools_on=False)
+		log.warning("Retrying without tools: %s", first)
+		try:
+			return await ask_openrouter(
+				content, system_prompt(bot_name, [], [], False) + NO_TOOLS_NOTE, [], user_id,
+				on_text, cache_id, tools_on=False)
+		except Exception:
+			log.exception("The retry without tools failed too")
+			raise first
 
 
 # ---------------------------------------------------------------- drafts ----
@@ -1655,10 +1714,11 @@ async def current_holdings(server: "MCPServer", portfolio_names: list[str]) -> d
 
 async def holding_news_text(bot, username: str, holdings: dict[str, str]) -> str | None:
 	"""Ask Grok for major news about these holdings; None if there's nothing."""
-	recent = db.execute(
-		"SELECT text FROM holding_news WHERE username = ? AND ts > ? ORDER BY ts",
-		(username, int((datetime.now() - timedelta(days=3)).timestamp())),
-	).fetchall()
+	recent = await asyncio.to_thread(
+		lambda: db.execute(
+			"SELECT text FROM holding_news WHERE username = ? AND ts > ? ORDER BY ts",
+			(username, int((datetime.now() - timedelta(days=3)).timestamp())),
+		).fetchall())
 	already = (
 		"\nAlready reported in the last few days; don't repeat these unless there's a "
 		"genuinely new development:\n" + "\n".join(r[0] for r in recent) + "\n"
@@ -1752,17 +1812,35 @@ def undo_button(code: str) -> InlineKeyboardMarkup:
 	)
 
 
+def remember_news_message(chat_id: int, message_id: int, codes: list[str]) -> None:
+	db.execute("INSERT OR REPLACE INTO holding_news_msgs VALUES (?, ?, ?)",
+			   (chat_id, message_id, ",".join(codes)))
+	db.commit()
+
+
+def news_message_codes(chat_id: int, message_id: int) -> list[str]:
+	row = db.execute(
+		"SELECT codes FROM holding_news_msgs WHERE chat_id = ? AND message_id = ?",
+		(chat_id, message_id),
+	).fetchone()
+	return [c for c in (row[0] if row else "").split(",") if c]
+
+
+def record_holding_news(username: str, news: str) -> None:
+	db.execute("INSERT INTO holding_news VALUES (?, ?, ?)",
+			   (username, int(datetime.now().timestamp()), news))
+	db.commit()
+
+
 async def send_holding_news(bot, chat_id: int, news: str, codes: list[str]) -> None:
 	"""Send a holding-news message with its Unsubscribe button on the last part."""
 	chunks = split_html(f"📰 <b>Holding news</b> (past 24h)\n\n{news}")
 	for i, chunk in enumerate(chunks):
 		last = i == len(chunks) - 1
 		sent = await send_html(bot, chat_id, chunk, reply_markup=UNSUBSCRIBE_BUTTON if last else None)
-		save(sent)
+		await asyncio.to_thread(save, sent)
 		if last:
-			db.execute("INSERT OR REPLACE INTO holding_news_msgs VALUES (?, ?, ?)",
-					   (chat_id, sent.message_id, ",".join(codes)))
-			db.commit()
+			await asyncio.to_thread(remember_news_message, chat_id, sent.message_id, codes)
 
 
 async def on_holding_news_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1776,23 +1854,19 @@ async def on_holding_news_button(update: Update, context: ContextTypes.DEFAULT_T
 	code = rest[0] if rest else ""
 	msg = query.message
 	if action == "menu":
-		row = db.execute(
-			"SELECT codes FROM holding_news_msgs WHERE chat_id = ? AND message_id = ?",
-			(msg.chat_id, msg.message_id),
-		).fetchone()
-		codes = [c for c in (row[0] if row else "").split(",") if c]
+		codes = await asyncio.to_thread(news_message_codes, msg.chat_id, msg.message_id)
 		await query.answer()
 		await query.edit_message_reply_markup(unsubscribe_menu(codes))
 	elif action == "cancel":
 		await query.answer()
 		await query.edit_message_reply_markup(UNSUBSCRIBE_BUTTON)
 	elif action == "mute":
-		set_muted(username, code, True)
+		await asyncio.to_thread(set_muted, username, code, True)
 		log.info("@%s unsubscribed from holding news: %s", username, code)
 		await query.answer("Unsubscribed from " + ("all holding news" if code == "*" else f"{code} news"))
 		await query.edit_message_reply_markup(undo_button(code))
 	elif action == "undo":
-		set_muted(username, code, False)
+		await asyncio.to_thread(set_muted, username, code, False)
 		log.info("@%s resubscribed to holding news: %s", username, code)
 		await query.answer("Resubscribed")
 		await query.edit_message_reply_markup(UNSUBSCRIBE_BUTTON)
@@ -1811,7 +1885,7 @@ async def run_holding_news(bot, only_username: str | None = None) -> dict[str, t
 			people.setdefault(username, []).append(portfolio)
 	results: dict[str, tuple[str, list[str]] | None] = {}
 	for username, portfolio_names in people.items():
-		muted = muted_codes(username)
+		muted = await asyncio.to_thread(muted_codes, username)
 		if "*" in muted:
 			log.info("Holding news: @%s has unsubscribed from all of it", username)
 			continue
@@ -1828,7 +1902,7 @@ async def run_holding_news(bot, only_username: str | None = None) -> dict[str, t
 		log.info("Holding news for @%s: %s", username, "found" if news else "nothing major")
 		if not news or only_username:	# on-demand checks are replied to by the caller
 			continue
-		chat_id = user_id_for(username)
+		chat_id = await asyncio.to_thread(user_id_for, username)
 		if not chat_id:
 			log.warning(
 				"Holding news: don't know @%s's user ID yet; they need to message the bot "
@@ -1837,9 +1911,7 @@ async def run_holding_news(bot, only_username: str | None = None) -> dict[str, t
 			continue
 		try:
 			await send_holding_news(bot, chat_id, news, results[username][1])
-			db.execute("INSERT INTO holding_news VALUES (?, ?, ?)",
-					   (username, int(datetime.now().timestamp()), news))
-			db.commit()
+			await asyncio.to_thread(record_holding_news, username, news)
 		except Forbidden:
 			log.warning("Holding news: @%s hasn't started a private chat with the bot", username)
 	return results
@@ -1909,10 +1981,10 @@ async def holding_news_on_demand(bot, msg: Message) -> None:
 	always reply, even when there's nothing (handy for testing)."""
 	username = (msg.from_user.username or "").lower() if msg.from_user else ""
 	if username not in HOLDING_NEWS_RECIPIENTS.values():
-		save(await msg.reply_text("You're not set up for holding news."))
+		await asyncio.to_thread(save, await msg.reply_text("You're not set up for holding news."))
 		return
-	if "*" in muted_codes(username):
-		save(await msg.reply_text(
+	if "*" in await asyncio.to_thread(muted_codes, username):
+		await asyncio.to_thread(save, await msg.reply_text(
 			"You've unsubscribed from all holding news.", reply_markup=undo_button("*")
 		))
 		return
@@ -1925,7 +1997,8 @@ async def holding_news_on_demand(bot, msg: Message) -> None:
 	if result:
 		await send_holding_news(bot, msg.chat_id, *result)
 	else:
-		save(await msg.reply_text("No major news on your holdings in the past 24 hours."))
+		await asyncio.to_thread(
+			save, await msg.reply_text("No major news on your holdings in the past 24 hours."))
 
 
 def is_movers_list(msg: Message) -> bool:
@@ -1983,7 +2056,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 			"Hi! Ask me anything" + (", or tap a button below." if DM_BUTTONS else "."),
 			reply_markup=DM_KEYBOARD if DM_BUTTONS else None,
 		)
-		save(sent)
+		await asyncio.to_thread(save, sent)
 		return
 	if private and command == "/holdingnews" and HOLDING_NEWS:
 		await holding_news_on_demand(bot, msg)
@@ -2132,6 +2205,8 @@ async def log_stopped_generation(update: Update, context: ContextTypes.DEFAULT_T
 
 async def credits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 	"""/credits - owner only (OWNER_USER_ID), OpenRouter backend only: credit left."""
+	# This handler takes the message before on_message would, so log it here.
+	await asyncio.to_thread(save, update.effective_message)
 	if not update.effective_user or update.effective_user.id != OWNER_ID:
 		return
 	try:
@@ -2145,7 +2220,8 @@ async def credits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 	except Exception as e:
 		log.exception("Credit check failed")
 		text = f"Couldn't fetch credits: {e}"
-	await update.effective_message.reply_text(text, disable_notification=True)
+	sent = await update.effective_message.reply_text(text, disable_notification=True)
+	await asyncio.to_thread(save, sent)
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
