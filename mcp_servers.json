@@ -16,7 +16,7 @@
       "cache_ttl": 30
     },
     "sharesight": {
-      "description": "Sharesight portfolios. Never ask the user for portfolio IDs or holdings: call list_portfolios first (it names every portfolio and its owner), then get_performance_report for the ones involved. A report's holdings list is exactly their current positions, with quantity, value and gains.",
+      "description": "Sharesight portfolios. Never ask the user for portfolio IDs or holdings: call list_portfolios first (it names every portfolio and its owner), then get_performance_report for the ones involved. A report's holdings list is exactly their current positions, with quantity, value and gains. When comparing portfolios, give each one's return, then the biggest contributors (upside) and the biggest detractors (downside), and say what explains the gap.",
       "command": "node",
       "args": [
         "/home/rob/sharesight-mcp/dist/index.js",
@@ -27,17 +27,6 @@
         "SHARESIGHT_CLIENT_SECRET": "${SHARESIGHT_CLIENT_SECRET}"
       },
       "current_holdings_only": true,
-      "blocked_tools": [
-        "list_holdings",
-        "list_portfolio_holdings",
-        "list_coupon_rates",
-        "show_coupon_code",
-        "list_countries",
-        "list_custom_investments",
-        "list_custom_investment_prices",
-        "get_custom_investment",
-        "get_portfolio_user_setting"
-      ],
       "slim": "sharesight",
       "gate": "portfolio",
       "max_concurrent": 1

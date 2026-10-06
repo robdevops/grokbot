@@ -17,7 +17,7 @@ from ..ask import ask
 from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers
 from ..history import compact, format_rows
-from ..llm.gate import route
+from ..llm.gate import is_portfolio_question, route
 from ..msgtext import describe, sender_name
 from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, chat_prompt, down_note
 from ..store import is_dm
@@ -151,7 +151,7 @@ class Handlers:
         body = describe(t)
         return f"[#{t.message_id}] {who}: {compact(body) if self.ctx.st.token_saver else body}"
 
-    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "") -> str:
+    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False) -> str:
         ctx, st = self.ctx, self.ctx.st
         rows = await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
         transcript = format_rows(rows, ctx.self_name, st.tz, line_max=st.history_line_max,
@@ -159,7 +159,7 @@ class Handlers:
         return chat_prompt(
             transcript=transcript, sender=sender_name(msg), private=trig.private,
             reply_quote=self._quote(trig), msg_id=msg.message_id, now=ctx.now(),
-            down=down_note(ctx.registry.down()), saver=st.token_saver, middle=middle)
+            down=down_note(ctx.registry.down()), saver=st.token_saver, middle=middle, fresh=fresh)
 
     # -- answering ---------------------------------------------------------------------
     async def _answer(self, msg: Message, trig: Trigger) -> None:
@@ -211,10 +211,12 @@ class Handlers:
                                must_search=True, cache_key=f"chat-{chat_id}", on_text=on_text,
                                kind="movers", chat_id=chat_id)
         else:
-            parts = [{"type": "text", "text": await self._chat_text(msg, trig)}]
-            parts += await self._images(msg, trig)
             context = trig.text + " " + (describe(trig.reply_target) if trig.reply_target else "")
-            answer = await ask(ctx, parts, route(context, st, ctx.registry),
+            chosen = route(context, st, ctx.registry)
+            fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)
+            parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]
+            parts += await self._images(msg, trig)
+            answer = await ask(ctx, parts, chosen,
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id)
         return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers)
 

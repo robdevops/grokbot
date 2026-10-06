@@ -68,7 +68,8 @@ def down_note(down: list[MCPServer]) -> str:
 
 
 def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str | None,
-                msg_id: int, now: str, down: str = "", saver: bool = True, middle: str = "") -> str:
+                msg_id: int, now: str, down: str = "", saver: bool = True, middle: str = "",
+                fresh: bool = False) -> str:
     """The user turn: transcript, the replied-to message, and the volatile tail (kept last so the
     cached prefix before it is unchanged)."""
     head = (f"Private one-to-one chat with {sender}, not the group. Transcript:\n{transcript}"
@@ -83,6 +84,9 @@ def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str
                  "of yours that did either. Fetch fresh data rather than reusing numbers from "
                  "earlier replies, and follow the formatting rules in your instructions even "
                  "where your earlier replies didn't.")
+    if fresh:  # a portfolio question: stale numbers and refusals in the history must not be reused
+        tail += (" Get current figures with your portfolio tools before answering; don't reuse "
+                 "numbers or refusals from earlier replies.")
     return head + tail + down
 
 
