@@ -38,7 +38,8 @@
         "get_custom_investment",
         "get_portfolio_user_setting"
       ],
-      "slim": "sharesight"
+      "slim": "sharesight",
+      "gate": "portfolio"
     }
   }
 }
