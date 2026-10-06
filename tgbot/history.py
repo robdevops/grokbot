@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from .store import HistoryRow
 from .textfmt import ANY_TAG_RE
 
+LAST_REPLY_MAX = 6000  # characters of the bot's latest reply kept in the prompt (~1,500 tokens)
 _LINK = re.compile(r'<a href="([^"]*)">(.*?)</a>', re.DOTALL)
 _YAHOO = "https://finance.yahoo.com/quote/"
 
@@ -29,14 +30,18 @@ def format_rows(rows: list[HistoryRow], own_name: str, tz: ZoneInfo, *, line_max
                 compact_text: bool, own_line_max: int | None = None) -> str:
     """One line per message, oldest first: `[#id] Wed 14:05 Name (replying to #x): text`.
     The bot's own earlier replies appear as "You". Long lines are cut (the bot's own, usually the
-    longest, at `own_line_max` when given)."""
+    longest, at `own_line_max` when given), except the bot's most recent reply, which is kept
+    nearly whole (LAST_REPLY_MAX): people ask follow-up questions about it ("what was the training
+    incident?") and a cut-off answer can't be asked about."""
+    last_own = max((i for i, r in enumerate(rows) if r.sender == own_name), default=-1)
     lines = []
-    for r in rows:
+    for i, r in enumerate(rows):
         when = datetime.fromtimestamp(r.ts, tz).strftime("%a %H:%M")
         reply = f" (replying to #{r.reply_to})" if r.reply_to else ""
         who = "You" if r.sender == own_name else r.sender
         text = compact(r.text) if compact_text else r.text
-        cap = own_line_max if (own_line_max and who == "You") else line_max
+        cap = LAST_REPLY_MAX if i == last_own else (
+            own_line_max if (own_line_max and who == "You") else line_max)
         if len(text) > cap:
             text = text[:cap].rstrip() + " …[cut]"
         lines.append(f"[#{r.message_id}] {when} {who}{reply}: {text}")

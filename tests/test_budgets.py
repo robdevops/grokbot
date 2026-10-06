@@ -11,9 +11,9 @@ from tgbot.prompts import chat_prompt, system_prompt
 
 def test_system_prompt_stays_small():
     full = report.tokens(system_prompt("Stock", Route([], True), "the web"))
-    assert full < 500, full  # was ~860 before the recode
+    assert full < 560, full  # was ~860 before the recode
     lean = report.tokens(system_prompt("Stock", Route([], False, simple=True), "the web"))
-    assert lean < 480
+    assert lean < 540
 
 
 def test_history_encoding_trims_link_heavy_bot_lines():
@@ -22,7 +22,7 @@ def test_history_encoding_trims_link_heavy_bot_lines():
     tz = ZoneInfo("UTC")
     raw = format_rows(rows, "Stock (@stockbot)", tz, line_max=400, compact_text=False)
     slim = format_rows(rows, "Stock (@stockbot)", tz, line_max=240, compact_text=True, own_line_max=160)
-    assert report.tokens(slim) < report.tokens(raw) * 0.7
+    assert report.tokens(slim) < report.tokens(raw) * 0.8  # the latest bot reply is kept whole
     assert "finance.yahoo.com" not in slim and "<b>" not in slim and "NVDA" in slim
 
 
@@ -45,6 +45,10 @@ def test_volatile_text_comes_last_so_the_prefix_can_be_cached():
 
 def test_system_prompt_is_identical_for_everyone_with_the_same_route():
     assert system_prompt("Stock", Route([], True), "the web") == system_prompt("Stock", Route([], True), "the web")
+
+
+def test_system_prompt_explains_cut_lines():
+    assert "…[cut]" in system_prompt("Stock", Route([], True), "the web")
 
 
 def test_compact_text_helper():

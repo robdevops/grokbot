@@ -174,6 +174,15 @@ def test_photo_size_choice():
     assert pick_photo(N(photo=None, document=None), small=True) is None
 
 
+async def test_dm_follow_up_sees_the_whole_previous_answer(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("Headlines..." + "x" * 700 + " ADF soldier died in a training incident"),
+                                            step("an ADF soldier died near Darwin")])
+    await run(h, user_msg(ctx.bot, "headlines?", chat_id=5, user_id=5, mid=1))
+    await run(h, user_msg(ctx.bot, "what was the training incident?", chat_id=5, user_id=5, mid=2000))
+    assert "ADF soldier died in a training incident" in backend.seen[1]["prompt"]
+    assert "…[cut]" not in backend.seen[1]["prompt"].split("what was the training incident?")[0].split("Headlines")[1]
+
+
 async def test_usage_is_recorded(env, store):
     ctx, backend, h = make_ctx(env, store, [step("ok", usage=Usage(1000, 400, 50, 0.01))])
     await run(h, user_msg(ctx.bot, "@stockbot hi"))

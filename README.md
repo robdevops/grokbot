@@ -45,7 +45,8 @@ or `EnvironmentFile=` for the variables below.
 - **History:** the prompt carries a window of the chat's recent messages, oldest first. The window
   is `HISTORY_LIMIT` to 1.5x that many messages (20-29 by default): its start only moves every
   `HISTORY_LIMIT/2` messages, so the start of the prompt stays identical between requests and the
-  provider's prompt cache keeps working. The bot's own earlier replies appear as "You"; a replied-to
+  provider's prompt cache keeps working. The bot's own earlier replies appear as "You" (its latest reply in full, so follow-up questions about it
+  work; older ones shortened); a replied-to
   message is quoted even if it is older than the window.
 - **Shared database:** group history lives in `messages`, shared by every bot pointed at the same
   `DB_PATH` (so two bots in one group see each other's replies). Private chats live in
