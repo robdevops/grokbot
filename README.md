@@ -35,8 +35,7 @@ or `EnvironmentFile=` for the variables below.
   API, `tgbot/llm/openrouter.py` on chat completions).
 
 ## How it answers
-- **Groups:** the bot answers when it is @mentioned (an exact `@username`; `@stockbot2` does not
-  count for `@stockbot`) or when someone replies to one of its messages. Every message is logged;
+- **Groups:** the bot answers when it is @mentioned or when someone replies to one of its messages. Every message is logged;
   messages from other bots are logged as context but never answered (the one exception is the
   movers feature below). Edited messages are logged, not answered.
 - **Private chats:** every message is answered, and the reply streams into a Telegram message
