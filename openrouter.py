@@ -1038,7 +1038,8 @@ def merge_reasoning(details: list[dict], new: list) -> None:
             details.append(d)
 
 
-async def complete(messages: list[dict], tools: list[dict], on_text=None, tool_choice: str | None = None):
+async def complete(messages: list[dict], tools: list[dict], on_text=None,
+                   tool_choice: str | None = None, session: str | None = None):
     """One chat-completions call. With on_text, stream it, calling on_text(text so far)
     as text arrives. Returns text, any tool calls the model handed back, the assistant
     message to replay into the next round, and the finish reason, usage and citations."""
@@ -1050,7 +1051,12 @@ async def complete(messages: list[dict], tools: list[dict], on_text=None, tool_c
         extra_body={
             **({"reasoning": {"effort": REASONING}} if REASONING else {}),
             "usage": {"include": True},  # ask OpenRouter for the real cost
+            # Sticky routing: keep a chat's requests on the provider endpoint that holds
+            # its cached prompt (session_id, sent as a header too), with prompt_cache_key
+            # as the weaker fallback some providers read.
+            **({"session_id": session, "prompt_cache_key": session} if session else {}),
         },
+        **({"extra_headers": {"x-session-id": session}} if session else {}),
     )
     if tools:
         kwargs["tools"] = tools
@@ -1125,7 +1131,7 @@ def active_servers(user_id: int | None) -> tuple[list[MCPServer], list[MCPServer
 
 
 async def ask_model(messages: list[dict], user_id: int | None = None, on_text=None,
-                    tools_on: bool = True) -> str:
+                    tools_on: bool = True, session: str | None = None) -> str:
     """Ask the model, running the tool calls it makes (MCP data tools here, searches via
     SEARCH_MODEL) for up to MAX_TOOL_ROUNDS rounds, until it produces an answer.
     With on_text, replies are streamed and on_text gets the text so far."""
@@ -1139,7 +1145,8 @@ async def ask_model(messages: list[dict], user_id: int | None = None, on_text=No
     while True:
         tools = (SEARCH_TOOL if search_on else []) + [t for s in servers for t in s.tools]
         final = rounds >= MAX_TOOL_ROUNDS
-        r = await complete(conv, tools, on_text, tool_choice="none" if final else None)
+        r = await complete(conv, tools, on_text, tool_choice="none" if final else None,
+                           session=session)
         rounds += 1
         u = r.usage
         tok["in"] += getattr(u, "prompt_tokens", 0) or 0
@@ -1431,16 +1438,17 @@ async def answer_question(bot, msg: Message, text: str, reply_target: Message | 
     own_name = bot.first_name + (f" (@{bot.username})" if bot.username else "")
     messages = build_messages(bot, msg, reply_target, replied_to_bot, content, own_name)
     user_id = msg.from_user.id if msg.from_user else None
+    session = f"{bot.username or bot.id}-chat-{msg.chat_id}"  # per bot and chat, <= 256 chars
 
     try:
         try:
-            return await ask_model(messages, user_id, on_text)
+            return await ask_model(messages, user_id, on_text, session=session)
         except (APIStatusError, RuntimeError):
             if not (SEARCH or MCP_SERVERS):
                 raise
             log.warning("Retrying without tools")
             return await ask_model(messages + [{"role": "user", "content": NO_SEARCH_NOTE}],
-                                   user_id, on_text, tools_on=False)
+                                   user_id, on_text, tools_on=False, session=session)
     except APIStatusError as e:
         log.exception("LLM request failed")
         try:
