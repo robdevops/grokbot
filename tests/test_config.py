@@ -58,9 +58,9 @@ def test_search_off_without_search_model(env):
     assert not config.load({**env, "SEARCH": "off"}).search
 
 
-def test_alert_chats_and_recipients(env):
-    s = config.load({**env, "ALERT_CHAT_IDS": "-1, -2 3", "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Rob:@Me"})
-    assert s.alert_chats == {-1, -2, 3} and s.holding_news_recipients == {"rob": "me"}
+def test_admin_chats_and_recipients(env):
+    s = config.load({**env, "ADMIN_CHAT_IDS": "-1, -2 3", "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Rob:@Me"})
+    assert s.admin_chats == {-1, -2, 3} and s.holding_news_recipients == {"rob": "me"}
 
 
 def test_no_names_in_code_defaults(env):

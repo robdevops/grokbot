@@ -95,7 +95,7 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
 - **Everyone who can reach the bot can use every enabled tool**, including Sharesight portfolio
   data (there is no per-user tool restriction; Telegram/BotFather
   controls who may use the bot). Restrict the bot in BotFather, or leave Sharesight out.
-- **Down servers:** if a server dies, chats in `ALERT_CHAT_IDS` get a message with the error, and the
+- **Down servers:** if a server dies, chats in `ADMIN_CHAT_IDS` get a message with the error, and the
   model is told the source is down (and quotes the error) instead of claiming it has no access. A
   dead server is not restarted until the bot restarts.
 - **Slimming:** results are compacted before the model sees them (see token saving below).
@@ -207,7 +207,7 @@ token size of the tool definitions.
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `BOT_TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
 | `MCP_CONFIG` | MCP server config file (default mcp_servers.json; missing = no MCP tools). |
-| `ALERT_CHAT_IDS` | Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts). |
+| `ADMIN_CHAT_IDS` | Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts). |
 | `OWNER_USER_ID` | Telegram user ID allowed to use /credits and /usage. |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |

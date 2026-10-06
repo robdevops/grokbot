@@ -24,7 +24,7 @@ ENV_VARS: dict[str, str] = {
     "DB_PATH": "SQLite file for chat history (default chat_log.db). Instances may share it.",
     "BOT_TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
     "MCP_CONFIG": "MCP server config file (default mcp_servers.json; missing = no MCP tools).",
-    "ALERT_CHAT_IDS": "Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts).",
+    "ADMIN_CHAT_IDS": "Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts).",
     "OWNER_USER_ID": "Telegram user ID allowed to use /credits and /usage.",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
@@ -66,7 +66,7 @@ class Settings:
     db_path: str
     tz: ZoneInfo
     mcp_config: str
-    alert_chats: frozenset[int]
+    admin_chats: frozenset[int]
     owner_id: int
     movers_bots: frozenset[str]
     dm_buttons: bool
@@ -160,7 +160,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         db_path=env.get("DB_PATH", "chat_log.db"),
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
         mcp_config=env.get("MCP_CONFIG", "mcp_servers.json"),
-        alert_chats=_ids(env.get("ALERT_CHAT_IDS", "")),
+        admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
         owner_id=int(env.get("OWNER_USER_ID") or 0),
         movers_bots=frozenset(
             u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "").replace(",", " ").split()

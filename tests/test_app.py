@@ -64,8 +64,8 @@ def test_main_accepts_and_ignores_a_label_and_unknown_args(monkeypatch, tmp_path
     assert started
 
 
-async def test_alert_down_notifies_alert_chats_only(env, store):
-    st = config.load({**env, "ALERT_CHAT_IDS": "-10 -11"})
+async def test_alert_down_notifies_admin_chats_only(env, store):
+    st = config.load({**env, "ADMIN_CHAT_IDS": "-10 -11"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
     server = MCPServer("yahoo", {}, timeout=1, max_output=10)
     server.error = "boom <x>"

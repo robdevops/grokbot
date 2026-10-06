@@ -51,13 +51,13 @@ def setup_logging() -> None:
 
 
 async def alert_down(ctx: Ctx, server: MCPServer) -> None:
-    """Tell ALERT_CHAT_IDS that an MCP server died (and log it, so the model sees it in history)."""
+    """Tell ADMIN_CHAT_IDS that an MCP server died (and log it, so the model sees it in history)."""
     if not ctx.bot:
         return
     text = (f"⚠️ The <b>{html.escape(server.label)}</b> data source is down. "
             f"I can't use it until the bot is restarted.\n"
             f"<pre>{html.escape(server.error or 'unknown error')}</pre>")
-    for chat_id in ctx.st.alert_chats:
+    for chat_id in ctx.st.admin_chats:
         try:
             sent = await ctx.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML,
                                               disable_notification=True)
