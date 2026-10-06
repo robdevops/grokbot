@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -63,6 +63,7 @@ class Request:
     cache_id: str | None = None  # keeps a chat's requests on the server holding its cached prompt
     on_text: Callable[[str], None] | None = None  # streaming callback, gets the text so far
     no_tools_system: str = ""  # system prompt for the retry without tools
+    local: dict[str, Callable[[dict], Awaitable[str]]] = field(default_factory=dict)  # tools run in the bot
     max_tokens: int | None = None  # reply cap incl. reasoning; None = the provider's setting
 
 

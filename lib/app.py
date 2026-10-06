@@ -19,6 +19,7 @@ from telegram.error import NetworkError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
+    ChatMemberHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -27,7 +28,7 @@ from telegram.ext import (
 
 from . import config
 from .context import Ctx
-from .features import dm_buttons, holding_news
+from .features import dm_buttons, holding_news, post
 from .llm.base import Backend
 from .llm.openrouter import OpenRouterBackend
 from .llm.xai import XaiBackend
@@ -130,12 +131,15 @@ def build_app(ctx: Ctx) -> Application:
         & ~filters.StatusUpdate.ALL, handlers.on_message))
     if st.holding_news:  # the Unsubscribe / Undo buttons on holding-news messages
         app.add_handler(CallbackQueryHandler(command(holding_news.on_button), pattern=r"^hn:"))
+    if st.post_to_groups:  # keeps the list of groups the bot can post in
+        app.add_handler(ChatMemberHandler(command(post.on_membership), ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_error_handler(on_error)
     return app
 
 
 def allowed_updates(st: config.Settings) -> list[str]:
-    return ["message", "edited_message"] + (["callback_query"] if st.holding_news else [])
+    return (["message", "edited_message"] + (["callback_query"] if st.holding_news else [])
+            + (["my_chat_member"] if st.post_to_groups else []))
 
 
 def git_hash() -> str:

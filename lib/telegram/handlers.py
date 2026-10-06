@@ -15,9 +15,9 @@ from telegram.ext import ContextTypes
 from .. import config
 from ..ask import ask
 from ..context import Ctx
-from ..features import dm_buttons, holding_news, movers
+from ..features import dm_buttons, holding_news, movers, post
 from ..history import compact, format_rows
-from ..llm.gate import is_portfolio_question, route
+from ..llm.gate import Route, is_portfolio_question, route
 from ..msgtext import describe, sender_name
 from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, chat_prompt, down_note
 from ..store import is_dm
@@ -76,6 +76,9 @@ class Handlers:
         if self.ctx.st.holding_news:
             self.ctx.store.remember_user(msg)
         self.ctx.store.save(msg)
+        chat = getattr(msg, "chat", None)
+        if self.ctx.st.post_to_groups and chat and chat.type in post.GROUP_TYPES and chat.title:
+            self.ctx.store.remember_chat(chat.id, chat.title)
 
     async def on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         msg = update.effective_message
@@ -213,11 +216,16 @@ class Handlers:
         else:
             context = trig.text + " " + (describe(trig.reply_target) if trig.reply_target else "")
             chosen = route(context, st, ctx.registry)
+            extra = []
+            if st.post_to_groups and trig.private and post.wants_post(trig.text):
+                extra = [post.tool(ctx, msg.from_user.id)]
+                if chosen.simple:  # the model must not be told it has no tools
+                    chosen = Route([], False)
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)
             parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]
             parts += await self._images(msg, trig)
             answer = await ask(ctx, parts, chosen,
-                               cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id)
+                               cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra)
         return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers)
 
 

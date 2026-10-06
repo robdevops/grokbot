@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace as N
 
 import pytest
+from telegram.error import TelegramError
 
 from lib import config
 from lib.store import Store
@@ -30,12 +31,13 @@ def store(tmp_path):
 
 
 def make_msg(mid, text, sender="Rob", chat_id=-100, ts=1, reply_to=None, username=None,
-             is_bot=False, **extra):
+             is_bot=False, chat_title=None, **extra):
     """A minimal fake telegram.Message."""
     media = dict(photo=None, video=None, animation=None, voice=None, video_note=None, audio=None,
                  document=None, sticker=None, poll=None, location=None, contact=None)
     media.update(extra)
     return N(
+        chat=N(id=chat_id, type="private" if chat_id > 0 else "supergroup", title=chat_title),
         chat_id=chat_id, message_id=mid, text=text, caption=None, text_html=text,
         caption_html=None, sender_chat=None, date=N(timestamp=lambda: ts),
         reply_to_message=N(message_id=reply_to) if reply_to else None,
@@ -54,6 +56,7 @@ class FakeBot:
         self.drafts: list[str] = []
         self.actions: list[str] = []
         self.fail_send: dict[int, Exception] = {}
+        self.admins: dict[int, list[int]] = {}  # chat id -> admin user IDs; a missing chat raises
         self._next = 1000
 
     def _msg(self, chat_id, text):
@@ -68,6 +71,11 @@ class FakeBot:
             raise self.fail_send[chat_id]
         self.sent.append({"chat_id": chat_id, "text": text, **kw})
         return self._msg(chat_id, text)
+
+    async def get_chat_administrators(self, chat_id):
+        if chat_id not in self.admins:
+            raise TelegramError("Bad Request: chat not found")
+        return [N(user=N(id=uid)) for uid in self.admins[chat_id]]
 
     async def send_chat_action(self, chat_id, action):
         self.actions.append(action)

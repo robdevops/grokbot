@@ -39,7 +39,7 @@ def _hide_needs_tools(on_text):
 
 async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = False,
               cache_key: str | None = None, on_text=None, kind: str = "chat",
-              chat_id: int = 0) -> Answer:
+              chat_id: int = 0, extra_tools=()) -> Answer:
     """Ask the configured provider and record the usage. `route` says which tools to offer;
     must_search forces a search (and offers nothing else). A message the gate gave fewer tools
     than exist that gets back NEEDS_TOOLS is asked again with everything on."""
@@ -53,7 +53,8 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         system=system_prompt(ctx.first_name, route, ctx.backend.search_what, saver=saver),
         parts=parts,
         model=(st.fast_model or st.model) if route.simple else st.model,
-        tools=[t for s in route.servers for t in s.tools],
+        tools=[t for s in route.servers for t in s.tools] + [t for t, _ in extra_tools],
+        local={t.name: fn for t, fn in extra_tools},
         search=route.search, must_search=must_search, reasoning=st.reasoning,
         cache_id=cache_id(ctx.first_name, cache_key),
         on_text=_hide_needs_tools(on_text) if (route.simple or route.partial) else on_text,
@@ -67,7 +68,8 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         full = Route(ctx.registry.up(), st.search)
         req = dataclasses.replace(
             req, system=system_prompt(ctx.first_name, full, ctx.backend.search_what, saver=saver),
-            model=st.model, tools=[t for s in full.servers for t in s.tools], search=full.search,
+            model=st.model, tools=[t for s in full.servers for t in s.tools] + [t for t, _ in extra_tools],
+            search=full.search,
             on_text=on_text)
         answer = await policy.ask(ctx.backend, ctx.registry, req)
         await _record(ctx, req.model, kind, chat_id, answer)

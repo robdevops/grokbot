@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS holding_news_mutes (
     username TEXT, code TEXT, PRIMARY KEY (username, code));
 CREATE TABLE IF NOT EXISTS holding_news_msgs (
     chat_id INTEGER, message_id INTEGER, codes TEXT, PRIMARY KEY (chat_id, message_id));
+-- Groups the bot has seen (Telegram can't list a bot's chats), so "post in <name>" can find one.
+CREATE TABLE IF NOT EXISTS chats (chat_id INTEGER PRIMARY KEY, title TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS kv (bot_id INTEGER, key TEXT, value TEXT, PRIMARY KEY (bot_id, key));
 CREATE TABLE IF NOT EXISTS usage (
     ts INTEGER, bot_id INTEGER, chat_id INTEGER, model TEXT, kind TEXT, rounds INTEGER,
@@ -89,6 +91,15 @@ class Store:
                       (self._own_id(), *row), commit=True)
         else:
             self._run("INSERT OR REPLACE INTO messages VALUES (?,?,?,?,?,?)", row, commit=True)
+
+    def remember_chat(self, chat_id: int, title: str) -> None:
+        self._run("INSERT OR REPLACE INTO chats VALUES (?,?,?)", (chat_id, title, int(time.time())), commit=True)
+
+    def forget_chat(self, chat_id: int) -> None:
+        self._run("DELETE FROM chats WHERE chat_id=?", (chat_id,), commit=True)
+
+    def chats(self) -> list[tuple[int, str]]:
+        return [(r[0], r[1]) for r in self._run("SELECT chat_id, title FROM chats")]
 
     def history(self, chat_id: int, limit: int) -> list[HistoryRow]:
         """Recent messages, oldest first.

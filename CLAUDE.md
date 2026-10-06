@@ -22,7 +22,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   code), `runner.py` (THE tool loop), `policy.py` (THE retry ladder), `gate.py` (which tools a message needs).
 - `prompts.py` all prompts. `ask.py` one entry point: route -> Request -> policy.ask -> usage -> NEEDS_TOOLS rerun.
 - `telegram/`: `handlers.py` (trigger -> request -> reply), `send.py`, `draft.py` (typing + streaming
-  drafts), `commands.py` (/credits, /usage). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`.
+  drafts), `commands.py` (/credits, /usage). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`.
 - `app.py` wiring/startup; `context.py` `Ctx` (settings, store, backend, registry, bot); `report.py`.
 
 ## Request flow

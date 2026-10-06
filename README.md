@@ -137,6 +137,12 @@ Each is off by default. The holding-news DM and the movers reply are switched on
   on startup**: if the button set changed since the last run, everyone the bot has a private chat
   with gets one short "Buttons updated." message carrying the new keyboard (nothing is sent when it
   is unchanged; people who blocked the bot are skipped).
+- **Post to a group from a DM** (`POST_TO_GROUPS_FROM_DM=on`): in a private chat, "say hello in the
+  <group name> group" makes the bot post there, but only if the person asking is the creator or an
+  admin of that group (checked with Telegram each time) and the bot is a member. Groups only, not
+  channels. Telegram can't list a bot's chats, so the bot learns them from the messages it sees and
+  from being added: a group it joined earlier is unknown until someone posts there. If the name
+  matches none of your groups the reply is the same whether or not the group exists.
 
 ## Commands
 | Command | Who | What |
@@ -213,6 +219,7 @@ token size of the tool definitions. The `Starting ...` line shows the git commit
 | `ADMIN_CHAT_IDS` | Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts). |
 | `OWNER_USER_ID` | Telegram user ID allowed to use /credits and /usage. |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
+| `POST_TO_GROUPS_FROM_DM` | on|off. A group admin can have the bot post in that group from a DM (default off). |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
 | `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |
