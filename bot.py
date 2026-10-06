@@ -106,7 +106,7 @@ SEARCH_TOKENS = int(os.getenv("SEARCH_TOKENS", "400"))  # cap on each search wri
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4000"))  # reply cap; counts reasoning tokens too
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.6"))
 OWNER_ID = int(os.getenv("OWNER_USER_ID", "0"))  # who may use /credits
-SEARCH_ON = bool(SEARCH_TOOLS) if BACKEND == "xai" else SEARCH
+SEARCH_ON = bool(SEARCH_TOOLS) if BACKEND == "xai" else SEARCH and bool(SEARCH_MODEL)
 SEARCH_WHAT = "the web and X (Twitter)" if BACKEND == "xai" else "the web"
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
@@ -249,7 +249,7 @@ Swearing and crude humor are fine if the group is doing it.
 
 def tools_prompt(servers: list["MCPServer"], down: list["MCPServer"]) -> str:
 	"""Extra instructions describing the MCP data sources for this request,
-	including ones that are down, so Grok reports the error instead of
+	including ones that are down, so the model reports the error instead of
 	claiming it has no access."""
 	text = ""
 	if servers:
@@ -336,7 +336,7 @@ db.execute(
 db.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, user_id INTEGER)")
 # Holding-news notifications already sent, so the same story isn't repeated.
 db.execute("CREATE TABLE IF NOT EXISTS holding_news (username TEXT, ts INTEGER, text TEXT)")
-# Drop "• NOTHING" alerts sent by an earlier version, so they aren't fed back to Grok.
+# Drop "• NOTHING" alerts sent by an earlier version, so they aren't fed back to the model.
 db.execute("DELETE FROM holding_news WHERE length(text) < 40 AND upper(text) LIKE '%NOTHING%'")
 # Companies (or "*" for everything) each person has unsubscribed from.
 db.execute(
@@ -431,11 +431,11 @@ def save(msg: Message) -> None:
 
 
 def recent_history(chat_id: int, limit: int) -> list[tuple]:
-	"""Recent messages, oldest first, for the transcript sent to Grok.
+	"""Recent messages, oldest first, for the transcript sent to the model.
 
 	A plain "last N messages" window drops its oldest line every time a
 	message arrives, which changes the start of the transcript and so defeats
-	Grok's prompt cache (it caches the unchanged start of a prompt). Instead
+	the model's prompt cache (it caches the unchanged start of a prompt). Instead
 	the window's start only moves every limit/2 messages: the transcript holds
 	between limit and 1.5 x limit messages and in between only grows at the
 	end, so everything before the new messages stays cached.
@@ -538,7 +538,7 @@ def strip_disclaimer(text: str) -> str:
 
 
 def md_to_html(text: str) -> str:
-	"""Convert Markdown that Grok slips into its replies (links, **bold**, `code`)
+	"""Convert Markdown that the model slips into its replies (links, **bold**, `code`)
 	into Telegram HTML. The prompt asks for HTML, but models don't always comply."""
 	def link(m: re.Match) -> str:
 		label, url = m.group(1), m.group(2)
@@ -695,8 +695,8 @@ def _expand(d: dict | None, label: str = "") -> dict | None:
 
 
 # Tool definitions are re-sent on every round of every request, so their size
-# adds up fast. Trim what Grok doesn't need to pick and call a tool well.
-HIDDEN_PARAMS = {"response_format"}	# optional params Grok shouldn't bother with
+# adds up fast. Trim what the model doesn't need to pick and call a tool well.
+HIDDEN_PARAMS = {"response_format"}	# optional params the model shouldn't bother with
 DESCRIPTION_SKIP = re.compile(r"^(returns?|example|args|arguments|note|raises)\b", re.IGNORECASE)
 
 
@@ -762,8 +762,8 @@ class MCPServer:
 		self.session: ClientSession | None = None
 		self.error: str | None = None	# why the server is down, if it is
 		self.bot = None	# for posting alerts to ALERT_CHATS
-		self.tools: list[dict] = []	# Responses API function tool specs
-		self.fn_names: dict[str, str] = {}	# function name sent to Grok -> MCP tool name
+		self.tools: list[dict] = []	# function tool specs (format depends on the backend, see function_tool)
+		self.fn_names: dict[str, str] = {}	# function name sent to the model -> MCP tool name
 		# Cap simultaneous calls: a 20-stock request fired all at once gets
 		# rate-limited by Yahoo.
 		self._sem = asyncio.Semaphore(int(cfg.get("max_concurrent", 4)))
@@ -1213,13 +1213,13 @@ async def ask_xai(
 			"Prompt fingerprint: system=%s tools=%s user-start=%s (%d chars)",
 			_fp(system), _fp(json.dumps(tools, sort_keys=True)), _fp(user_text[:500]), len(user_text),
 		)
-	if must_search:
-		try:
-			resp = await xai_create(on_text, input=first_input, tool_choice="required", **kwargs)
-		except BadRequestError as e:
-			log.warning("xAI rejected tool_choice=required (%s); retrying without it", e)
-			resp = await xai_create(on_text, input=first_input, **kwargs)
-	else:
+	try:
+		resp = await xai_create(
+			on_text, input=first_input, **({"tool_choice": "required"} if must_search else {}), **kwargs)
+	except BadRequestError as e:
+		if not must_search:
+			raise
+		log.warning("xAI rejected tool_choice=required (%s); retrying without it", e)
 		resp = await xai_create(on_text, input=first_input, **kwargs)
 	responses = [resp]	# every round, for the search and token totals
 	tool_calls = 0
@@ -1366,6 +1366,13 @@ def merge_reasoning(details: list[dict], new: list) -> None:
 			details.append(d)
 
 
+def raise_provider_error(obj) -> None:
+	"""OpenRouter reports provider failures inside a normal HTTP 200 body."""
+	err = (getattr(obj, "model_extra", None) or {}).get("error")
+	if err:
+		raise RuntimeError(f"provider error {err.get('code', '')}: {err.get('message', err)}")
+
+
 async def complete(messages: list[dict], tools: list[dict], on_text=None,
 				   tool_choice: str | None = None, session: str | None = None):
 	"""One chat-completions call. With on_text, stream it, calling on_text(text so far)
@@ -1392,10 +1399,7 @@ async def complete(messages: list[dict], tools: list[dict], on_text=None,
 			kwargs["tool_choice"] = tool_choice
 	if on_text is None:
 		resp = await llm.chat.completions.create(**kwargs)
-		# OpenRouter reports provider failures inside a normal HTTP 200 body.
-		err = (getattr(resp, "model_extra", None) or {}).get("error")
-		if err:
-			raise RuntimeError(f"provider error {err.get('code', '')}: {err.get('message', err)}")
+		raise_provider_error(resp)
 		if not resp.choices:
 			log.warning("Bad payload: %s", resp.model_dump_json()[:800])
 			raise RuntimeError("no choices in response")
@@ -1416,9 +1420,7 @@ async def complete(messages: list[dict], tools: list[dict], on_text=None,
 	calls: dict[int, dict] = {}
 	details: list[dict] = []
 	async for chunk in stream:
-		err = (getattr(chunk, "model_extra", None) or {}).get("error")
-		if err:
-			raise RuntimeError(f"provider error {err.get('code', '')}: {err.get('message', err)}")
+		raise_provider_error(chunk)
 		if chunk.usage:
 			usage = chunk.usage
 		if not chunk.choices:
@@ -1471,12 +1473,15 @@ async def run_search(arguments: str) -> str:
 	query = call_query(arguments)
 	if not query:
 		return "Search call had no usable query (expected JSON with a 'query' field)."
-	if not SEARCH_MODEL:
-		return "Search isn't available."
 	try:
 		return await run_query(query)
 	except Exception as e:
 		return f"Search failed: {e}"
+
+
+async def note(text: str) -> str:
+	"""A constant tool reply, as an awaitable so it can sit beside the real jobs."""
+	return text
 
 
 async def run_calls(calls: list, user_id: int | None, servers: list["MCPServer"]) -> list[str]:
@@ -1490,11 +1495,11 @@ async def run_calls(calls: list, user_id: int | None, servers: list["MCPServer"]
 		if c.name in offered:
 			jobs.append(run_tool(c, user_id))
 		elif is_mcp_tool(c.name) or not ("search" in c.name.lower() or call_query(c.arguments)):
-			jobs.append(asyncio.sleep(0, f"Error: tool {c.name} isn't available."))
+			jobs.append(note(f"Error: tool {c.name} isn't available."))
 		else:
 			searches += 1
 			if searches > MAX_SEARCHES:
-				jobs.append(asyncio.sleep(0, "Skipped: too many searches at once. Use what you already have."))
+				jobs.append(note("Skipped: too many searches at once. Use what you already have."))
 			else:
 				jobs.append(run_search(c.arguments))
 	return list(await asyncio.gather(*jobs))
@@ -1502,14 +1507,13 @@ async def run_calls(calls: list, user_id: int | None, servers: list["MCPServer"]
 
 async def ask_openrouter(
 	content: list[dict], system: str, servers: list["MCPServer"], user_id: int | None,
-	on_text=None, session: str | None = None, tools_on: bool = True, must_search: bool = False,
+	on_text=None, session: str | None = None, search: bool = True, must_search: bool = False,
 ) -> str:
 	"""Ask the model, running the tool calls it makes (MCP data tools here, searches via
 	SEARCH_MODEL) for up to MAX_TOOL_ROUNDS rounds, until it produces an answer.
 	With on_text, replies are streamed and on_text gets the text so far."""
 	t0 = time.monotonic()
-	search_on = tools_on and SEARCH
-	servers = servers if tools_on else []
+	search_on = search	# also switched off after one text-recovery round, below
 	conv = [{"role": "system", "content": system}, {"role": "user", "content": chat_content(content)}]
 	rounds = tool_calls = cites = 0
 	tok = {"in": 0, "cached": 0, "out": 0, "cost": 0.0}
@@ -1548,7 +1552,7 @@ async def ask_openrouter(
 		# MiMo sometimes prints a search call as text instead of making it: run the query
 		# and hand the results back, once.
 		fake = [q.strip() for q in FAKE_CALL_RE.findall(r.text) if q.strip()]
-		if fake and search_on and SEARCH_MODEL:
+		if fake and search_on:
 			results = await asyncio.gather(*(run_query(q) for q in fake[:5]),
 										   return_exceptions=True)
 			for q, x in zip(fake, results):
@@ -1602,8 +1606,9 @@ async def ask_llm(
 	if must_search:
 		servers, down = [], []
 	else:
-		servers = [s for s in MCP_SERVERS.values() if s.session and s.permits(user_id)]
-		down = [s for s in MCP_SERVERS.values() if s.error and s.permits(user_id)]
+		visible = [s for s in MCP_SERVERS.values() if s.permits(user_id)]
+		servers = [s for s in visible if s.session]
+		down = [s for s in visible if s.error]
 	system = system_prompt(bot_name, servers, down, SEARCH_ON)
 	# Keeps a chat's requests on the server holding its cached prompt. Goes into HTTP
 	# headers, so ASCII only (bot names can hold anything), and short.
@@ -1612,7 +1617,7 @@ async def ask_llm(
 		return await ask_xai(content, system, servers, must_search, on_text, cache_id, user_id)
 	try:
 		return await ask_openrouter(content, system, servers, user_id, on_text, cache_id,
-									must_search=must_search)
+									search=SEARCH_ON, must_search=must_search)
 	except (APIStatusError, RuntimeError) as first:
 		# Retry without tools only when they could be the cause (a provider error, an empty
 		# reply, a 400/422), never for 401/402/429/5xx, and never when a search is required.
@@ -1623,7 +1628,7 @@ async def ask_llm(
 		try:
 			return await ask_openrouter(
 				content, system_prompt(bot_name, [], [], False) + NO_TOOLS_NOTE, [], user_id,
-				on_text, cache_id, tools_on=False)
+				on_text, cache_id, search=False)
 		except Exception:
 			log.exception("The retry without tools failed too")
 			raise first
@@ -1632,7 +1637,7 @@ async def ask_llm(
 # ---------------------------------------------------------------- drafts ----
 
 # Telegram's own tags, plus one half-written tag at the end of the text. A bare "<" in
-# Grok's prose ("<5% from ATH") is not a tag and must survive.
+# the model's prose ("<5% from ATH") is not a tag and must survive.
 TG_TAG_NAMES = r"(?:b|strong|i|em|u|s|code|pre|a|blockquote|tg-spoiler)"
 TG_TAG_RE = re.compile(rf"</?{TG_TAG_NAMES}\b[^>]*>|</?{TG_TAG_NAMES}\b[^>]*$", re.I)
 
@@ -1641,7 +1646,7 @@ class Draft:
 	"""Streams a reply into a Telegram message draft (private chats only).
 
 	Starts with an empty draft, which Telegram shows as "Thinking...", then
-	shows Grok's text as it arrives. Drafts vanish after 30 s without an
+	shows the model's text as it arrives. Drafts vanish after 30 s without an
 	update, so it's re-sent at least every KEEPALIVE seconds, e.g. while
 	tools run. The finished reply is sent as a normal message."""
 
@@ -1652,7 +1657,7 @@ class Draft:
 		self.bot = bot
 		self.chat_id = chat_id
 		self.draft_id = random.randint(1, 2**31 - 1)
-		self.text = ""	# Grok's latest raw text (Telegram HTML, possibly half-written)
+		self.text = ""	# the model's latest raw text (Telegram HTML, possibly half-written)
 		self._shown: str | None = None
 		self._last = 0.0
 		self._task: asyncio.Task | None = None
@@ -1751,7 +1756,7 @@ async def current_holdings(server: "MCPServer", portfolio_names: list[str]) -> d
 
 
 async def holding_news_text(bot, username: str, holdings: dict[str, str]) -> str | None:
-	"""Ask Grok for major news about these holdings; None if there's nothing."""
+	"""Ask the model for major news about these holdings; None if there's nothing."""
 	recent = await asyncio.to_thread(
 		lambda: db.execute(
 			"SELECT text FROM holding_news WHERE username = ? AND ts > ? ORDER BY ts",
@@ -1775,17 +1780,30 @@ async def holding_news_text(bot, username: str, holdings: dict[str, str]) -> str
 	return as_bullets(md_to_html(raw))
 
 
+A_TAG_RE = re.compile(r'<a href="([^"]*)">(.*?)</a>')
+ANY_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def plain_text(text: str) -> str:
+	"""Telegram HTML as plain text: links become "label (url)", other tags are dropped."""
+	return html.unescape(ANY_TAG_RE.sub("", A_TAG_RE.sub(r"\2 (\1)", text)))
+
+
+def is_parse_error(e: BadRequest) -> bool:
+	return "parse entities" in str(e).lower()
+
+
 def is_nothing(raw: str) -> bool:
-	"""True for Grok's "nothing to report" answer, however it's dressed up
+	"""True for the model's "nothing to report" answer, however it's dressed up
 	("NOTHING", "• NOTHING", "**Nothing.**", "None") or an empty reply."""
-	plain = html.unescape(re.sub(r"<[^>]+>", "", raw or ""))
+	plain = html.unescape(ANY_TAG_RE.sub("", raw or ""))
 	words = re.sub(r"[^A-Za-z ]", " ", plain).split()
 	# A real item is longer, even one about a company called "Nothing ...".
 	return not words or (words[0].upper() in ("NOTHING", "NONE") and len(words) <= 5)
 
 
 def as_bullets(text: str) -> str:
-	"""One "• " bullet per non-empty line, whatever bullet style (if any) Grok used."""
+	"""One "• " bullet per non-empty line, whatever bullet style (if any) the model used."""
 	lines = (re.sub(r"^\s*(?:[•\-*–·]|\d+[.)])\s+", "", l).strip() for l in text.splitlines())
 	return "\n".join(f"• {l}" for l in lines if l)
 
@@ -1798,12 +1816,10 @@ async def send_html(bot, chat_id: int, text: str, reply_markup=None) -> Message:
 			reply_markup=reply_markup,
 		)
 	except BadRequest as e:
-		if "parse entities" not in str(e).lower():
+		if not is_parse_error(e):
 			raise
-		plain = re.sub(r'<a href="([^"]*)">(.*?)</a>', r"\2 (\1)", text)
-		plain = html.unescape(re.sub(r"<[^>]+>", "", plain))
 		return await bot.send_message(
-			chat_id, plain, link_preview_options=NO_PREVIEW, reply_markup=reply_markup
+			chat_id, plain_text(text), link_preview_options=NO_PREVIEW, reply_markup=reply_markup
 		)
 
 
@@ -2067,14 +2083,19 @@ def mentions(text: str, username: str | None) -> bool:
 	return bool(username and re.search(rf"(?<![\w@])@{re.escape(username)}(?!\w)", text, re.I))
 
 
+def record(msg: Message) -> None:
+	"""Log every message, including edits (they overwrite the original), and remember who
+	sent it so holding-news DMs can reach people by username."""
+	if HOLDING_NEWS:
+		remember_user(msg)
+	save(msg)
+
+
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 	msg = update.effective_message
 	if msg is None:
 		return
-	if HOLDING_NEWS:
-		await asyncio.to_thread(remember_user, msg)	# username -> ID, for holding-news DMs
-
-	await asyncio.to_thread(save, msg)  # log everything, incl. edits (they overwrite the original)
+	await asyncio.to_thread(record, msg)
 	if update.edited_message:
 		return	# don't answer edited messages
 	# Other bots are logged but never answered (avoids bot-to-bot loops),
@@ -2084,7 +2105,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		return
 
 	bot = context.bot
-	private = msg.chat.type == "private"
+	private = is_dm(msg.chat_id)
 	text = msg.text or msg.caption or ""
 	mentioned = private or mentions(text, bot.username)
 
@@ -2114,7 +2135,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	log.info("[%s %s%s]%s %s", sender_name(msg), user_id, "" if private else f" @ {msg.chat_id}",
 			 " (movers list)" if movers else "", preview or f"[{describe(msg) or 'no text'}]")
 
-	# Show we're working straight away, before building the prompt or calling Grok.
+	# Show we're working straight away, before building the prompt or calling the model.
 	# Private chats stream into a draft (plus typing); groups get the typing indicator.
 	draft = Draft(bot, msg.chat_id) if private else None
 	if draft:
@@ -2125,7 +2146,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		preset = DM_PRESETS.get(text.strip()) if private and DM_BUTTONS else None
 		if preset:
 			# Preset buttons are standalone requests: no chat transcript, which
-			# would only add tokens (and old answers for Grok to copy).
+			# would only add tokens (and old answers for the model to copy).
 			prompt = (
 				f"This is a private chat with {sender_name(msg)}. They tapped the "
 				f"\"{text.strip()}\" button, which asks for: {preset}. It's now {now_str()}. "
@@ -2169,7 +2190,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 		content: list[dict] = [{"type": "input_text", "text": prompt}]
 		# Movers lists are explained from their caption alone; finbot's image adds
-		# nothing Grok needs and costs a lot of tokens.
+		# nothing the model needs and costs a lot of tokens.
 		image_sources = () if movers else (reply_target, msg)
 		# replied-to photo first, then the mention itself; downloaded concurrently
 		file_ids = [fid for m in image_sources if m and (fid := photo_file_id(m))]
@@ -2222,13 +2243,11 @@ async def send_formatted(msg: Message, text: str, quote: bool = True, reply_mark
 			link_preview_options=NO_PREVIEW, reply_markup=reply_markup,
 		)
 	except BadRequest as e:
-		if "parse entities" not in str(e).lower():
+		if not is_parse_error(e):
 			raise
-		log.warning("Bad HTML from Grok, sending as plain text: %s", e)
-		plain = re.sub(r'<a href="([^"]*)">(.*?)</a>', r"\2 (\1)", text)
-		plain = html.unescape(re.sub(r"<[^>]+>", "", plain))
+		log.warning("Bad HTML from the model, sending as plain text: %s", e)
 		return await msg.reply_text(
-			plain, do_quote=quote, disable_notification=True, link_preview_options=NO_PREVIEW,
+			plain_text(text), do_quote=quote, disable_notification=True, link_preview_options=NO_PREVIEW,
 			reply_markup=reply_markup,
 		)
 
