@@ -82,7 +82,8 @@ async def capture(server: MCPServer, days: int) -> None:
     listed = {t.name: t for t in (await server.session.list_tools()).tools}
     names = sorted(set(server.fn_names.values()))
     print("=== TOOLS (the bot offers these) ===")
-    print(json.dumps([{"name": n, "description": listed[n].description, "inputSchema": listed[n].inputSchema}
+    print(json.dumps([{"name": n, "description": listed[n].description, "inputSchema": listed[n].inputSchema,
+                       "annotations": listed[n].annotations.model_dump() if listed[n].annotations else None}
                       for n in names], indent=1))
     today = date.today()
     ids: list = []

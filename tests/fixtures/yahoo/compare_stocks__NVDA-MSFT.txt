@@ -1,0 +1,13 @@
+# Stock Comparison: NVDA, MSFT
+
+|    | Ticker   | Name                  |   Price |   Change% |     MarketCap |      PE |   EPS |   DivYield% |   Beta |   52WkHigh |   52WkLow |    Volume |   AvgVolume | Sector     | Industry                  |
+|---:|:---------|:----------------------|--------:|----------:|--------------:|--------:|------:|------------:|-------:|-----------:|----------:|----------:|------------:|:-----------|:--------------------------|
+|  0 | NVDA     | NVIDIA Corporation    |  239.24 |  0.142324 | 5776928145408 | 30.2453 |  7.91 |        0.42 |  2.216 |     243.37 |    164.27 | 101482897 |   122898671 | Technology | Semiconductors            |
+|  1 | MSFT     | Microsoft Corporation |  529.3  |  0.784492 | 3930341244928 | 29.4875 | 17.95 |        0.75 |  1.099 |     553.72 |    349.2  |  21098949 |    28126893 | Technology | Software - Infrastructure |
+
+## Key Insights
+
+- **Highest Price:** MSFT at $529.30
+- **Largest Market Cap:** NVDA at $5776.93B
+- **Highest Dividend Yield:** MSFT at 0.75%
+

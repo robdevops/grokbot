@@ -1,0 +1,4 @@
+Tool error: Error executing tool get_stock_quote: 1 validation error for get_stock_quoteArguments
+ticker
+  String should have at most 10 characters [type=string_too_long, input_value='ZZZZNOTREAL', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_too_long

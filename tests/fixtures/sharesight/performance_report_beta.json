@@ -1,0 +1,799 @@
+{
+  "report": {
+    "id": "PerformanceReport_502345",
+    "portfolio_id": 502345,
+    "portfolio_tz_name": "Australia/Sydney",
+    "value": 4215.58,
+    "grouping": "market",
+    "currency": {
+      "code": "AUD",
+      "id": 2,
+      "symbol": "$",
+      "qualified_symbol": "AU$"
+    },
+    "start_date": "2021-08-14",
+    "end_date": "2026-10-07",
+    "include_sales": false,
+    "capital_gain": 1102.62,
+    "capital_gain_percent": 65.83,
+    "payout_gain": 48.83,
+    "payout_gain_percent": 1.07,
+    "currency_gain": -20.48,
+    "currency_gain_percent": -1.36,
+    "total_gain": 1130.97,
+    "total_gain_percent": 65.55,
+    "percentages_annualised": true,
+    "holdings": [
+      {
+        "id": 9200001,
+        "instrument": {
+          "code": "ILU",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2323,
+          "market_code": "ASX",
+          "name": "Iluka Resources",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Other Metals/Minerals",
+          "sector_classification_name": "Non-Energy Minerals",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/ILU.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/ILU.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 65,
+        "value": 378.3,
+        "instrument_price": 5.82,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": -42.22,
+        "capital_gain_percent": -10.04,
+        "payout_gain": 3.83,
+        "payout_gain_percent": 0.91,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": -38.39,
+        "total_gain_percent": -9.13,
+        "number_of_unconfirmed_transactions": 2
+      },
+      {
+        "id": 9200002,
+        "instrument": {
+          "code": "SEMI",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2165430,
+          "market_code": "ASX",
+          "name": "Global X Semiconductor Etf",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Investment Trusts/Mutual Funds",
+          "sector_classification_name": "Miscellaneous",
+          "friendly_instrument_description": "Exchange Traded Fund",
+          "friendly_instrument_description_code": "exchange_traded_fund",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/SEMI.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/SEMI.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 9,
+        "value": 366.12,
+        "instrument_price": 40.68,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": 149.58,
+        "capital_gain_percent": 69.08,
+        "payout_gain": 27.37,
+        "payout_gain_percent": 12.64,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": 176.95,
+        "total_gain_percent": 81.71,
+        "number_of_unconfirmed_transactions": 1
+      },
+      {
+        "id": 9200003,
+        "instrument": {
+          "code": "WIRE",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2405327,
+          "market_code": "ASX",
+          "name": "Global X Copper Miners Etf",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Investment Trusts/Mutual Funds",
+          "sector_classification_name": "Miscellaneous",
+          "friendly_instrument_description": "Exchange Traded Fund",
+          "friendly_instrument_description_code": "exchange_traded_fund",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/WIRE.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/WIRE.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 15,
+        "value": 368.7,
+        "instrument_price": 24.58,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": 3.42,
+        "capital_gain_percent": 0.94,
+        "payout_gain": 7.47,
+        "payout_gain_percent": 2.05,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": 10.89,
+        "total_gain_percent": 2.98,
+        "number_of_unconfirmed_transactions": 1
+      },
+      {
+        "id": 9200004,
+        "instrument": {
+          "code": "WTC",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 1705496,
+          "market_code": "ASX",
+          "name": "Wisetech Global Ltd",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Packaged Software",
+          "sector_classification_name": "Technology Services",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/WTC.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/WTC.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 5,
+        "value": 159.55,
+        "instrument_price": 31.91,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": -47.75,
+        "capital_gain_percent": -23.03,
+        "payout_gain": 0.88,
+        "payout_gain_percent": 0.42,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": -46.87,
+        "total_gain_percent": -22.61,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9200005,
+        "instrument": {
+          "code": "XMET",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2380482,
+          "market_code": "ASX",
+          "name": "Betashares Critical Minerals Etf",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Investment Trusts/Mutual Funds",
+          "sector_classification_name": "Miscellaneous",
+          "friendly_instrument_description": "Exchange Traded Fund",
+          "friendly_instrument_description_code": "exchange_traded_fund",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/XMET.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/XMET.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 21,
+        "value": 297.88,
+        "instrument_price": 14.185,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": -45.28,
+        "capital_gain_percent": -13.2,
+        "payout_gain": 7.38,
+        "payout_gain_percent": 2.15,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": -37.9,
+        "total_gain_percent": -11.04,
+        "number_of_unconfirmed_transactions": 1
+      },
+      {
+        "id": 9200006,
+        "instrument": {
+          "code": "ACMR",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 1768173,
+          "market_code": "NASDAQ",
+          "name": "ACM Research Inc - Ordinary Shares - Class A",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Industrial Machinery",
+          "sector_classification_name": "Producer Manufacturing",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/ACMR.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/ACMR.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 3,
+        "value": 226.05,
+        "instrument_price": 75.35,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 26.55,
+        "capital_gain_percent": 9.18,
+        "payout_gain": 0.0,
+        "payout_gain_percent": 0,
+        "currency_gain": 7.97,
+        "currency_gain_percent": 2.75,
+        "total_gain": 34.52,
+        "total_gain_percent": 11.93,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9200007,
+        "instrument": {
+          "code": "AMD",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 776402,
+          "market_code": "NASDAQ",
+          "name": "Advanced Micro Devices Inc.",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Semiconductors",
+          "sector_classification_name": "Electronic Technology",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/AMD.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/AMD.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 649.42,
+        "instrument_price": 649.42,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 153.76,
+        "capital_gain_percent": 19.97,
+        "payout_gain": 0.0,
+        "payout_gain_percent": 0,
+        "currency_gain": 6.55,
+        "currency_gain_percent": 0.85,
+        "total_gain": 160.31,
+        "total_gain_percent": 20.82,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9200008,
+        "instrument": {
+          "code": "CRWD",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 1938954,
+          "market_code": "NASDAQ",
+          "name": "Crowdstrike Holdings Inc - Ordinary Shares - Class A",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Packaged Software",
+          "sector_classification_name": "Technology Services",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/CRWD.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/CRWD.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 278.86,
+        "instrument_price": 278.86,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 331.25,
+        "capital_gain_percent": 114.67,
+        "payout_gain": 0.0,
+        "payout_gain_percent": 0,
+        "currency_gain": 0.91,
+        "currency_gain_percent": 0.32,
+        "total_gain": 332.16,
+        "total_gain_percent": 114.98,
+        "number_of_unconfirmed_transactions": 1
+      },
+      {
+        "id": 9200009,
+        "instrument": {
+          "code": "NVDA",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 24699,
+          "market_code": "NASDAQ",
+          "name": "NVIDIA Corp",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Semiconductors",
+          "sector_classification_name": "Electronic Technology",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/NVDA.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/NVDA.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 239.24,
+        "instrument_price": 239.24,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 87.94,
+        "capital_gain_percent": 33.65,
+        "payout_gain": 0.65,
+        "payout_gain_percent": 0.25,
+        "currency_gain": -6.56,
+        "currency_gain_percent": -2.51,
+        "total_gain": 82.03,
+        "total_gain_percent": 31.39,
+        "number_of_unconfirmed_transactions": 3
+      },
+      {
+        "id": 9200010,
+        "instrument": {
+          "code": "SKHY",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 5457867,
+          "market_code": "NASDAQ",
+          "name": "SK Hynix Inc - ADR",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Semiconductors",
+          "sector_classification_name": "Electronic Technology",
+          "friendly_instrument_description": "Depository Receipt",
+          "friendly_instrument_description_code": "depository_receipt",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/SKHY.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/SKHY.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 182.56,
+        "instrument_price": 182.56,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 18.05,
+        "capital_gain_percent": 7.48,
+        "payout_gain": 0.01,
+        "payout_gain_percent": 0.01,
+        "currency_gain": 2.09,
+        "currency_gain_percent": 0.87,
+        "total_gain": 20.15,
+        "total_gain_percent": 8.35,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9200011,
+        "instrument": {
+          "code": "SMH",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 1965968,
+          "market_code": "NASDAQ",
+          "name": "VanEck ETF Trust - VanEck Semiconductor ETF",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Investment Trusts/Mutual Funds",
+          "sector_classification_name": "Miscellaneous",
+          "friendly_instrument_description": "Exchange Traded Fund",
+          "friendly_instrument_description_code": "exchange_traded_fund",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/SMH.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/SMH.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 632.5,
+        "instrument_price": 632.5,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 428.77,
+        "capital_gain_percent": 81.45,
+        "payout_gain": 1.24,
+        "payout_gain_percent": 0.23,
+        "currency_gain": -24.5,
+        "currency_gain_percent": -4.65,
+        "total_gain": 405.51,
+        "total_gain_percent": 77.03,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9200012,
+        "instrument": {
+          "code": "S",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2148831,
+          "market_code": "NYSE",
+          "name": "SentinelOne Inc - Ordinary Shares - Class A",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Packaged Software",
+          "sector_classification_name": "Technology Services",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NYSE/light/S.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NYSE/dark/S.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 10,
+        "value": 258.0,
+        "instrument_price": 25.8,
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 3,
+        "group_name": "NYSE",
+        "capital_gain": 38.55,
+        "capital_gain_percent": 4.37,
+        "payout_gain": 0.0,
+        "payout_gain_percent": 0,
+        "currency_gain": -6.94,
+        "currency_gain_percent": -0.79,
+        "total_gain": 31.61,
+        "total_gain_percent": 3.59,
+        "number_of_unconfirmed_transactions": 0
+      }
+    ],
+    "sub_totals": [
+      {
+        "value": 1570.55,
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": 17.75,
+        "capital_gain_percent": 35.89,
+        "payout_gain": 46.93,
+        "payout_gain_percent": 5.24,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": 64.68,
+        "total_gain_percent": 41.13
+      },
+      {
+        "value": 2208.63,
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 1046.32,
+        "capital_gain_percent": 91.16,
+        "payout_gain": 1.9,
+        "payout_gain_percent": 0.46,
+        "currency_gain": -13.54,
+        "currency_gain_percent": -1.31,
+        "total_gain": 1034.68,
+        "total_gain_percent": 90.32
+      },
+      {
+        "value": 258.0,
+        "group_id": 3,
+        "group_name": "NYSE",
+        "capital_gain": 38.55,
+        "capital_gain_percent": 22.35,
+        "payout_gain": 0.0,
+        "payout_gain_percent": 0.37,
+        "currency_gain": -6.94,
+        "currency_gain_percent": -1.73,
+        "total_gain": 31.61,
+        "total_gain_percent": 20.99
+      }
+    ],
+    "cash_accounts": [
+      {
+        "id": 7101,
+        "key": 7101,
+        "name": "Cash account 1",
+        "source": null,
+        "value": -12.0,
+        "capital_gain": null,
+        "capital_gain_percent": null,
+        "payout_gain": null,
+        "payout_gain_percent": null,
+        "currency_gain": null,
+        "currency_gain_percent": null,
+        "total_gain": null,
+        "total_gain_percent": null,
+        "currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        }
+      },
+      {
+        "id": 7102,
+        "key": 7102,
+        "name": "Cash account 2",
+        "source": null,
+        "value": 190.4,
+        "capital_gain": null,
+        "capital_gain_percent": null,
+        "payout_gain": null,
+        "payout_gain_percent": null,
+        "currency_gain": null,
+        "currency_gain_percent": null,
+        "total_gain": null,
+        "total_gain_percent": null,
+        "currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        }
+      },
+      {
+        "id": 7103,
+        "key": 7103,
+        "name": "unassigned",
+        "source": null,
+        "value": 0.0,
+        "capital_gain": null,
+        "capital_gain_percent": null,
+        "payout_gain": null,
+        "payout_gain_percent": null,
+        "currency_gain": null,
+        "currency_gain_percent": null,
+        "total_gain": null,
+        "total_gain_percent": null,
+        "currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "portfolio": {
+          "id": 502345,
+          "consolidated": false,
+          "name": "Beta SMSF",
+          "external_identifier": null
+        }
+      }
+    ]
+  },
+  "api_transaction": {
+    "id": 1000502345,
+    "version": 3,
+    "action": "/api/v3/portfolios/502345/performance",
+    "timestamp": "2026-01-01T00:00:00.000Z"
+  },
+  "links": {
+    "portfolio": "https://api.sharesight.com/api/v3/portfolios/502345?consolidated=false",
+    "self": "https://api.sharesight.com/api/v3/portfolios/502345/performance?consolidated=false"
+  }
+}

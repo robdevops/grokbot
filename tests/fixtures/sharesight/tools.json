@@ -1,0 +1,75 @@
+[
+  {
+    "name": "get_performance_report",
+    "description": "Retrieves the performance report for a portfolio with gains, holdings breakdown, and benchmarks",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "portfolio_id": {
+          "type": "number",
+          "description": "The portfolio ID"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Start date YYYY-MM-DD (defaults to portfolio inception)"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End date YYYY-MM-DD (defaults to today)"
+        },
+        "consolidated": {
+          "type": "boolean",
+          "description": "Set to true for consolidated portfolio views"
+        },
+        "include_sales": {
+          "type": "boolean",
+          "description": "Include or exclude sales"
+        },
+        "report_combined": {
+          "type": "boolean",
+          "description": "Receive combined totals for same instruments across portfolios"
+        },
+        "grouping": {
+          "type": "string",
+          "description": "Group by: country, currency, custom_group, industry_classification, investment_type, market, portfolio, sector_classification, ungrouped"
+        },
+        "custom_group_id": {
+          "type": "number",
+          "description": "Custom group ID (requires grouping=custom_group)"
+        },
+        "include_limited": {
+          "type": "boolean",
+          "description": "Include holdings limited by user plan"
+        },
+        "benchmark_code": {
+          "type": "string",
+          "description": "Benchmark code and market (e.g., SPY.NYSE)"
+        }
+      },
+      "required": [
+        "portfolio_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  },
+  {
+    "name": "list_portfolios",
+    "description": "Retrieves a list of the user's portfolios. Optionally filter by consolidated view or instrument.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "consolidated": {
+          "type": "boolean",
+          "description": "Set to true to see consolidated portfolio views"
+        },
+        "instrument_id": {
+          "type": "number",
+          "description": "Filter by instrument ID. When set, consolidated defaults to false"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    }
+  }
+]

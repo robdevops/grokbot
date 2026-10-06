@@ -1,0 +1,23 @@
+# NVIDIA Corporation (NVDA)
+
+**Current Price:** $239.24
+**Change:** 🔻 $-0.96 (-0.40%)
+
+## Market Data
+- **Previous Close:** $240.20
+- **Open:** $242.08
+- **Day's Range:** $238.93 - $243.37
+- **52 Week Range:** $164.27 - $243.37
+- **Volume:** 101,482,897
+- **Avg Volume:** 122,898,671
+- **Market Cap:** $5776.93B
+- **Beta:** 2.216
+- **PE Ratio:** 30.24526
+- **EPS:** $7.91
+- **Dividend Yield:** 0.42%
+
+## Company Info
+- **Sector:** Technology
+- **Industry:** Semiconductors
+- **Website:** https://www.nvidia.com
+

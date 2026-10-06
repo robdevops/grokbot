@@ -1,0 +1,905 @@
+{
+  "report": {
+    "id": "PerformanceReport_501234",
+    "portfolio_id": 501234,
+    "portfolio_tz_name": "Australia/Sydney",
+    "value": 5021.66,
+    "grouping": "market",
+    "currency": {
+      "code": "AUD",
+      "id": 2,
+      "symbol": "$",
+      "qualified_symbol": "AU$"
+    },
+    "start_date": "2021-08-14",
+    "end_date": "2026-10-07",
+    "include_sales": false,
+    "capital_gain": 1249.49,
+    "capital_gain_percent": 65.83,
+    "payout_gain": 67.08,
+    "payout_gain_percent": 1.07,
+    "currency_gain": -28.53,
+    "currency_gain_percent": -1.36,
+    "total_gain": 1288.02,
+    "total_gain_percent": 65.55,
+    "percentages_annualised": true,
+    "holdings": [
+      {
+        "id": 9100001,
+        "instrument": {
+          "code": "GNP",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2021928,
+          "market_code": "ASX",
+          "name": "Genusplus Group Ltd",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Engineering & Construction",
+          "sector_classification_name": "Industrial Services",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/GNP.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/GNP.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 34,
+        "value": 337.62,
+        "instrument_price": 9.93,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": 165.43,
+        "capital_gain_percent": 96.07,
+        "payout_gain": 3.84,
+        "payout_gain_percent": 2.23,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": 169.26,
+        "total_gain_percent": 98.3,
+        "number_of_unconfirmed_transactions": 1
+      },
+      {
+        "id": 9100002,
+        "instrument": {
+          "code": "ILU",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2323,
+          "market_code": "ASX",
+          "name": "Iluka Resources",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Other Metals/Minerals",
+          "sector_classification_name": "Non-Energy Minerals",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/ILU.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/ILU.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 62,
+        "value": 360.84,
+        "instrument_price": 5.82,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": -40.27,
+        "capital_gain_percent": -10.04,
+        "payout_gain": 3.65,
+        "payout_gain_percent": 0.91,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": -36.62,
+        "total_gain_percent": -9.13,
+        "number_of_unconfirmed_transactions": 2
+      },
+      {
+        "id": 9100003,
+        "instrument": {
+          "code": "RMD",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2964,
+          "market_code": "ASX",
+          "name": "Resmed Inc",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Medical Specialties",
+          "sector_classification_name": "Health Technology",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/RMD.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/RMD.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 16,
+        "value": 507.68,
+        "instrument_price": 31.73,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": -30.4,
+        "capital_gain_percent": -5.65,
+        "payout_gain": 0.0,
+        "payout_gain_percent": 0,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": -30.4,
+        "total_gain_percent": -5.65,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9100004,
+        "instrument": {
+          "code": "SEMI",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2165430,
+          "market_code": "ASX",
+          "name": "Global X Semiconductor Etf",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Investment Trusts/Mutual Funds",
+          "sector_classification_name": "Miscellaneous",
+          "friendly_instrument_description": "Exchange Traded Fund",
+          "friendly_instrument_description_code": "exchange_traded_fund",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/SEMI.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/SEMI.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 9,
+        "value": 366.12,
+        "instrument_price": 40.68,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": 149.58,
+        "capital_gain_percent": 69.08,
+        "payout_gain": 27.37,
+        "payout_gain_percent": 12.64,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": 176.95,
+        "total_gain_percent": 81.71,
+        "number_of_unconfirmed_transactions": 1
+      },
+      {
+        "id": 9100005,
+        "instrument": {
+          "code": "WIRE",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2405327,
+          "market_code": "ASX",
+          "name": "Global X Copper Miners Etf",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Investment Trusts/Mutual Funds",
+          "sector_classification_name": "Miscellaneous",
+          "friendly_instrument_description": "Exchange Traded Fund",
+          "friendly_instrument_description_code": "exchange_traded_fund",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/WIRE.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/WIRE.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 15,
+        "value": 368.7,
+        "instrument_price": 24.58,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": 3.42,
+        "capital_gain_percent": 0.94,
+        "payout_gain": 7.47,
+        "payout_gain_percent": 2.05,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": 10.89,
+        "total_gain_percent": 2.98,
+        "number_of_unconfirmed_transactions": 1
+      },
+      {
+        "id": 9100006,
+        "instrument": {
+          "code": "WTC",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 1705496,
+          "market_code": "ASX",
+          "name": "Wisetech Global Ltd",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Packaged Software",
+          "sector_classification_name": "Technology Services",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/WTC.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/WTC.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 12,
+        "value": 382.92,
+        "instrument_price": 31.91,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": -114.6,
+        "capital_gain_percent": -23.03,
+        "payout_gain": 2.11,
+        "payout_gain_percent": 0.42,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": -112.49,
+        "total_gain_percent": -22.61,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9100007,
+        "instrument": {
+          "code": "XMET",
+          "country_id": 2,
+          "crypto": false,
+          "currency_code": "AUD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2380482,
+          "market_code": "ASX",
+          "name": "Betashares Critical Minerals Etf",
+          "supported_denominations": null,
+          "tz_name": "Australia/Sydney",
+          "industry_classification_name": "Investment Trusts/Mutual Funds",
+          "sector_classification_name": "Miscellaneous",
+          "friendly_instrument_description": "Exchange Traded Fund",
+          "friendly_instrument_description_code": "exchange_traded_fund",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/ASX/light/XMET.svg",
+            "dark_url": "https://logo-assets.sharesight.com/ASX/dark/XMET.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 19,
+        "value": 269.51,
+        "instrument_price": 14.185,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": -40.97,
+        "capital_gain_percent": -13.2,
+        "payout_gain": 6.68,
+        "payout_gain_percent": 2.15,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": -34.29,
+        "total_gain_percent": -11.04,
+        "number_of_unconfirmed_transactions": 1
+      },
+      {
+        "id": 9100008,
+        "instrument": {
+          "code": "ACMR",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 1768173,
+          "market_code": "NASDAQ",
+          "name": "ACM Research Inc - Ordinary Shares - Class A",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Industrial Machinery",
+          "sector_classification_name": "Producer Manufacturing",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/ACMR.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/ACMR.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 5,
+        "value": 376.75,
+        "instrument_price": 75.35,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 44.25,
+        "capital_gain_percent": 9.18,
+        "payout_gain": 0.0,
+        "payout_gain_percent": 0,
+        "currency_gain": 13.28,
+        "currency_gain_percent": 2.75,
+        "total_gain": 57.53,
+        "total_gain_percent": 11.93,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9100009,
+        "instrument": {
+          "code": "AVGO",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 1879420,
+          "market_code": "NASDAQ",
+          "name": "Broadcom Inc",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Semiconductors",
+          "sector_classification_name": "Electronic Technology",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/AVGO.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/AVGO.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 375.81,
+        "instrument_price": 375.81,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 334.83,
+        "capital_gain_percent": 64.52,
+        "payout_gain": 9.34,
+        "payout_gain_percent": 1.8,
+        "currency_gain": -13.28,
+        "currency_gain_percent": -2.56,
+        "total_gain": 330.88,
+        "total_gain_percent": 63.76,
+        "number_of_unconfirmed_transactions": 3
+      },
+      {
+        "id": 9100010,
+        "instrument": {
+          "code": "CRWD",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 1938954,
+          "market_code": "NASDAQ",
+          "name": "Crowdstrike Holdings Inc - Ordinary Shares - Class A",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Packaged Software",
+          "sector_classification_name": "Technology Services",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/CRWD.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/CRWD.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 278.86,
+        "instrument_price": 278.86,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 331.25,
+        "capital_gain_percent": 114.67,
+        "payout_gain": 0.0,
+        "payout_gain_percent": 0,
+        "currency_gain": 0.91,
+        "currency_gain_percent": 0.32,
+        "total_gain": 332.16,
+        "total_gain_percent": 114.98,
+        "number_of_unconfirmed_transactions": 1
+      },
+      {
+        "id": 9100011,
+        "instrument": {
+          "code": "NVDA",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 24699,
+          "market_code": "NASDAQ",
+          "name": "NVIDIA Corp",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Semiconductors",
+          "sector_classification_name": "Electronic Technology",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/NVDA.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/NVDA.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 239.24,
+        "instrument_price": 239.24,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 87.94,
+        "capital_gain_percent": 33.65,
+        "payout_gain": 0.65,
+        "payout_gain_percent": 0.25,
+        "currency_gain": -6.56,
+        "currency_gain_percent": -2.51,
+        "total_gain": 82.03,
+        "total_gain_percent": 31.39,
+        "number_of_unconfirmed_transactions": 3
+      },
+      {
+        "id": 9100012,
+        "instrument": {
+          "code": "SKHY",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 5457867,
+          "market_code": "NASDAQ",
+          "name": "SK Hynix Inc - ADR",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Semiconductors",
+          "sector_classification_name": "Electronic Technology",
+          "friendly_instrument_description": "Depository Receipt",
+          "friendly_instrument_description_code": "depository_receipt",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NASDAQ/light/SKHY.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NASDAQ/dark/SKHY.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 182.56,
+        "instrument_price": 182.56,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 18.05,
+        "capital_gain_percent": 7.48,
+        "payout_gain": 0.01,
+        "payout_gain_percent": 0.01,
+        "currency_gain": 2.09,
+        "currency_gain_percent": 0.87,
+        "total_gain": 20.15,
+        "total_gain_percent": 8.35,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9100013,
+        "instrument": {
+          "code": "S",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 2148831,
+          "market_code": "NYSE",
+          "name": "SentinelOne Inc - Ordinary Shares - Class A",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Packaged Software",
+          "sector_classification_name": "Technology Services",
+          "friendly_instrument_description": "Ordinary Shares",
+          "friendly_instrument_description_code": "ordinary_shares",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NYSE/light/S.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NYSE/dark/S.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 10,
+        "value": 258.0,
+        "instrument_price": 25.8,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 3,
+        "group_name": "NYSE",
+        "capital_gain": 38.55,
+        "capital_gain_percent": 4.37,
+        "payout_gain": 0.0,
+        "payout_gain_percent": 0,
+        "currency_gain": -6.94,
+        "currency_gain_percent": -0.79,
+        "total_gain": 31.61,
+        "total_gain_percent": 3.59,
+        "number_of_unconfirmed_transactions": 0
+      },
+      {
+        "id": 9100014,
+        "instrument": {
+          "code": "TSM",
+          "country_id": 49,
+          "crypto": false,
+          "currency_code": "USD",
+          "expires_on": null,
+          "expired": false,
+          "id": 23766,
+          "market_code": "NYSE",
+          "name": "Taiwan Semiconductor Manufacturing - ADR",
+          "supported_denominations": null,
+          "tz_name": "America/New_York",
+          "industry_classification_name": "Semiconductors",
+          "sector_classification_name": "Electronic Technology",
+          "friendly_instrument_description": "Depository Receipt",
+          "friendly_instrument_description_code": "depository_receipt",
+          "logo": {
+            "light_url": "https://logo-assets.sharesight.com/NYSE/light/TSM.svg",
+            "dark_url": "https://logo-assets.sharesight.com/NYSE/dark/TSM.svg"
+          }
+        },
+        "instrument_currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "valid_position": true,
+        "inception_date": null,
+        "quantity": 1,
+        "value": 482.3,
+        "instrument_price": 482.3,
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        },
+        "labels": [],
+        "group_id": 3,
+        "group_name": "NYSE",
+        "capital_gain": 302.43,
+        "capital_gain_percent": 74.4,
+        "payout_gain": 5.96,
+        "payout_gain_percent": 1.47,
+        "currency_gain": -18.03,
+        "currency_gain_percent": -4.43,
+        "total_gain": 290.36,
+        "total_gain_percent": 71.43,
+        "number_of_unconfirmed_transactions": 2
+      }
+    ],
+    "sub_totals": [
+      {
+        "value": 2593.39,
+        "group_id": 2,
+        "group_name": "ASX",
+        "capital_gain": 92.19,
+        "capital_gain_percent": 35.89,
+        "payout_gain": 51.12,
+        "payout_gain_percent": 5.24,
+        "currency_gain": 0.0,
+        "currency_gain_percent": 0,
+        "total_gain": 143.3,
+        "total_gain_percent": 41.13
+      },
+      {
+        "value": 1453.22,
+        "group_id": 5,
+        "group_name": "NASDAQ",
+        "capital_gain": 816.32,
+        "capital_gain_percent": 91.16,
+        "payout_gain": 10.0,
+        "payout_gain_percent": 0.46,
+        "currency_gain": -3.56,
+        "currency_gain_percent": -1.31,
+        "total_gain": 822.75,
+        "total_gain_percent": 90.32
+      },
+      {
+        "value": 740.3,
+        "group_id": 3,
+        "group_name": "NYSE",
+        "capital_gain": 340.98,
+        "capital_gain_percent": 22.35,
+        "payout_gain": 5.96,
+        "payout_gain_percent": 0.37,
+        "currency_gain": -24.97,
+        "currency_gain_percent": -1.73,
+        "total_gain": 321.97,
+        "total_gain_percent": 20.99
+      }
+    ],
+    "cash_accounts": [
+      {
+        "id": 7001,
+        "key": 7001,
+        "name": "Cash account 1",
+        "source": null,
+        "value": -40.5,
+        "capital_gain": null,
+        "capital_gain_percent": null,
+        "payout_gain": null,
+        "payout_gain_percent": null,
+        "currency_gain": null,
+        "currency_gain_percent": null,
+        "total_gain": null,
+        "total_gain_percent": null,
+        "currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        }
+      },
+      {
+        "id": 7002,
+        "key": 7002,
+        "name": "Cash account 2",
+        "source": null,
+        "value": 275.25,
+        "capital_gain": null,
+        "capital_gain_percent": null,
+        "payout_gain": null,
+        "payout_gain_percent": null,
+        "currency_gain": null,
+        "currency_gain_percent": null,
+        "total_gain": null,
+        "total_gain_percent": null,
+        "currency": {
+          "code": "USD",
+          "id": 5,
+          "symbol": "$",
+          "qualified_symbol": "US$"
+        },
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        }
+      },
+      {
+        "id": 7003,
+        "key": 7003,
+        "name": "unassigned",
+        "source": null,
+        "value": 0.0,
+        "capital_gain": null,
+        "capital_gain_percent": null,
+        "payout_gain": null,
+        "payout_gain_percent": null,
+        "currency_gain": null,
+        "currency_gain_percent": null,
+        "total_gain": null,
+        "total_gain_percent": null,
+        "currency": {
+          "code": "AUD",
+          "id": 2,
+          "symbol": "$",
+          "qualified_symbol": "AU$"
+        },
+        "portfolio": {
+          "id": 501234,
+          "consolidated": false,
+          "name": "Alpha SMSF",
+          "external_identifier": null
+        }
+      }
+    ]
+  },
+  "api_transaction": {
+    "id": 1000501234,
+    "version": 3,
+    "action": "/api/v3/portfolios/501234/performance",
+    "timestamp": "2026-01-01T00:00:00.000Z"
+  },
+  "links": {
+    "portfolio": "https://api.sharesight.com/api/v3/portfolios/501234?consolidated=false",
+    "self": "https://api.sharesight.com/api/v3/portfolios/501234/performance?consolidated=false"
+  }
+}

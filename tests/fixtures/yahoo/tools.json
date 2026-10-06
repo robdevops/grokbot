@@ -1,0 +1,349 @@
+[
+  {
+    "name": "compare_stocks",
+    "description": "Side-by-side comparison of 2-10 stocks across key metrics (price, market cap, P/E, EPS, dividend yield, 52-week range, and period performance) with brief auto-generated insights.\n\nUse for \"which is better, X or Y\", peer/relative comparison, or screening a small set. For a deep dive on a single name use get_stock_quote or get_company_info.\n\nPass 2-10 tickers in the tickers list. Returns a Markdown comparison table by default, or JSON when response_format='json'. A ticker that fails to resolve is reported per-symbol rather than failing the whole call.\n",
+    "inputSchema": {
+      "$defs": {
+        "ResponseFormat": {
+          "description": "Output format for tool responses.",
+          "enum": [
+            "markdown",
+            "json"
+          ],
+          "title": "ResponseFormat",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "tickers": {
+          "description": "List of 2-10 stock ticker symbols to compare (e.g., ['AAPL', 'MSFT', 'GOOGL'])",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 2,
+          "title": "Tickers",
+          "type": "array"
+        },
+        "response_format": {
+          "$ref": "#/$defs/ResponseFormat",
+          "default": "markdown",
+          "description": "Output format: 'markdown' for human-readable or 'json' for machine-readable"
+        }
+      },
+      "required": [
+        "tickers"
+      ],
+      "title": "compare_stocksArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_analyst_estimates",
+    "description": "Forward-looking analyst estimates for one stock: price targets, EPS and revenue estimates by period (current and next quarter and year), and growth estimates.\n\nUse for projected/expected numbers and forecasts. This complements get_analyst_recommendations: that tool returns ratings and the recommendation trend, this one returns the numeric forward estimates.\n\nReturns Markdown by default, or JSON when response_format='json'. A stock without analyst coverage returns the available fields as N/A or a short message.\n",
+    "inputSchema": {
+      "$defs": {
+        "ResponseFormat": {
+          "description": "Output format for tool responses.",
+          "enum": [
+            "markdown",
+            "json"
+          ],
+          "title": "ResponseFormat",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ticker": {
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')",
+          "maxLength": 10,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "response_format": {
+          "$ref": "#/$defs/ResponseFormat",
+          "default": "markdown",
+          "description": "Output format: 'markdown' for human-readable or 'json' for machine-readable"
+        }
+      },
+      "required": [
+        "ticker"
+      ],
+      "title": "get_analyst_estimatesArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_analyst_recommendations",
+    "description": "Wall Street analyst view on one stock: price targets (high/mean/low), consensus rating, the buy/hold/sell recommendation-trend breakdown, and recent upgrades/downgrades.\n\nUse for \"what do analysts think of X\", ratings, or sentiment. For forward EPS/revenue/growth projections use get_analyst_estimates instead: this tool is ratings and targets, that one is the numeric estimates.\n\nReturns Markdown by default, or JSON when response_format='json'. A stock with no analyst coverage returns the available fields as N/A; errors return a short message.\n",
+    "inputSchema": {
+      "$defs": {
+        "ResponseFormat": {
+          "description": "Output format for tool responses.",
+          "enum": [
+            "markdown",
+            "json"
+          ],
+          "title": "ResponseFormat",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ticker": {
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')",
+          "maxLength": 10,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "response_format": {
+          "$ref": "#/$defs/ResponseFormat",
+          "default": "markdown",
+          "description": "Output format: 'markdown' for human-readable or 'json' for machine-readable"
+        }
+      },
+      "required": [
+        "ticker"
+      ],
+      "title": "get_analyst_recommendationsArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_company_info",
+    "description": "Detailed company profile for one stock: long business summary, sector/industry, key executives, headquarters/website/employee count, and valuation & financial-highlight stats (market cap, P/E, margins, and similar).\n\nUse for \"what does X do\", company background, or a business overview. For the statement-level numbers (income/balance/cash flow) use get_financial_statements; for just the live price use get_stock_quote.\n\nReturns Markdown by default, or JSON when response_format='json'. An unknown ticker or upstream error returns a short error message.\n",
+    "inputSchema": {
+      "$defs": {
+        "ResponseFormat": {
+          "description": "Output format for tool responses.",
+          "enum": [
+            "markdown",
+            "json"
+          ],
+          "title": "ResponseFormat",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ticker": {
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')",
+          "maxLength": 10,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "response_format": {
+          "$ref": "#/$defs/ResponseFormat",
+          "default": "markdown",
+          "description": "Output format: 'markdown' for human-readable or 'json' for machine-readable"
+        }
+      },
+      "required": [
+        "ticker"
+      ],
+      "title": "get_company_infoArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_financial_statements",
+    "description": "Annual financial statements for one company: income statement, balance sheet, and cash flow statement, each with multiple years of data.\n\nUse for revenue, earnings, assets/liabilities, cash flow, or fundamental analysis. For headline ratios only use get_company_info; for forward projections use get_analyst_estimates. Quarterly data is not returned; request JSON for the complete machine-readable export.\n\nReturns Markdown by default, or JSON when response_format='json'. Companies without filed statements (for example some ETFs or ADRs) return empty sections or a short message.\n",
+    "inputSchema": {
+      "$defs": {
+        "ResponseFormat": {
+          "description": "Output format for tool responses.",
+          "enum": [
+            "markdown",
+            "json"
+          ],
+          "title": "ResponseFormat",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ticker": {
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')",
+          "maxLength": 10,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "response_format": {
+          "$ref": "#/$defs/ResponseFormat",
+          "default": "markdown",
+          "description": "Output format: 'markdown' for human-readable or 'json' for machine-readable"
+        }
+      },
+      "required": [
+        "ticker"
+      ],
+      "title": "get_financial_statementsArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_historical_prices",
+    "description": "Historical OHLCV price series for one stock over a chosen period/interval, plus summary stats (highest/lowest/average close, average volume) and total return over the window.\n\nUse for performance, trends, or charting (\"how has X done over the last year\"). For a single current price use get_stock_quote; for dividend/split events use get_dividends_splits. Note: intraday intervals (1m-90m) are only available for short recent periods, and long periods return many rows, so prefer JSON or a shorter period if the output is truncated.\n\nReturns Markdown (summary stats plus the last 10 rows) by default, or the full series as JSON when response_format='json'. An empty or unsupported period/interval combination returns a short message.\n",
+    "inputSchema": {
+      "$defs": {
+        "Interval": {
+          "description": "Data intervals for historical prices.",
+          "enum": [
+            "1m",
+            "2m",
+            "5m",
+            "15m",
+            "30m",
+            "60m",
+            "90m",
+            "1h",
+            "1d",
+            "5d",
+            "1wk",
+            "1mo",
+            "3mo"
+          ],
+          "title": "Interval",
+          "type": "string"
+        },
+        "Period": {
+          "description": "Time periods for historical data.",
+          "enum": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ],
+          "title": "Period",
+          "type": "string"
+        },
+        "ResponseFormat": {
+          "description": "Output format for tool responses.",
+          "enum": [
+            "markdown",
+            "json"
+          ],
+          "title": "ResponseFormat",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ticker": {
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')",
+          "maxLength": 10,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "period": {
+          "$ref": "#/$defs/Period",
+          "default": "1mo",
+          "description": "Time period for historical data (e.g., '1mo' for 1 month, '1y' for 1 year)"
+        },
+        "interval": {
+          "$ref": "#/$defs/Interval",
+          "default": "1d",
+          "description": "Data interval (e.g., '1d' for daily, '1h' for hourly)"
+        },
+        "response_format": {
+          "$ref": "#/$defs/ResponseFormat",
+          "default": "markdown",
+          "description": "Output format: 'markdown' for human-readable or 'json' for machine-readable"
+        }
+      },
+      "required": [
+        "ticker"
+      ],
+      "title": "get_historical_pricesArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_market_news",
+    "description": "Latest news articles for one stock; each item has a title, publisher/source, publish date, a short summary, and a link.\n\nUse for \"what's the latest news on X\", recent headlines, or catalysts. Returns news only: for price use get_stock_quote, for fundamentals use the financials tools.\n\ncount sets how many articles to return (1-20, default 10). Returns Markdown by default, or JSON when response_format='json'. No recent news returns a short message.\n",
+    "inputSchema": {
+      "$defs": {
+        "ResponseFormat": {
+          "description": "Output format for tool responses.",
+          "enum": [
+            "markdown",
+            "json"
+          ],
+          "title": "ResponseFormat",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ticker": {
+          "description": "Stock ticker symbol to get news for (e.g., 'AAPL', 'TSLA', 'NVDA')",
+          "maxLength": 10,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "count": {
+          "default": 10,
+          "description": "Number of news articles to return (1-20)",
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "response_format": {
+          "$ref": "#/$defs/ResponseFormat",
+          "default": "markdown",
+          "description": "Output format: 'markdown' for human-readable or 'json' for machine-readable"
+        }
+      },
+      "required": [
+        "ticker"
+      ],
+      "title": "get_market_newsArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_stock_quote",
+    "description": "Real-time quote snapshot for ONE stock: last price, day change ($ and %), open, previous close, day range, 52-week range, volume and average volume, market cap, beta, trailing P/E, EPS, dividend yield, and sector/industry/website.\n\nUse for \"what's the price of X\" or a quick single-stock snapshot. For several stocks side by side use compare_stocks; for the full company profile use get_company_info; for a past price series use get_historical_prices.\n\nReturns Markdown by default, or structured JSON when response_format='json'. An unknown ticker or an upstream/rate-limit error returns a short error message rather than raising.\n",
+    "inputSchema": {
+      "$defs": {
+        "ResponseFormat": {
+          "description": "Output format for tool responses.",
+          "enum": [
+            "markdown",
+            "json"
+          ],
+          "title": "ResponseFormat",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ticker": {
+          "description": "Stock ticker symbol (e.g., 'AAPL' for Apple, 'MSFT' for Microsoft, 'TSLA' for Tesla)",
+          "maxLength": 10,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "response_format": {
+          "$ref": "#/$defs/ResponseFormat",
+          "default": "markdown",
+          "description": "Output format: 'markdown' for human-readable or 'json' for machine-readable"
+        }
+      },
+      "required": [
+        "ticker"
+      ],
+      "title": "get_stock_quoteArguments",
+      "type": "object"
+    }
+  }
+]
