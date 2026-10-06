@@ -82,21 +82,29 @@ ALERT_CHATS = {
 	int(x) for x in os.getenv("ALERT_CHAT_IDS", "").replace(",", " ").split()
 }
 
-# Bots whose end-of-day "big movers" lists get an automatic news explanation
-# (usernames, comma-separated; set MOVERS_BOTS="" to turn this off).
-MOVERS_BOTS = {
-	u.lower().lstrip("@") for u in os.getenv("MOVERS_BOTS", "finbotibot").replace(",", " ").split()
-}
-# The bold header, e.g. "≥ 5.0% at close (ASX):" or "≤ -5% at close (NASDAQ, NYSE):"
-MOVERS_HEADER = re.compile(r"(?:≥|≤|>=?|<=?)\s*[-−]?\s*\d+(?:\.\d+)?\s*%.*\bclose\b", re.IGNORECASE)
-PERCENT = re.compile(r"\d+(?:\.\d+)?\s*%")
+# Optional features, all off by default. Each is switched on by its own env flag:
+#   MOVERS_EXPLAIN=on             auto-explain another bot's end-of-day "big movers" lists
+#   TELEGRAM_DM_BUTTONS=on        preset-prompt buttons in private chats
+#   SHARESIGHT_HOLDING_NEWS=on    daily Sharesight holding-news digest (with mute/undo buttons)
+#   LOG_STOPPED_GENERATION=on     log when a user presses Telegram's stop button on a draft
 
 
 def _flag(name: str) -> bool:
 	return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
-# Preset-prompt buttons under the message box in private chats (off by default).
+MOVERS_EXPLAIN = _flag("MOVERS_EXPLAIN")
+# Bots whose "big movers" lists get the explanation (usernames, comma-separated). Only
+# used when MOVERS_EXPLAIN is on.
+MOVERS_BOTS = {
+	u.lower().lstrip("@") for u in os.getenv("MOVERS_BOTS", "finbotibot").replace(",", " ").split()
+} if MOVERS_EXPLAIN else set()
+# The bold header, e.g. "≥ 5.0% at close (ASX):" or "≤ -5% at close (NASDAQ, NYSE):"
+MOVERS_HEADER = re.compile(r"(?:≥|≤|>=?|<=?)\s*[-−]?\s*\d+(?:\.\d+)?\s*%.*\bclose\b", re.IGNORECASE)
+PERCENT = re.compile(r"\d+(?:\.\d+)?\s*%")
+
+
+# Preset-prompt buttons under the message box in private chats (TELEGRAM_DM_BUTTONS).
 DM_BUTTONS = _flag("TELEGRAM_DM_BUTTONS")
 DM_PRESETS = {	# button label -> what it asks for; laid out 2 per row
 	"News": "today's top headlines",
@@ -111,7 +119,7 @@ DM_KEYBOARD = ReplyKeyboardMarkup(
 	resize_keyboard=True, is_persistent=True,
 )
 
-# Daily check for major news about Sharesight holdings (off by default).
+# Daily check for major news about Sharesight holdings (SHARESIGHT_HOLDING_NEWS).
 HOLDING_NEWS = _flag("SHARESIGHT_HOLDING_NEWS")
 HOLDING_NEWS_TIME = os.getenv("SHARESIGHT_HOLDING_NEWS_TIME", "08:00")	# HH:MM in BOT_TZ
 # Sharesight portfolio name -> Telegram username to notify, comma-separated.
@@ -124,6 +132,9 @@ HOLDING_NEWS_RECIPIENTS = {
 		).split(",") if ":" in pair
 	)
 }
+
+# Log (but don't act on) Telegram's stop button on a streamed draft.
+LOG_STOPPED_GENERATION = _flag("LOG_STOPPED_GENERATION")
 
 MAX_TG_MESSAGE = 4096
 
@@ -1437,7 +1448,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	msg = update.effective_message
 	if msg is None:
 		return
-	remember_user(msg)	# username -> ID, for holding-news DMs
+	if HOLDING_NEWS:
+		remember_user(msg)	# username -> ID, for holding-news DMs
 
 	save(msg)  # log everything, including edits (they overwrite the original)
 	if update.edited_message:
@@ -1642,11 +1654,16 @@ def main() -> None:
 			on_message,
 		)
 	)
-	app.add_handler(TypeHandler(Update, log_stopped_generation), group=-1)
-	app.add_handler(CallbackQueryHandler(on_holding_news_button, pattern=r"^hn:"))
+	updates = ["message", "edited_message"]
+	if LOG_STOPPED_GENERATION:
+		app.add_handler(TypeHandler(Update, log_stopped_generation), group=-1)
+		updates.append("stopped_message_generation")
+	if HOLDING_NEWS:	# the Unsubscribe / Undo buttons on holding-news messages
+		app.add_handler(CallbackQueryHandler(on_holding_news_button, pattern=r"^hn:"))
+		updates.append("callback_query")
 	app.add_error_handler(on_error)
 	log.info("Starting bot with model %s; MCP servers: %s", MODEL, ", ".join(MCP_SERVERS) or "none")
-	app.run_polling(allowed_updates=["message", "edited_message", "callback_query", "stopped_message_generation"])
+	app.run_polling(allowed_updates=updates)
 
 if __name__ == "__main__":
 	main()
