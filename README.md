@@ -30,8 +30,7 @@ or `EnvironmentFile=` for the variables below.
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
 - `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
 - **Both set, or neither: the bot refuses to start** with a message saying so.
-- `MODEL` and `REASONING` (low/medium/high) apply to either provider. `GROK_MODEL` and
-  `GROK_REASONING` no longer exist.
+- `MODEL` and `REASONING` (low/medium/high) apply to either provider.
 - The two providers share all code except one adapter each (`tgbot/llm/xai.py` on the Responses
   API, `tgbot/llm/openrouter.py` on chat completions).
 
@@ -95,7 +94,7 @@ off); `slim` (result slimming, defaults to the server's name; `sharesight` flatt
   starts with get/list/search/fetch/find/lookup/show/read, so nobody in the group can talk the bot
   into changing your data. Use `allowed_tools` to opt others in.
 - **Everyone who can reach the bot can use every enabled tool**, including Sharesight portfolio
-  data (there is no per-user tool restriction; `allowed_users` was removed because Telegram/BotFather
+  data (there is no per-user tool restriction; Telegram/BotFather
   controls who may use the bot). Restrict the bot in BotFather, or leave Sharesight out.
 - **Down servers:** if a server dies, chats in `ALERT_CHAT_IDS` get a message with the error, and the
   model is told the source is down (and quotes the error) instead of claiming it has no access. A
