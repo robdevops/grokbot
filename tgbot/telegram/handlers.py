@@ -155,7 +155,7 @@ class Handlers:
         ctx, st = self.ctx, self.ctx.st
         rows = await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
         transcript = format_rows(rows, ctx.self_name, st.tz, line_max=st.history_line_max,
-                                 compact_text=st.token_saver)
+                                 compact_text=st.token_saver, own_line_max=st.history_own_line_max)
         return chat_prompt(
             transcript=transcript, sender=sender_name(msg), private=trig.private,
             reply_quote=self._quote(trig), msg_id=msg.message_id, now=ctx.now(),

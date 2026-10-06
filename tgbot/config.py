@@ -86,6 +86,11 @@ class Settings:
     def history_line_max(self) -> int:
         return 240 if self.token_saver else 400
 
+    @property
+    def history_own_line_max(self) -> int | None:
+        """The bot's own earlier answers are the longest lines; cut them harder."""
+        return 160 if self.token_saver else None
+
 
 def _flag(env: Mapping[str, str], name: str, default: bool = False) -> bool:
     value = env.get(name, "").strip().lower()
