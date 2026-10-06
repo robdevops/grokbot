@@ -117,6 +117,17 @@ async def test_xai_cache_headers_and_flat_tools(env):
     assert kw["input"][0] == {"role": "system", "content": "SYS"} and kw["reasoning"] == {"effort": "low"}
 
 
+async def test_xai_cost_comes_from_usd_ticks(env):
+    from types import SimpleNamespace as N
+    st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
+    usage = N(input_tokens=100, output_tokens=10, input_tokens_details=N(cached_tokens=0),
+              cost_in_usd_ticks=37_756_000)
+    b = XaiBackend(st, FakeXaiClient(xai_events(text="hi", usage=usage)))
+    r = req()
+    step = await b.step(b.start(r), r, tool_choice=None)
+    assert step.usage.cost == pytest.approx(0.0037756)
+
+
 async def test_xai_forced_search_only_search_tools_and_choice():
     st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
     client = FakeXaiClient(xai_events(text="ok"))

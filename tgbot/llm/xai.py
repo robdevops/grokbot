@@ -11,6 +11,7 @@ from .base import Backend, Call, Request, Step, Usage
 
 log = logging.getLogger("bot")
 
+TICKS_PER_USD = 10_000_000_000  # xAI reports each response's cost in 1e-10 USD ticks
 SEARCH_TOOLS = [{"type": "web_search"}, {"type": "x_search"}]
 # Output items replayed into the next round: the model's tool calls, its reasoning (needed to
 # continue its line of thought) and any text it wrote. Server-side search calls aren't replayed;
@@ -108,6 +109,7 @@ class XaiBackend(Backend):
             tokens_in=getattr(u, "input_tokens", 0) or 0,
             cached=getattr(details, "cached_tokens", 0) or 0,
             tokens_out=getattr(u, "output_tokens", 0) or 0,
+            cost=(getattr(u, "cost_in_usd_ticks", 0) or 0) / TICKS_PER_USD,
         )
         searches = sum(1 for i in resp.output if i.type.endswith("_search_call"))
         return Step((resp.output_text or "").strip(), calls, usage, resp.status, searches)
