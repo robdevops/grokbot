@@ -1048,10 +1048,11 @@ async def run_query(query: str) -> str:
     return (resp.choices[0].message.content or "").strip() or "No results found."
 
 
-def call_query(call) -> str:
-    """Pull the search string out of a tool call, whatever the model named the field."""
+def call_query(arguments: str) -> str:
+    """Pull the search string out of a tool call's JSON arguments, whatever the model
+    named the field."""
     try:
-        args = json.loads(call.function.arguments or "{}")
+        args = json.loads(arguments or "{}")
     except ValueError:
         return ""
     for key in ("query", "q", "search_query", "keywords", "input"):
@@ -1166,6 +1167,13 @@ def active_servers(user_id: int | None) -> tuple[list[MCPServer], list[MCPServer
     return up, down
 
 
+def usage_numbers(u) -> tuple[int, int, int, float]:
+    """(input, cached input, output tokens, cost) from a usage object; zeros if absent."""
+    cached = getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0)
+    return (getattr(u, "prompt_tokens", 0) or 0, cached or 0,
+            getattr(u, "completion_tokens", 0) or 0, getattr(u, "cost", 0) or 0)
+
+
 async def ask_model(messages: list[dict], user_id: int | None = None, on_text=None,
                     tools_on: bool = True, session: str | None = None) -> str:
     """Ask the model, running the tool calls it makes (MCP data tools here, searches via
@@ -1184,23 +1192,19 @@ async def ask_model(messages: list[dict], user_id: int | None = None, on_text=No
         r = await complete(conv, tools, on_text, tool_choice="none" if final else None,
                            session=session)
         rounds += 1
-        u = r.usage
-        tok["in"] += getattr(u, "prompt_tokens", 0) or 0
-        tok["out"] += getattr(u, "completion_tokens", 0) or 0
-        tok["cached"] += getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
-        tok["cost"] += getattr(u, "cost", 0) or 0
-        n_in = getattr(u, "prompt_tokens", 0) or 0
-        n_cached = getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
-        log.info("Round %d: in %d (%d cached) out %d, %s", rounds, n_in, n_cached,
-                 getattr(u, "completion_tokens", 0) or 0, r.finish)
+        n_in, n_cached, n_out, cost = usage_numbers(r.usage)
+        tok["in"] += n_in
+        tok["cached"] += n_cached
+        tok["out"] += n_out
+        tok["cost"] += cost
+        log.info("Round %d: in %d (%d cached) out %d, %s", rounds, n_in, n_cached, n_out, r.finish)
         if final:
             log.warning("Hit MAX_TOOL_ROUNDS (%d); made the model answer with what it has",
                         MAX_TOOL_ROUNDS)
             break
         if r.calls:
             tool_calls += len(r.calls)
-            outputs = await asyncio.gather(*(run_call(c, user_id) for c in
-                                             _cap_searches(r.calls)))
+            outputs = await run_calls(r.calls, user_id)
             conv.append(r.assistant)
             conv += [{"role": "tool", "tool_call_id": c.id, "content": out}
                      for c, out in zip(r.calls, outputs)]
@@ -1236,25 +1240,8 @@ def is_mcp_tool(name: str) -> bool:
 MAX_SEARCHES = 5  # search calls run per round; the rest are told to try later
 
 
-def _cap_searches(calls: list) -> list:
-    """Mark search calls beyond MAX_SEARCHES so run_call declines them (every call
-    still needs a tool reply)."""
-    seen = 0
-    for c in calls:
-        if is_mcp_tool(c.name):
-            continue
-        seen += 1
-        c.skip = seen > MAX_SEARCHES
-    return calls
-
-
-async def run_call(call, user_id: int | None) -> str:
-    """Run one tool call the model handed back: an MCP data tool, or else a web search."""
-    if is_mcp_tool(call.name):
-        return await run_tool(call, user_id)
-    if getattr(call, "skip", False):
-        return "Skipped: too many searches at once. Use what you already have."
-    query = call_query(SimpleNamespace(function=call))
+async def run_search(arguments: str) -> str:
+    query = call_query(arguments)
     if not query or not SEARCH_MODEL:
         return "Search isn't available."
     try:
@@ -1263,29 +1250,44 @@ async def run_call(call, user_id: int | None) -> str:
         return f"Search failed: {e}"
 
 
+async def run_calls(calls: list, user_id: int | None) -> list[str]:
+    """Run the tool calls the model handed back: MCP data tools, or else web searches
+    (all of them concurrently). Every call needs a reply, so searches past MAX_SEARCHES
+    get a note instead of being dropped."""
+    searches = 0
+    jobs = []
+    for c in calls:
+        if is_mcp_tool(c.name):
+            jobs.append(run_tool(c, user_id))
+            continue
+        searches += 1
+        if searches > MAX_SEARCHES:
+            jobs.append(asyncio.sleep(0, "Skipped: too many searches at once. Use what you already have."))
+        else:
+            jobs.append(run_search(c.arguments))
+    return list(await asyncio.gather(*jobs))
+
+
 # -------------------------------------------------------------- handlers ----
 
-async def keep_typing(bot, chat_id: int) -> None:
-    """Telegram's typing indicator lasts ~5s, so resend it until cancelled."""
-    while True:
-        await bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await asyncio.sleep(4)
-
-
 async def start_typing(bot, chat_id: int) -> asyncio.Task:
-    """Send the typing indicator right now, then keep it going in the background.
-    (A task alone would only send its first one at the next await, which can be
-    after the prompt has been built.)"""
-    try:
-        await bot.send_chat_action(chat_id, ChatAction.TYPING)
-    except Exception as e:
-        log.warning("Typing indicator failed: %s", e)
+    """Send the typing indicator right now, then keep it going until the task is
+    cancelled (Telegram's lasts ~5 s). The first one is sent directly rather than from
+    the task, which wouldn't run until the next await, possibly after the prompt has been
+    built. A failed send is logged, never fatal."""
+    async def send() -> None:
+        try:
+            await bot.send_chat_action(chat_id, ChatAction.TYPING)
+        except Exception as e:
+            log.warning("Typing indicator failed: %s", e)
 
-    async def resend() -> None:
-        await asyncio.sleep(4)
-        await keep_typing(bot, chat_id)
+    async def keep() -> None:
+        while True:
+            await asyncio.sleep(4)
+            await send()
 
-    return asyncio.create_task(resend())
+    await send()
+    return asyncio.create_task(keep())
 
 
 # Telegram's own tags, plus one half-written tag at the end of the text. A bare "<" in the
@@ -1467,14 +1469,15 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 async def answer_question(bot, msg: Message, text: str, reply_target: Message | None,
                           replied_to_bot: bool, on_text=None) -> str:
     content: list[dict] = [{"type": "text", "text": text}]
-    for candidate in (reply_target, msg):  # replied-to photo first, then the mention
-        if candidate and len(content) <= MAX_IMAGES:
-            fid = photo_file_id(candidate)
-            if fid:
-                try:
-                    content.append(await image_part(bot, fid))
-                except Exception:
-                    log.exception("Couldn't download image")
+    # replied-to photo first, then the mention; downloaded concurrently
+    file_ids = [fid for m in (reply_target, msg) if m and (fid := photo_file_id(m))]
+    images = await asyncio.gather(*(image_part(bot, f) for f in file_ids[:MAX_IMAGES]),
+                                  return_exceptions=True)
+    for img in images:
+        if isinstance(img, BaseException):
+            log.error("Couldn't download image", exc_info=img)
+        else:
+            content.append(img)
     if len(content) > 1:
         log.info("Attached %d image(s)", len(content) - 1)
 
