@@ -104,15 +104,15 @@ ZAI_ENV = {"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "key"}
 
 async def test_zai_request_shape_usage_cost_and_search_tool():
     from types import SimpleNamespace as N
-    usage = N(prompt_tokens=1_000_000, completion_tokens=1_000_000, prompt_tokens_details=N(cached_tokens=10))
+    usage = N(prompt_tokens=1_000_000, completion_tokens=1_000_000, prompt_tokens_details=N(cached_tokens=400_000))
     client = FakeOpenRouterClient(Stream([or_chunk("hi", extra={"reasoning_content": "hmm"}),
                                           or_chunk(finish="stop", usage=usage)]))
     b = ZaiBackend(config.load(ZAI_ENV), client)
     r = req(tools=[TOOL], search=True, cache_id="c", model="glm-5.3-flash")
     step = await b.step(b.start(r), r, tool_choice="required")
     kw = client.kwargs[0]
-    assert step.text == "hi" and step.usage.tokens_in == 1_000_000 and step.usage.cached == 10
-    assert step.usage.cost == pytest.approx(0.65)
+    assert step.text == "hi" and step.usage.tokens_in == 1_000_000 and step.usage.cached == 400_000
+    assert step.usage.cost == pytest.approx(0.602)  # 600k x 0.15 + 400k x 0.03 + 1M x 0.50, per million
     assert [t["function"]["name"] for t in kw["tools"]] == ["web_search", "yahoo__q"]
     assert "tool_choice" not in kw and "extra_headers" not in kw
     assert kw["extra_body"] == {"reasoning_effort": "low"}  # the default

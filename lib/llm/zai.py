@@ -15,9 +15,9 @@ from .chat import ChatBackend
 log = logging.getLogger("bot")
 
 BASE_URL = "https://api.z.ai/api/paas/v4/"
-# USD per million tokens (input, output). Cached input is billed at the input rate here, so the
-# cost shown is an upper bound. A model missing from the table shows $0 (logged once).
-PRICES = {"glm-5.3-flash": (0.15, 0.50)}
+# USD per million tokens (input, cached input, output). A model missing from the table shows $0
+# (logged once).
+PRICES = {"glm-5.3-flash": (0.15, 0.03, 0.50)}
 # z.ai models always think and accept only low, high or max. Low costs almost no reasoning
 # tokens, so it is the default; the bot's REASONING values map onto z.ai's.
 EFFORT = {"": "low", "low": "low", "medium": "high", "high": "high", "max": "max"}
@@ -65,8 +65,9 @@ class ZaiBackend(ChatBackend):
                 self._warned = True
             return 0.0
         tokens_in = getattr(usage_obj, "prompt_tokens", 0) or 0
+        cached = getattr(getattr(usage_obj, "prompt_tokens_details", None), "cached_tokens", 0) or 0
         tokens_out = getattr(usage_obj, "completion_tokens", 0) or 0
-        return (tokens_in * price[0] + tokens_out * price[1]) / 1_000_000
+        return ((tokens_in - cached) * price[0] + cached * price[1] + tokens_out * price[2]) / 1_000_000
 
     async def run_search(self, query: str) -> str | None:
         """Search through z.ai's search API; each result is one line of title, link and snippet."""
