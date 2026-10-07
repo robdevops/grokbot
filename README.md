@@ -2,8 +2,8 @@
 
 A Telegram bot for a group chat about stocks and investing. People @mention it (or reply to it, or
 DM it) and it answers with an LLM, using the group's recent messages as context, live market data
-from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (Grok)** or
-**OpenRouter**, chosen by which API key you set.
+from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (Grok)**,
+**OpenRouter** or **z.ai**, chosen by which API key you set.
 
 ## Contents
 - [Quick start](#quick-start) · [Providers](#providers) · [How it answers](#how-it-answers)
@@ -29,7 +29,7 @@ or `EnvironmentFile=` for the variables below.
 ## Providers
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
 - `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
-- `ZAI_API_KEY` set -> z.ai directly (default model `glm-5.3-flash`). Search runs through z.ai's search API (about $0.01 a search, not included in the cost line).
+- `ZAI_API_KEY` set -> z.ai directly (default model `glm-5.3-flash`; prompts and chat history go to z.ai, a China-based provider). Search runs through z.ai's search API (about $0.01 a search, not included in the cost line).
   z.ai always thinks, so the bot sends `reasoning_effort` low unless `REASONING` says otherwise
   (medium maps to high). Cost is estimated from a price table in `lib/llm/zai.py` because z.ai's usage reports none.
 - **More than one key set, or none: the bot refuses to start** with a message saying so.
@@ -153,12 +153,12 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 |---|---|---|
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
-| `/credits` | `OWNER_USER_ID` | Provider balance (OpenRouter; xAI has none to show) |
+| `/credits` | `OWNER_USER_ID` | Provider balance (OpenRouter; xAI and z.ai have none to show) |
 | `/usage` | `OWNER_USER_ID` | Requests, tokens (and % cached) and cost per model, last 24 h and 7 days |
 
 ## Caching and token saving
-**Provider prompt caching** (both providers keep a conversation on the server holding its cached
-prompt): xAI gets `prompt_cache_key` and the `x-grok-conv-id` header; OpenRouter gets `session_id`,
+**Provider prompt caching** (xAI and OpenRouter keep a conversation on the server holding its cached
+prompt; z.ai caches automatically and gets no key): xAI gets `prompt_cache_key` and the `x-grok-conv-id` header; OpenRouter gets `session_id`,
 the `x-session-id` header and `prompt_cache_key`. The key is `<bot name>-chat-<chat id>` (ASCII,
 at most 128 characters). Prompts are ordered so the cacheable part comes first: system prompt,
 tools (sorted), history (stepped window), and the volatile part last (time, down-server notice).
@@ -242,6 +242,7 @@ treat them as rough; speed varies by provider.
 | `xiaomi/mimo-v2.6-flash` | 0.14 / 0.28 | ~56 tok/s | 38 |
 | `z-ai/glm-5.3-flash` (default on OpenRouter) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 |
 | `grok-4.3` / `x-ai/grok-4.3` (default on xAI) | 1.25 / 2.50 | ~105-146 tok/s | 25 (at high reasoning) |
+| `glm-5.3-flash` (default on z.ai) | 0.15 / 0.50 (assumed; check z.ai's pricing page) | ~50 tok/s | 57 |
 | `xiaomi/mimo-v2.5-pro` | 0.30 / 0.61 | ~29-46 tok/s | unreliable (retires 21 Oct 2026) |
 | `xiaomi/mimo-v2.5` | 0.12 / 0.24 | ~44-58 tok/s | not found (retires 21 Oct 2026) |
 

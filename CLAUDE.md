@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Telegram bot for a stock-chat group: answers @mentions/replies/DMs with an LLM (xAI or OpenRouter),
+Telegram bot for a stock-chat group: answers @mentions/replies/DMs with an LLM (xAI, OpenRouter or z.ai),
 MCP data tools and web search. User-facing docs are in `README.md`; this file is the map.
 
 ## Commands
@@ -54,6 +54,8 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - A reply that hits MAX_TOKENS while thinking about tool results is re-asked in the same conversation (2x cap, low
   reasoning), not retried without tools: that would answer from memory and deny having any data.
 - `mcp` is capped below 2: 2.x dropped `streamablehttp_client`, which `mcp/server.py` uses (CI caught it). Raise the cap only with a port.
+- z.ai: `tool_choice` is ignored (even "none", so the backend omits tools instead), its built-in `web_search` vanishes when function
+  tools are present (so search is a function tool run through its search API), thinking can't be disabled (default `reasoning_effort` low), and usage has no cost (price table).
 - `must_search` requests are never retried without tools (answering from memory would invent news).
 - Telegram HTML: only b/i/u/s/code/pre/a/blockquote/tg-spoiler. `Draft` strips tags (half-written HTML is rejected).
 - No live Telegram/xAI/OpenRouter/MCP access in tests or in this sandbox; say so when behaviour can't be checked.
