@@ -209,7 +209,7 @@ tokens, cached % and cost. Tool servers log their tools in short wrapped lines; 
 token size of the tool definitions. The `Starting ...` line shows the git commit the checkout is on.
 
 ## Environment variables
-### Model settings
+### Getting started
 Set exactly one of the three keys.
 
 | Variable | Meaning |

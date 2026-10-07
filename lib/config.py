@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 # Every environment variable the bot reads, with a one-line description. README.md must
 # mention each name (tests/test_config.py enforces it).
 ENV_VARS: dict[str, str] = {
-    # Model settings
+    # Getting started
     "OPENROUTER_API_KEY": "OpenRouter key; selects the OpenRouter provider.",
     "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
     "ZAI_API_KEY": "z.ai key; selects the z.ai provider.",
