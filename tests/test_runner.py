@@ -227,9 +227,9 @@ PORTFOLIO_PHRASES = [
     "how are my stocks", "how is my smsf going", "what's in my SMSF", "how am I doing this year",
     "what did I make this month", "my returns ytd?", "what's my biggest winner", "what's my cash balance",
     "net worth update", "my super fund", "my watchlist", "who's my worst performer", "what's my P&L",
-    "my position in CBA", "am I up or down today", "show performance this year", "rob smsf vs rob personal",
-    "are my dividends coming", "why did I outperform Sue over the past month?", "how did I do last month",
-    "did I beat Sue this year", "why did Sue underperform me", "who's ahead of who this quarter, me or Sue",
+    "my position in CBA", "am I up or down today", "show performance this year", "bob smsf vs bob personal",
+    "are my dividends coming", "why did I outperform Alice over the past month?", "how did I do last month",
+    "did I beat Alice this year", "why did Alice underperform me", "who's ahead of who this quarter, me or Alice",
 ]
 
 
@@ -249,9 +249,9 @@ def test_gate_keeps_sharesight_out_of_other_questions(text, settings):
 
 
 def test_gate_matches_configured_portfolio_names_as_whole_words(env):
-    st = config.load({**env, "PORTFOLIO_NAMES": "Family Trust, RobSMSF"})
+    st = config.load({**env, "PORTFOLIO_NAMES": "Family Trust, BobSMSF"})
     y, s = servers()
-    for text in ("how is the family trust going", "RobSMSF?", "robsmsf's returns"):
+    for text in ("how is the family trust going", "BobSMSF?", "bobsmsf's returns"):
         assert s in route(text, st, registry(y, s)).servers, text
     assert s not in route("trustworthy family", st, registry(y, s)).servers
 

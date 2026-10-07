@@ -115,7 +115,8 @@ class MCPServer:
             self.fn_names[fn] = t.name
             self.tools.append(ToolDef(
                 fn, compact_description(t.description or ""),
-                compact_schema(t.inputSchema or {"type": "object", "properties": {}})))
+                compact_schema(t.inputSchema or {"type": "object", "properties": {}},
+                               hide=frozenset(self.cfg.get("hide_params", [])))))
         self._warn_unknown_names(listed, allow | blocked)
         enabled = sorted(self.fn_names.values())
         skipped = sorted(t.name for t in listed if t.name not in enabled)

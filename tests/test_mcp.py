@@ -2,7 +2,7 @@ import asyncio
 import json
 from types import SimpleNamespace as N
 
-from lib.mcp.results import diet, slim_result, table_records, tidy_sharesight
+from lib.mcp.results import diet, slim_result, squeeze_tables, table_records, tidy_sharesight
 from lib.mcp.schema import ToolDef, compact_description, compact_schema, looks_read_only
 from lib.mcp.server import MCPServer, Registry
 
@@ -194,3 +194,25 @@ async def test_wait_started_gives_up_after_the_timeout():
     await Registry([s]).wait_started(0.05)
     assert s.starting
     await s.stop()
+
+
+def test_squeeze_tables_drops_padding_and_rule_rows_and_shortens_numbers():
+    table = ("# Title\n\n"
+             "|            |   2026-01-31 00:00:00 |   2025-01-31 00:00:00 |\n"
+             "|:-----------|----------------------:|----------------------:|\n"
+             "| Net Income |           1.20067e+11 |                   nan |\n"
+             "| Rate       |               0.15117 |           -2.8413e+08 |\n"
+             "| Code       |              9988.HK  |           1234567     |\n\nplain text 1.5e+11 stays")
+    assert squeeze_tables(table) == (
+        "# Title\n\n||2026-01-31|2025-01-31|\n|Net Income|120.067B|-|\n|Rate|0.15117|-284.13M|\n"
+        "|Code|9988.HK|1.23457M|\n\nplain text 1.5e+11 stays")
+    assert slim_result("no tables here, 1.5e+11", "yahoo") == "no tables here, 1.5e+11"
+    assert slim_result("{\"a\": 1.23456789}", "yahoo") == '{"a":1.23457}'  # JSON is still handled as before
+
+
+def test_compact_schema_hides_listed_params_but_never_required_ones_and_drops_schema_noise():
+    schema = {"$schema": "http://json-schema.org/draft-07/schema#", "type": "object", "additionalProperties": False,
+              "properties": {"a": {"type": "string"}, "b": {"type": "string"}, "c": {"type": "string"}},
+              "required": ["a"]}
+    out = compact_schema(schema, hide=frozenset({"a", "b"}))
+    assert set(out["properties"]) == {"a", "c"} and "$schema" not in out and "additionalProperties" not in out

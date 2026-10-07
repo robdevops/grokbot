@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 from zoneinfo import ZoneInfo
 
-from .history import format_rows
-from .llm.gate import Route
-from .mcp.schema import ToolDef, compact_description, compact_schema
-from .prompts import chat_prompt, system_prompt
-from .store import HistoryRow
+from lib.history import format_rows
+from lib.llm.gate import Route
+from lib.mcp.schema import ToolDef, compact_description, compact_schema
+from lib.prompts import chat_prompt, system_prompt
+from lib.store import HistoryRow
 
 LINK = '<a href="https://finance.yahoo.com/quote/{t}"><b>{t}</b></a>'
 SAMPLE_TOOL = {
@@ -41,7 +41,7 @@ def sample_rows() -> list[HistoryRow]:
                 enumerate([("Nvidia", "NVDA"), ("Pro Medicus", "PME.AX"), ("Arm", "ARM")])))
             rows.append(HistoryRow(i, "Stock (@stockbot)", body, i * 60, i - 1))
         else:
-            rows.append(HistoryRow(i, "Rob (@rob)", f"what do you reckon about the market today, message {i}?", i * 60, None))
+            rows.append(HistoryRow(i, "Bob (@bob)", f"what do you reckon about the market today, message {i}?", i * 60, None))
     return rows
 
 
@@ -55,7 +55,7 @@ def report() -> str:
         tool = ToolDef("yahoo__get_historical_prices",
                        compact_description(SAMPLE_TOOL["description"], 220 if saver else 600),
                        compact_schema(SAMPLE_TOOL["schema"]))
-        tail = chat_prompt(transcript="", sender="Rob", private=False, reply_quote=None, msg_id=26,
+        tail = chat_prompt(transcript="", sender="Bob", private=False, reply_quote=None, msg_id=26,
                            now="Tuesday 06 October 2026, 10:00 UTC", saver=saver)
         lines.append(f"TOKEN_SAVER={'on' if saver else 'off'}: system ~{tokens(sys_full)}, "
                      f"history (25 msgs) ~{tokens(history)}, tail ~{tokens(tail)}, "

@@ -1,0 +1,44 @@
+# Analyst Recommendations: NVDA
+
+## Price Targets
+
+- **Target High:** $515.00
+- **Target Mean:** $328.72
+- **Target Low:** $180.00
+- **Target Median:** $315.00
+- **Current Price:** $239.24
+
+**Potential from Mean Target:** +37.40%
+
+## Analyst Consensus
+
+- **Number of Analysts:** 59
+- **Recommendation Mean:** 1.29508 (Strong Buy/Buy)
+- **Recommendation Key:** strong_buy
+
+## Recommendation Trend
+
+*Number of analysts by rating, by period (0m = current month, -1m = last month, ...).*
+
+|    | period   |   strongBuy |   buy |   hold |   sell |   strongSell |
+|---:|:---------|------------:|------:|-------:|-------:|-------------:|
+|  0 | 0m       |          10 |    48 |      2 |      1 |            0 |
+|  1 | -1m      |          10 |    48 |      2 |      1 |            0 |
+|  2 | -2m      |           9 |    48 |      2 |      1 |            0 |
+|  3 | -3m      |          10 |    48 |      2 |      1 |            0 |
+
+## Recent Upgrades / Downgrades (Last 10)
+
+| GradeDate   | Firm              | ToGrade    | FromGrade   | Action   | priceTargetAction   |   currentPriceTarget |   priorPriceTarget |
+|:------------|:------------------|:-----------|:------------|:---------|:--------------------|---------------------:|-------------------:|
+| 2026-10-01  | Cantor Fitzgerald | Overweight | Overweight  | reit     | Maintains           |                  350 |                350 |
+| 2026-09-29  | Rosenblatt        | Buy        | Buy         | main     | Maintains           |                  390 |                390 |
+| 2026-09-10  | Piper Sandler     | Overweight |             | init     | Announces           |                  300 |                  0 |
+| 2026-09-04  | Rosenblatt        | Buy        | Buy         | main     | Maintains           |                  390 |                390 |
+| 2026-09-04  | Needham           | Buy        | Buy         | reit     | Maintains           |                  300 |                300 |
+| 2026-08-27  | Citigroup         | Buy        | Buy         | main     | Raises              |                  315 |                300 |
+| 2026-08-27  | Mizuho            | Outperform | Outperform  | main     | Raises              |                  315 |                300 |
+| 2026-08-27  | JP Morgan         | Overweight | Overweight  | main     | Raises              |                  320 |                280 |
+| 2026-08-27  | Bernstein         | Outperform | Outperform  | main     | Raises              |                  400 |                315 |
+| 2026-08-27  | RBC Capital       | Outperform | Outperform  | main     | Raises              |                  330 |                300 |
+

@@ -100,7 +100,7 @@ async def test_market_question_offers_tools_up_front(env, store):
 async def test_portfolio_question_reminds_the_model_to_fetch_fresh_figures(env, store):
     sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
     ctx, backend, h = make_ctx(env, store, [step("a"), step("b")], servers=[sharesight])
-    await run(h, user_msg(ctx.bot, "@stockbot why did I outperform Sue this month?", mid=1))
+    await run(h, user_msg(ctx.bot, "@stockbot why did I outperform Alice this month?", mid=1))
     await run(h, user_msg(ctx.bot, "@stockbot how is NVDA looking?", mid=2))
     assert "portfolio tools before answering" in backend.seen[0]["prompt"]
     assert "tailwinds and headwinds" in backend.seen[0]["prompt"]

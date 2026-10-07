@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "yahoo": {
-      "description": "Yahoo Finance market data: quotes, price history, financial statements, analyst ratings, news. Yahoo needs exchange suffixes: ASX codes end in .AX (CPU.AX), KRX in .KS (000660.KS), KOSDAQ in .KQ, NZX in .NZ, LSE in .L; US tickers have none. Convert Sharesight codes before calling. For beta, P/E or other key stats across many stocks, use compare_stocks: it takes up to 10 tickers per call, so split a long list into groups of 10 and make all those calls at once.",
+      "description": "Yahoo Finance market data: quotes, price history, financial statements, analyst ratings. Yahoo needs exchange suffixes: ASX codes end in .AX (CPU.AX), KRX in .KS (000660.KS), KOSDAQ in .KQ, NZX in .NZ, LSE in .L; US tickers have none. Convert Sharesight codes before calling. For beta, P/E or other key stats across many stocks, use compare_stocks: it takes up to 10 tickers per call, so split a long list into groups of 10 and make all those calls at once.",
       "command": "npx",
       "args": [
         "-y",
@@ -12,7 +12,8 @@
         "get_holders",
         "search_symbols",
         "get_market_status",
-        "get_dividends_splits"
+        "get_dividends_splits",
+        "get_market_news"
       ],
       "cache_ttl": 30
     },
@@ -28,6 +29,14 @@
         "SHARESIGHT_CLIENT_SECRET": "${SHARESIGHT_CLIENT_SECRET}"
       },
       "current_holdings_only": true,
+      "hide_params": [
+        "consolidated",
+        "report_combined",
+        "custom_group_id",
+        "include_limited",
+        "include_sales",
+        "instrument_id"
+      ],
       "slim": "sharesight",
       "gate": "portfolio",
       "max_concurrent": 1

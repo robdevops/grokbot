@@ -7,7 +7,8 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - `make check`: ruff + pytest (no network, a few seconds). Run it before every commit.
 - `make prompt-report`: token breakdown of a sample request. `python bot.py [label]` runs the bot.
 - Tests use fakes (`tests/conftest.py`: FakeBot, user_msg; `tests/fakes.py`: ScriptedBackend,
-  FakeMcp, fake SDK clients). Add a test next to the module you change; don't write scratch scripts.
+  FakeMcp, fake SDK clients; `tests/fixtures/` real anonymised MCP output). Add a test next to the module you change;
+  don't write scratch scripts.
 
 ## Map (`lib/`, each module < ~300 lines)
 - `config.py`: `Settings` from env (`load()`), `ENV_VARS` registry, tuning constants. The only place that
@@ -23,7 +24,9 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - `prompts.py` all prompts. `ask.py` one entry point: route -> Request -> policy.ask -> usage -> NEEDS_TOOLS rerun.
 - `telegram/`: `handlers.py` (trigger -> request -> reply), `send.py`, `draft.py` (typing + streaming
   drafts), `commands.py` (/credits, /usage). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`.
-- `app.py` wiring/startup; `context.py` `Ctx` (settings, store, backend, registry, bot); `report.py`.
+- `app.py` wiring/startup; `context.py` `Ctx` (settings, store, backend, registry, bot).
+- `lib/` holds only what the bot needs to run. Developer helpers live in `tools/`: `report.py` (`make prompt-report`),
+  `capture.py` (real MCP output for fixtures); the bot never imports them.
 
 ## Request flow
 `handlers.on_message` logs the message -> `_trigger` (mention / reply-to-bot / DM / movers list) ->
@@ -49,6 +52,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   `previous_response_id` if replay is rejected. OpenRouter errors can arrive inside a 200 body or stream chunk.
 - A reply that hits MAX_TOKENS while thinking about tool results is re-asked in the same conversation (2x cap, low
   reasoning), not retried without tools: that would answer from memory and deny having any data.
+- `mcp` is capped below 2: 2.x dropped `streamablehttp_client`, which `mcp/server.py` uses (CI caught it). Raise the cap only with a port.
 - `must_search` requests are never retried without tools (answering from memory would invent news).
 - Telegram HTML: only b/i/u/s/code/pre/a/blockquote/tg-spoiler. `Draft` strips tags (half-written HTML is rejected).
 - No live Telegram/xAI/OpenRouter/MCP access in tests or in this sandbox; say so when behaviour can't be checked.

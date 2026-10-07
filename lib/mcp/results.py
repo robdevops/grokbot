@@ -26,7 +26,7 @@ def is_open(h) -> bool:
 # objects, logos...). Keep only what's useful, flattened, so a big portfolio
 # fits in one tool result.
 HOLDING_KEEP = (
-    "id", "quantity", "value", "instrument_price", "average_purchase_price",
+    "quantity", "value", "instrument_price", "average_purchase_price",
     "capital_gain", "capital_gain_percent", "payout_gain", "payout_gain_percent",
     "currency_gain", "total_gain", "total_gain_percent", "inception_date",
     "group_name", "cost_base", "values_over_time",
@@ -64,6 +64,9 @@ def clean_name(name, code: str | None = None):
     return name
 
 
+TYPE_SHORT = {"Exchange Traded Fund": "ETF", "Depository Receipt": "ADR"}
+
+
 def slim_holding(h):
     if not isinstance(h, dict):
         return h
@@ -79,7 +82,8 @@ def slim_holding(h):
     out.update({k: h.get(k) for k in HOLDING_KEEP})
     if out.get("type") == "Ordinary Shares":    # the default; only say when it's something else
         del out["type"]
-    if out.get("group_name") == "All Holdings": # ungrouped report
+    out["type"] = TYPE_SHORT.get(out.get("type"), out.get("type"))
+    if out.get("group_name") in ("All Holdings", out.get("market")):  # ungrouped, or just the market again
         del out["group_name"]
     return {k: v for k, v in out.items() if v not in (None, [], {})}
 
@@ -135,6 +139,9 @@ def tidy_sharesight(text: str, drop_closed: bool = False) -> str:
             if report.get("grouping") == "ungrouped":
                 report.pop("grouping")
                 report.pop("sub_totals", None)  # one group, same as the report totals
+            if isinstance(report.get("sub_totals"), list):
+                report["sub_totals"] = [{k: v for k, v in s.items() if k != "group_id"}
+                                        for s in report["sub_totals"] if isinstance(s, dict)]
             if isinstance(report.get("cash_accounts"), list):
                 report["cash_accounts"] = [
                     {
@@ -192,13 +199,50 @@ def diet(node):
     return node
 
 
+TABLE_NUMBER = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?|[+-]?(?:nan|inf)", re.IGNORECASE)
+TABLE_RULE = re.compile(r":?-+:?")
+UNITS = ((1e12, "T"), (1e9, "B"), (1e6, "M"))
+
+
+def _cell(cell: str) -> str:
+    """One markdown table cell: numbers to 6 significant digits (1.20067e+11 -> 120.067B), NaN to "-",
+    and a midnight timestamp to its date."""
+    cell = cell.strip()
+    if cell.endswith(" 00:00:00"):
+        return cell[:-9]
+    if not TABLE_NUMBER.fullmatch(cell):
+        return cell
+    value = float(cell)
+    if value != value:
+        return "-"
+    for limit, unit in UNITS:
+        if abs(value) >= limit:
+            return f"{value / limit:.{SIG_DIGITS}g}{unit}"
+    return f"{value:.{SIG_DIGITS}g}"
+
+
+def squeeze_tables(text: str) -> str:
+    """Compact the padded markdown tables some servers return (Yahoo's statements are mostly spaces,
+    separator dashes and 12-digit numbers): drop the padding and the separator row, shorten numbers."""
+    lines = []
+    for line in text.split("\n"):
+        if not line.startswith("|"):
+            lines.append(line)
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if all(TABLE_RULE.fullmatch(c) for c in cells if c) and any(cells):
+            continue
+        lines.append("|" + "|".join(_cell(c) for c in cells) + "|")
+    return "\n".join(lines)
+
+
 def slim_result(text: str, kind: str | None, drop_closed: bool = False) -> str:
-    """Compact a JSON tool result: server-specific flattening, then rounding/down-sampling.
-    Anything that isn't JSON is returned unchanged."""
+    """Compact a tool result. JSON: server-specific flattening, then rounding/down-sampling. Markdown
+    tables are squeezed; any other text is returned unchanged."""
     try:
         data = json.loads(text)
     except ValueError:
-        return text
+        return squeeze_tables(text) if "\n|" in text else text
     if kind == "sharesight":
         data = json.loads(tidy_sharesight(json.dumps(data), drop_closed))
     return json.dumps(diet(data), separators=(",", ":"), ensure_ascii=False)

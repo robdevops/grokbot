@@ -1,0 +1,23 @@
+# Commonwealth Bank of Australia (CBA.AX)
+
+**Current Price:** $151.45
+**Change:** 🔻 $-0.93 (-0.61%)
+
+## Market Data
+- **Previous Close:** $152.38
+- **Open:** $151.00
+- **Day's Range:** $150.84 - $151.72
+- **52 Week Range:** $146.98 - $185.59
+- **Volume:** 164,033
+- **Avg Volume:** 1,990,806
+- **Market Cap:** $253.24B
+- **Beta:** 0.829
+- **PE Ratio:** 23.05175
+- **EPS:** $6.57
+- **Dividend Yield:** 3.34%
+
+## Company Info
+- **Sector:** Financial Services
+- **Industry:** Banks - Diversified
+- **Website:** https://www.commbank.com.au
+

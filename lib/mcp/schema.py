@@ -17,7 +17,7 @@ READ_ONLY_PREFIXES = ("get", "list", "search", "fetch", "find", "lookup", "show"
 ENV_REF = re.compile(r"\$\{(\w+)\}|\$(\w+)")
 HIDDEN_PARAMS = {"response_format"}  # optional params the model shouldn't bother with
 DESCRIPTION_SKIP = re.compile(r"^(returns?|example|args|arguments|note|raises)\b", re.IGNORECASE)
-DROP_KEYS = {"title", "default", "examples", "example"}
+DROP_KEYS = {"title", "default", "examples", "example", "$schema", "additionalProperties"}
 
 
 @dataclass(frozen=True)
@@ -37,11 +37,11 @@ def compact_description(text: str, limit: int = 220) -> str:
     return " ".join(kept)[:limit]
 
 
-def compact_schema(schema, param_desc_limit: int = 120):
-    """Strip titles/defaults/examples, hide HIDDEN_PARAMS and cut each parameter description to
-    its first sentence."""
+def compact_schema(schema, param_desc_limit: int = 120, hide: frozenset[str] = frozenset()):
+    """Strip titles/defaults/examples, hide HIDDEN_PARAMS (plus `hide`, a server's own list of optional
+    parameters the model never needs) and cut each parameter description to its first sentence."""
     if isinstance(schema, list):
-        return [compact_schema(x, param_desc_limit) for x in schema]
+        return [compact_schema(x, param_desc_limit, hide) for x in schema]
     if not isinstance(schema, dict):
         return schema
     out = {}
@@ -50,10 +50,10 @@ def compact_schema(schema, param_desc_limit: int = 120):
         if key in DROP_KEYS and not isinstance(value, dict):
             continue
         if key == "properties" and isinstance(value, dict):
-            value = {k: v for k, v in value.items() if k not in HIDDEN_PARAMS or k in required}
+            value = {k: v for k, v in value.items() if k not in HIDDEN_PARAMS | hide or k in required}
         if key == "description" and isinstance(value, str):
             value = re.split(r"(?<=[.;])\s", " ".join(value.split()), maxsplit=1)[0][:param_desc_limit]
-        out[key] = compact_schema(value, param_desc_limit)
+        out[key] = compact_schema(value, param_desc_limit, hide)
     if "$defs" in out:  # drop definitions nothing refers to any more
         used = json.dumps({k: v for k, v in out.items() if k != "$defs"})
         out["$defs"] = {k: v for k, v in out["$defs"].items() if f"#/$defs/{k}" in used}

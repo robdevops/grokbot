@@ -57,15 +57,15 @@ def test_kv_users_news_and_usage(store):
     store.kv_set("k", "v")
     assert store.kv_get("k") == "v"
     store.save(make_msg(1, "x", chat_id=-1))
-    store.remember_user(make_msg(2, "x", username="Rob", chat_id=-1))
-    assert store.user_id_for("rob") == 5
-    store.set_muted("rob", "NVDA", True)
-    store.set_muted("rob", "AMD", True)
-    store.set_muted("rob", "AMD", False)
-    assert store.muted_codes("rob") == {"NVDA"}
+    store.remember_user(make_msg(2, "x", username="Bob", chat_id=-1))
+    assert store.user_id_for("bob") == 5
+    store.set_muted("bob", "NVDA", True)
+    store.set_muted("bob", "AMD", True)
+    store.set_muted("bob", "AMD", False)
+    assert store.muted_codes("bob") == {"NVDA"}
     store.remember_news_message(9, 3, ["A", "B"])
     assert store.news_message_codes(9, 3) == ["A", "B"] and store.news_message_codes(9, 4) == []
-    store.add_news("rob", "• A: thing happened")
-    assert store.recent_news("rob", 0) == ["• A: thing happened"]
+    store.add_news("bob", "• A: thing happened")
+    assert store.recent_news("bob", 0) == ["• A: thing happened"]
     store.add_usage(-1, "m", "chat", 2, 1000, 400, 50, 0.01)
     assert store.usage_summary(0)[0][:5] == ("m", 1, 1000, 400, 50)

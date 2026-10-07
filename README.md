@@ -84,7 +84,8 @@ Per-server keys: `command`/`args`/`env` (local, stdio) or `url`/`headers` (remot
 `allowed_tools` (an explicit allow-list); `disabled`; `max_concurrent` (default 4, stops a 20-stock
 request hammering Yahoo); `cache_ttl` seconds during which identical calls share one result (0 =
 off); `slim` (result slimming, defaults to the server's name; `sharesight` flattens holdings);
-`gate` (`portfolio` = only offered when the question is about portfolios/holdings);
+`hide_params` (optional parameters kept out of the tool definition because the model never needs them,
+saving tokens every round; a required parameter is never hidden); `gate` (`portfolio` = only offered when the question is about portfolios/holdings);
 `current_holdings_only` (Sharesight: never include sold holdings).
 - **Tool names are exact:** `blocked_tools` and `allowed_tools` take the server's real tool names, as
   printed in the startup log (`get_analyst_estimates`, not `analyst_estimates`). An entry that matches
@@ -177,7 +178,8 @@ Each answer's log line shows the cached percentage.
 - **Smaller tool definitions:** descriptions cut to 220 characters, parameter descriptions to their
   first sentence, titles/defaults/examples dropped.
 - **Smaller results:** floats rounded to 6 significant digits, long price series thinned to 60
-  points, Sharesight holdings flattened into tables, results capped at 12,000 characters; an
+  points, Sharesight holdings flattened into tables, markdown tables (Yahoo) squeezed (padding and rule
+  rows dropped, `1.20067e+11` shown as `120.067B`, NaN as `-`), results capped at 12,000 characters; an
   identical call within one request gets a short "same as earlier" note instead of a second copy;
   `cache_ttl` shares results between concurrent users.
 - **Compact history:** stored HTML is shown to the model as plain text (ticker links become the
@@ -247,10 +249,16 @@ Most of the delay is reasoning time before the first answer token, not typing sp
 pip install -r requirements-dev.txt
 make check          # ruff + pytest, a few seconds, no network
 make prompt-report  # token breakdown of a sample request
+python -m tools.capture sharesight   # real MCP output for test fixtures (also: yahoo)
 ```
 The code is the `lib/` package (a map is in `CLAUDE.md`); `bot.py` is a thin entry point. Tests
 use fakes for Telegram, both providers and MCP, so nothing in the suite touches the network.
 `tests/test_config.py` fails if an environment variable is missing from the table above.
+`tests/fixtures/` holds real MCP output captured with it (Sharesight anonymised, Yahoo public) and
+`tests/test_fixtures.py` checks the bot against those shapes. `lib/` holds only what the bot needs to run; developer helpers live in `tools/`. `tools.capture` runs a
+server from `mcp_servers.json` with the service's environment and prints its tools and a real call to each
+to stdout: the output contains your real holdings and IDs, so redact it before sharing or committing it.
+GitHub Actions (`.github/workflows/check.yml`) runs `make check` on every pull request and push to `main`.
 
 ## Troubleshooting
 - **"Both XAI_API_KEY and OPENROUTER_API_KEY are set"**: set only one.
