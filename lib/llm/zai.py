@@ -16,7 +16,12 @@ log = logging.getLogger("bot")
 
 BASE_URL = "https://api.z.ai/api/paas/v4/"
 # USD per million tokens (input, cached input, output); a model missing here shows $0.
-PRICES = {"glm-5.3-flash": (0.15, 0.03, 0.50)}
+PRICES = {
+    "glm-5.3-flash": (0.15, 0.03, 0.50),
+    "glm-5.3-flashx": (0.37, 0.075, 1.25),
+    "glm-5.3": (1.40, 0.26, 4.40),
+    "glm-5.2": (1.40, 0.26, 4.40),
+}
 # z.ai models always think and accept only low, high or max. Low costs almost no reasoning
 # tokens, so it is the default; the bot's REASONING values map onto z.ai's.
 EFFORT = {"": "low", "low": "low", "medium": "high", "high": "high", "max": "max"}

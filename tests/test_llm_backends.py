@@ -136,6 +136,18 @@ async def test_zai_reasoning_maps_to_its_efforts_and_none_leaves_tools_out():
     assert client.kwargs[1]["extra_body"] == {"reasoning_effort": "max"} and "tools" not in client.kwargs[1]
 
 
+def test_zai_prices_cover_the_published_glm_models():
+    from types import SimpleNamespace as N
+
+    from lib.llm.zai import PRICES
+    assert set(PRICES) == {"glm-5.3-flash", "glm-5.3-flashx", "glm-5.3", "glm-5.2"}
+    b = ZaiBackend(config.load(ZAI_ENV), FakeChatClient())
+    usage = N(prompt_tokens=1_000_000, completion_tokens=1_000_000, prompt_tokens_details=N(cached_tokens=500_000))
+    # 500k uncached in + 500k cached in + 1M out, per million tokens
+    assert b._cost(usage, "glm-5.3") == pytest.approx(0.5 * 1.40 + 0.5 * 0.26 + 4.40)
+    assert b._cost(usage, "glm-5.3-flashx") == pytest.approx(0.5 * 0.37 + 0.5 * 0.075 + 1.25)
+
+
 async def test_zai_warns_once_about_models_without_a_price(caplog):
     ZaiBackend(config.load({**ZAI_ENV, "MODEL": "glm-x", "FAST_MODEL": "glm-5.3-flash"}), FakeChatClient())
     assert [r.getMessage() for r in caplog.records if "No z.ai price" in r.getMessage()] == [
