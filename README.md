@@ -239,18 +239,25 @@ token size of the tool definitions. The `Starting ...` line shows the git commit
 Figures from search results and Artificial Analysis at the time of writing (October 2026), so
 treat them as rough; speed varies by provider.
 
-| Model | $ per 1M in / out | Output speed | Quality index |
-|---|---|---|---|
-| `xiaomi/mimo-v2.6-pro` | 0.43 / 0.87 | ~28-46 tok/s | 46 (top open-weight model) |
-| `xiaomi/mimo-v2.6-flash` | 0.14 / 0.28 | ~56 tok/s | 38 |
-| `z-ai/glm-5.3-flash` (default on OpenRouter) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 |
-| `grok-4.3` / `x-ai/grok-4.3` (default on xAI) | 1.25 / 2.50 | ~105-146 tok/s | 25 (at high reasoning) |
-| `glm-5.3-flash` (default on z.ai) | 0.15 / 0.50 (cached input 0.03) | ~50 tok/s | 57 |
-| `xiaomi/mimo-v2.5-pro` | 0.30 / 0.61 | ~29-46 tok/s | unreliable (retires 21 Oct 2026) |
-| `xiaomi/mimo-v2.5` | 0.12 / 0.24 | ~44-58 tok/s | not found (retires 21 Oct 2026) |
+| Model | $ per 1M in / out | Output speed | Quality index | Fast sibling for `FAST_MODEL` |
+|---|---|---|---|---|
+| `xiaomi/mimo-v2.6-pro` | 0.43 / 0.87 | ~28-46 tok/s | 46 (top open-weight model) | `xiaomi/mimo-v2.6-flash` |
+| `xiaomi/mimo-v2.6-flash` | 0.14 / 0.28 | ~56 tok/s | 38 | itself (a flash model) |
+| `z-ai/glm-5.3-flash` (default on OpenRouter) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 | itself (a flash model) |
+| `grok-4.3` / `x-ai/grok-4.3` (default on xAI) | 1.25 / 2.50 | ~105-146 tok/s | 25 (at high reasoning) | none (see below) |
+| `glm-5.3-flash` (default on z.ai) | 0.15 / 0.50 (cached input 0.03) | ~50 tok/s | 57 | itself (a flash model) |
+| `xiaomi/mimo-v2.5-pro` | 0.30 / 0.61 | ~29-46 tok/s | unreliable (retires 21 Oct 2026) | `xiaomi/mimo-v2.5` (also retiring) |
+| `xiaomi/mimo-v2.5` | 0.12 / 0.24 | ~44-58 tok/s | not found (retires 21 Oct 2026) | itself |
 
 Most of the delay is reasoning time before the first answer token, not typing speed: use
-`REASONING=low`, and `FAST_MODEL=xiaomi/mimo-v2.6-flash` so simple messages skip the big model.
+`REASONING=low`, and set `FAST_MODEL` so simple messages skip the big model. `FAST_MODEL` runs on the
+same provider as your API key:
+- **OpenRouter:** any model, for example `FAST_MODEL=xiaomi/mimo-v2.6-flash` or `z-ai/glm-5.3-flash`
+  alongside a bigger `MODEL`.
+- **z.ai:** a GLM model. `glm-5.3-flash` is the flash one; for a bigger GLM, add its price to `PRICES` in
+  `lib/llm/zai.py`, otherwise its cost shows $0.
+- **xAI:** a Grok model, and there is no fast one to pick: Grok 4 Fast and Grok 4.1 Fast were reportedly
+  retired on 15 May 2026 and now redirect to `grok-4.3`.
 
 ## Development
 ```
