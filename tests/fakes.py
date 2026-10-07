@@ -40,7 +40,7 @@ class ScriptedBackend(Backend):
     def add_user_message(self, conv, text):
         conv["user"].append(text)
 
-    async def run_search(self, query):
+    async def run_search(self, query, usage):
         return await self.search_runner(query) if self.search_runner else None
 
 

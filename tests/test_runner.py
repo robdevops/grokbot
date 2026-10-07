@@ -74,6 +74,20 @@ async def test_search_cap_unknown_and_unoffered_tools_and_bad_arguments():
     assert all("no usable query" in r for r in b.results_log[0])
 
 
+async def test_search_cost_is_added_to_the_answer_usage():
+    mcp = FakeMcp()
+
+    class Costly(ScriptedBackend):
+        async def run_search(self, query, usage):
+            usage.cost += 0.01
+            return "found"
+
+    calls = [("1", "web_search", '{"query":"a"}'), ("2", "web_search", '{"query":"b"}')]
+    b = Costly([step(calls=calls, finish="tool_calls"), step("ok")])
+    answer = await run(b, registry(mcp), with_tools(mcp, search=True))
+    assert answer.usage.cost == pytest.approx(0.02)
+
+
 async def test_tool_result_size_and_small_results_are_logged(caplog):
     import logging
     big, small = FakeMcp("yahoo", reply="x" * 500), FakeMcp("sharesight", tools=("list_portfolios",),

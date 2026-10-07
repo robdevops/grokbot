@@ -3,6 +3,7 @@ import pytest
 from openai import BadRequestError
 
 from lib import config
+from lib.llm.base import Usage
 from lib.llm.openrouter import OpenRouterBackend
 from lib.llm.xai import XaiBackend
 from lib.llm.zai import ZaiBackend
@@ -80,8 +81,8 @@ async def test_openrouter_provider_error_in_stream_raises(env):
 async def test_openrouter_run_search_and_empty_result(env):
     from types import SimpleNamespace as N
 
-    def reply(text, finish="stop"):
-        return N(choices=[N(message=N(content=text), finish_reason=finish)])
+    def reply(text, finish="stop", cost=0.002):
+        return N(choices=[N(message=N(content=text), finish_reason=finish)], usage=N(cost=cost))
 
     class C:
         def __init__(self, *replies):
@@ -92,10 +93,12 @@ async def test_openrouter_run_search_and_empty_result(env):
             return self.replies.pop(0)
 
     b = OpenRouterBackend(config.load(env), C(reply("- NVDA 100 [Reuters]"), reply("", "length")))
-    assert await b.run_search("nvda") == "- NVDA 100 [Reuters]"
-    assert "returned no text" in await b.run_search("nvda")
+    spent = Usage()
+    assert await b.run_search("nvda", spent) == "- NVDA 100 [Reuters]"
+    assert "returned no text" in await b.run_search("nvda", spent)
+    assert spent.cost == pytest.approx(0.004)  # the search model's cost is counted, even when empty
     off = OpenRouterBackend(config.load({**env, "SEARCH": "off"}), C())
-    assert await off.run_search("x") is None
+    assert await off.run_search("x", Usage()) is None
 
 
 # ---- z.ai ----------------------------------------------------------------------------
@@ -141,20 +144,22 @@ async def test_zai_run_search_uses_the_search_api():
 
     http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     b = ZaiBackend(config.load(ZAI_ENV), FakeOpenRouterClient(), http)
-    out = await b.run_search("nvda close")
+    spent = Usage()
+    out = await b.run_search("nvda close", spent)
+    assert spent.cost == pytest.approx(0.01)
     assert seen["url"].endswith("/paas/v4/web_search") and seen["auth"] == "Bearer key"
     assert b"search-prime" in seen["body"] and b"nvda close" in seen["body"]
     lines = out.splitlines()
     assert lines[0] == "- NVDA close (https://x.test/a): closed at $238.90"
     assert ", 2026-10-06)" in lines[1] and len(lines[1]) < 500
     off = ZaiBackend(config.load({**ZAI_ENV, "SEARCH": "off"}), FakeOpenRouterClient(), http)
-    assert await off.run_search("x") is None
+    assert await off.run_search("x", Usage()) is None and spent.cost == pytest.approx(0.01)
 
 
 async def test_zai_search_with_no_results():
     http = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"search_result": []})))
     b = ZaiBackend(config.load(ZAI_ENV), FakeOpenRouterClient(), http)
-    assert "no results" in await b.run_search("zzz")
+    assert "no results" in await b.run_search("zzz", Usage())
 
 
 async def test_zai_whole_tool_call_chunk_and_replay():

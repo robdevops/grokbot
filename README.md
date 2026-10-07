@@ -29,7 +29,7 @@ or `EnvironmentFile=` for the variables below.
 ## Providers
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
 - `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
-- `ZAI_API_KEY` set -> z.ai directly (default model `glm-5.3-flash`; prompts and chat history go to z.ai, a China-based provider). Search runs through z.ai's search API (about $0.01 a search, not included in the cost line).
+- `ZAI_API_KEY` set -> z.ai directly (default model `glm-5.3-flash`; prompts and chat history go to z.ai, a China-based provider). Search runs through z.ai's search API ($0.01 a search, included in the cost line, as is OpenRouter's search model).
   z.ai always thinks, so the bot sends `reasoning_effort` low unless `REASONING` says otherwise
   (medium maps to high). Cost is estimated from a price table in `lib/llm/zai.py` because z.ai's usage reports none.
 - **More than one key set, or none: the bot refuses to start** with a message saying so.

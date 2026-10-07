@@ -9,7 +9,7 @@ from openai import AsyncOpenAI
 
 from .. import config
 from ..config import Settings
-from .base import Request
+from .base import Request, Usage
 from .chat import ChatBackend
 
 log = logging.getLogger("bot")
@@ -24,6 +24,7 @@ EFFORT = {"": "low", "low": "low", "medium": "high", "high": "high", "max": "max
 # z.ai drops its built-in web_search tool when function tools are in the request, so the model
 # gets an ordinary function tool and the bot runs the search through z.ai's search API.
 SEARCH_COUNT = 5
+SEARCH_COST = 0.01  # USD per search
 SEARCH_SNIPPET = 400  # characters kept of each result
 SEARCH_TOOL = {"type": "function", "function": {
     "name": "web_search",
@@ -69,7 +70,7 @@ class ZaiBackend(ChatBackend):
         tokens_out = getattr(usage_obj, "completion_tokens", 0) or 0
         return ((tokens_in - cached) * price[0] + cached * price[1] + tokens_out * price[2]) / 1_000_000
 
-    async def run_search(self, query: str) -> str | None:
+    async def run_search(self, query: str, usage: Usage) -> str | None:
         """Search through z.ai's search API; each result is one line of title, link and snippet."""
         if not self.st.search:
             return None
@@ -78,6 +79,7 @@ class ZaiBackend(ChatBackend):
             BASE_URL + "web_search", headers={"Authorization": f"Bearer {self.st.api_key}"},
             json={"search_engine": "search-prime", "search_query": query, "count": SEARCH_COUNT})
         r.raise_for_status()
+        usage.cost += SEARCH_COST
         results = r.json().get("search_result") or []
         if not results:
             return "The search returned no results."
