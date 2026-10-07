@@ -1,4 +1,4 @@
-"""Owner commands: /credits (OpenRouter balance) and /usage (token ledger)."""
+"""Owner commands: /credits (provider balance, where there is one) and /usage (token ledger)."""
 
 from __future__ import annotations
 

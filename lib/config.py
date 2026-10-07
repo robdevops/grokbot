@@ -12,12 +12,13 @@ from zoneinfo import ZoneInfo
 # mention each name (tests/test_config.py enforces it).
 ENV_VARS: dict[str, str] = {
     "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
-    "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the two keys.",
+    "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
     "OPENROUTER_API_KEY": "OpenRouter key; selects the OpenRouter provider.",
-    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter).",
+    "ZAI_API_KEY": "z.ai key; selects the z.ai provider.",
+    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai).",
     "FAST_MODEL": "Optional cheaper/faster model used for simple requests (TOKEN_SAVER only).",
-    "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
-    "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
+    "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
+    "SEARCH": "on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on.",
     "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
@@ -34,6 +35,8 @@ ENV_VARS: dict[str, str] = {
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
     "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
 }
+
+DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash", "zai": "glm-5.3-flash"}
 
 # Tuning constants (not configurable).
 MAX_TOOL_ROUNDS = 6  # model <-> tool round trips per answer
@@ -55,7 +58,7 @@ class ConfigError(Exception):
 @dataclass(frozen=True)
 class Settings:
     telegram_token: str
-    provider: str  # "xai" | "openrouter"
+    provider: str  # "xai" | "openrouter" | "zai"
     api_key: str
     model: str
     fast_model: str
@@ -128,21 +131,20 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     """Build Settings from `env` (default: os.environ). Raises ConfigError if unusable."""
     env = os.environ if env is None else env
     token = env.get("TELEGRAM_BOT_TOKEN", "").strip()
-    xai = env.get("XAI_API_KEY", "").strip()
-    openrouter = env.get("OPENROUTER_API_KEY", "").strip()
+    keys = {"xai": env.get("XAI_API_KEY", "").strip(),
+            "openrouter": env.get("OPENROUTER_API_KEY", "").strip(),
+            "zai": env.get("ZAI_API_KEY", "").strip()}
     if not token:
         raise ConfigError("TELEGRAM_BOT_TOKEN is not set.")
-    if xai and openrouter:
-        raise ConfigError(
-            "Both XAI_API_KEY and OPENROUTER_API_KEY are set; set only one, to choose the provider."
-        )
-    if not (xai or openrouter):
-        raise ConfigError("Set XAI_API_KEY (xAI) or OPENROUTER_API_KEY (OpenRouter).")
-    provider = "openrouter" if openrouter else "xai"
+    given = [p for p, k in keys.items() if k]
+    if len(given) > 1:
+        raise ConfigError("More than one API key is set (XAI_API_KEY, OPENROUTER_API_KEY, "
+                          "ZAI_API_KEY); set only one, to choose the provider.")
+    if not given:
+        raise ConfigError("Set XAI_API_KEY (xAI), OPENROUTER_API_KEY (OpenRouter) or ZAI_API_KEY (z.ai).")
+    provider = given[0]
     saver = _flag(env, "TOKEN_SAVER", default=True)
-    model = env.get("MODEL", "").strip() or (
-        "z-ai/glm-5.3-flash" if provider == "openrouter" else "grok-4.3"
-    )
+    model = env.get("MODEL", "").strip() or DEFAULT_MODELS[provider]
     search_model = env.get("SEARCH_MODEL", "xiaomi/mimo-v2.6-flash:online").strip()
     search = env.get("SEARCH", "on").strip().lower() != "off"
     if provider == "openrouter" and not search_model:
@@ -151,7 +153,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     return Settings(
         telegram_token=token,
         provider=provider,
-        api_key=openrouter or xai,
+        api_key=keys[provider],
         model=model,
         fast_model=env.get("FAST_MODEL", "").strip() if saver else "",
         reasoning=env.get("REASONING", "").strip().lower(),

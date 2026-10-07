@@ -2,8 +2,8 @@
 
 A Telegram bot for a group chat about stocks and investing. People @mention it (or reply to it, or
 DM it) and it answers with an LLM, using the group's recent messages as context, live market data
-from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (Grok)** or
-**OpenRouter**, chosen by which API key you set.
+from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (Grok)**,
+**OpenRouter** or **z.ai**, chosen by which API key you set.
 
 ## Contents
 - [Quick start](#quick-start) · [Providers](#providers) · [How it answers](#how-it-answers)
@@ -18,7 +18,7 @@ from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (G
    message in a group (remove and re-add it to groups it is already in). Who may use the bot is
    controlled in Telegram/BotFather; the bot itself has no allow-list.
 2. Python 3.13.5 (production; GitHub CI runs the latest stable Python and Node.js as an early warning): `pip install -r requirements.txt` (plus Node.js for npx-based MCP servers such as Yahoo Finance).
-3. Export `TELEGRAM_BOT_TOKEN` and **exactly one** of `XAI_API_KEY` or `OPENROUTER_API_KEY`.
+3. Export `TELEGRAM_BOT_TOKEN` and **exactly one** of `XAI_API_KEY`, `OPENROUTER_API_KEY` or `ZAI_API_KEY`.
 4. Optional: edit `mcp_servers.json` (see [MCP data tools](#mcp-data-tools)).
 5. `python bot.py [label]`
 
@@ -29,10 +29,13 @@ or `EnvironmentFile=` for the variables below.
 ## Providers
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
 - `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
-- **Both set, or neither: the bot refuses to start** with a message saying so.
-- `MODEL` and `REASONING` (low/medium/high) apply to either provider.
-- The two providers share all code except one adapter each (`lib/llm/xai.py` on the Responses
-  API, `lib/llm/openrouter.py` on chat completions).
+- `ZAI_API_KEY` set -> z.ai directly (default model `glm-5.3-flash`). Prompts and chat history go to z.ai, a China-based provider.
+  z.ai always thinks, so the bot sends `reasoning_effort` low unless `REASONING` says otherwise (medium maps to high).
+  Cost is estimated from a price table in `lib/llm/zai.py`, because z.ai's usage reports none.
+- **More than one key set, or none: the bot refuses to start** with a message saying so.
+- `MODEL` and `REASONING` (low/medium/high) apply to every provider.
+- The providers share all code except one adapter each (`lib/llm/xai.py` on the Responses API;
+  `lib/llm/openrouter.py` and `lib/llm/zai.py` on chat completions, sharing `lib/llm/chat.py`).
 
 ## How it answers
 - **Groups:** the bot answers when it is @mentioned or when someone replies to one of its messages. Every message is logged;
@@ -62,6 +65,8 @@ or `EnvironmentFile=` for the variables below.
 - **OpenRouter:** OpenRouter's `web_search` tool; when it hands a search call back, the bot runs the
   query through `SEARCH_MODEL` (default `xiaomi/mimo-v2.6-flash:online`) and returns the write-up; that call's cost is added to the answer's cost.
   Some models print a search call as text instead of making it; the bot recovers those queries too.
+- **z.ai:** z.ai ignores its own search tool when other tools are present, so the model gets a `web_search(query, recency)`
+  function and the bot runs it through z.ai's search API (5 results with site, date, snippet and link; $0.01 a search, included in the cost).
 - At most 5 searches per round; extras get a "skipped" note.
 - `SEARCH=off` turns search off (the prompt then says the model has no web search).
 - **Forced search:** movers lists, DM preset buttons and the holding-news digest *require* a
@@ -150,12 +155,12 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 |---|---|---|
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
-| `/credits` | `OWNER_USER_ID` | Provider balance (OpenRouter; xAI has none to show) |
+| `/credits` | `OWNER_USER_ID` | Provider balance (OpenRouter; xAI and z.ai have none to show) |
 | `/usage` | `OWNER_USER_ID` | Requests, tokens (and % cached) and cost per model, last 24 h and 7 days |
 
 ## Caching and token saving
-**Provider prompt caching** (both providers keep a conversation on the server holding its cached
-prompt): xAI gets `prompt_cache_key` and the `x-grok-conv-id` header; OpenRouter gets `session_id`,
+**Provider prompt caching** (xAI and OpenRouter keep a conversation on the server holding its cached
+prompt; z.ai caches automatically and gets no key): xAI gets `prompt_cache_key` and the `x-grok-conv-id` header; OpenRouter gets `session_id`,
 the `x-session-id` header and `prompt_cache_key`. The key is `<bot name>-chat-<chat id>` (ASCII,
 at most 128 characters). Prompts are ordered so the cacheable part comes first: system prompt,
 tools (sorted), history (stepped window), and the volatile part last (time, down-server notice).
@@ -206,12 +211,13 @@ token size of the tool definitions. The `Starting ...` line shows the git commit
 | Variable | Meaning |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
-| `XAI_API_KEY` | xAI key; selects the xAI provider. Set exactly one of the two keys. |
+| `XAI_API_KEY` | xAI key; selects the xAI provider. Set exactly one of the three keys. |
 | `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider. |
-| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter). |
+| `ZAI_API_KEY` | z.ai key; selects the z.ai provider. |
+| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai). |
 | `FAST_MODEL` | Optional cheaper/faster model used for simple requests (TOKEN_SAVER only). |
-| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default. |
-| `SEARCH` | on|off. Web search (and X search on xAI). Default on. |
+| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off). |
+| `SEARCH` | on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on. |
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
@@ -238,6 +244,7 @@ treat them as rough; speed varies by provider.
 | `xiaomi/mimo-v2.6-flash` | 0.14 / 0.28 | ~56 tok/s | 38 |
 | `z-ai/glm-5.3-flash` (default on OpenRouter) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 |
 | `grok-4.3` / `x-ai/grok-4.3` (default on xAI) | 1.25 / 2.50 | ~105-146 tok/s | 25 (at high reasoning) |
+| `glm-5.3-flash` (default on z.ai) | 0.15 / 0.50 (cached input 0.03) | ~50 tok/s | 57 |
 | `xiaomi/mimo-v2.5-pro` | 0.30 / 0.61 | ~29-46 tok/s | unreliable (retires 21 Oct 2026) |
 | `xiaomi/mimo-v2.5` | 0.12 / 0.24 | ~44-58 tok/s | not found (retires 21 Oct 2026) |
 
@@ -264,7 +271,7 @@ fails, it sends a Telegram message if the repository secrets `TELEGRAM_BOT_TOKEN
 Secrets and variables, Actions); without them it skips the message.
 
 ## Troubleshooting
-- **"Both XAI_API_KEY and OPENROUTER_API_KEY are set"**: set only one.
+- **"More than one API key is set"**: set only one of `XAI_API_KEY`, `OPENROUTER_API_KEY`, `ZAI_API_KEY`.
 - **The bot ignores messages in a group**: run `/setprivacy` -> Disable in @BotFather and re-add it.
 - **An MCP server shows as down**: the alert includes the server's own error (often a missing
   environment variable or `npx` not installed). Fix it and restart the bot.
