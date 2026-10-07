@@ -187,7 +187,8 @@ Each answer's log line shows the cached percentage.
   points, Sharesight holdings flattened into tables, markdown tables (Yahoo) squeezed (padding and rule
   rows dropped, `1.20067e+11` shown as `120.067B`, NaN as `-`), results capped at 12,000 characters; an
   identical call within one request gets a short "same as earlier" note instead of a second copy;
-  `cache_ttl` shares results between concurrent users.
+  `cache_ttl` shares results between users: 30 seconds for Yahoo, 30 minutes for Sharesight (so a portfolio
+  answer can be up to 30 minutes old).
 - **Compact history:** stored HTML is shown to the model as plain text (ticker links become the
   symbol, tags and Yahoo URLs dropped), lines cut to 240 characters and the bot's own to 160.
 - **Smaller prompts:** the system prompt is about half its previous size, the repeated instruction
