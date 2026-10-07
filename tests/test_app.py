@@ -5,6 +5,7 @@ from lib import app, config
 from lib.context import Ctx
 from lib.llm.openrouter import OpenRouterBackend
 from lib.llm.xai import XaiBackend
+from lib.llm.zai import ZaiBackend
 from lib.mcp.server import MCPServer
 
 from .conftest import FakeBot
@@ -19,6 +20,8 @@ def test_backend_follows_the_key(env):
     assert isinstance(app.build_backend(config.load(env)), OpenRouterBackend)
     xai = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
     assert isinstance(app.build_backend(xai), XaiBackend)
+    zai = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "k"})
+    assert isinstance(app.build_backend(zai), ZaiBackend)
 
 
 def test_handlers_follow_the_flags(env, store):
@@ -45,7 +48,7 @@ def test_main_refuses_to_start_with_both_or_neither_key(monkeypatch):
         app.main([])
     monkeypatch.setenv("XAI_API_KEY", "a")
     monkeypatch.setenv("OPENROUTER_API_KEY", "b")
-    with pytest.raises(SystemExit, match="Both"):
+    with pytest.raises(SystemExit, match="only one"):
         app.main(["mimo"])
 
 

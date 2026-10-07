@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Telegram bot for a stock-chat group: answers @mentions/replies/DMs with an LLM (xAI or OpenRouter),
+Telegram bot for a stock-chat group: answers @mentions/replies/DMs with an LLM (xAI, OpenRouter or z.ai),
 MCP data tools and web search. User-facing docs are in `README.md`; this file is the map.
 
 ## Commands
@@ -20,8 +20,8 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   (md_to_html, split_html, plain_text, TG_TAG_RE). `tickers.py` Yahoo links (+ `tickers_data.py`).
 - `mcp/`: `server.py` (MCPServer lifecycle, TTL cache, `Registry`), `schema.py` (neutral `ToolDef`,
   schema diet), `results.py` (result slimming).
-- `llm/`: `base.py` (Request/Step/Answer/Backend), `xai.py` + `openrouter.py` (the only provider-specific
-  code), `runner.py` (THE tool loop), `policy.py` (THE retry ladder), `gate.py` (which tools a message needs).
+- `llm/`: `base.py` (Request/Step/Answer/Backend), `chat.py` (shared chat-completions loop), `xai.py` +
+  `openrouter.py` + `zai.py` (the only provider-specific code), `runner.py` (THE tool loop), `policy.py` (THE retry ladder), `gate.py` (which tools a message needs).
 - `prompts.py` all prompts. `ask.py` one entry point: route -> Request -> policy.ask -> usage -> NEEDS_TOOLS rerun.
 - `telegram/`: `handlers.py` (trigger -> request -> reply), `send.py`, `draft.py` (typing + streaming
   drafts), `commands.py` (/credits, /usage). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`.
@@ -37,7 +37,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 
 ## Conventions
 - 4-space indent, ruff-clean, type hints, one-line module docstrings. `features/` modules never import
-  each other. Provider differences live only in `llm/xai.py` and `llm/openrouter.py`.
+  each other. Provider differences live only in `llm/xai.py`, `llm/openrouter.py` and `llm/zai.py`.
 - Parts sent to the model are neutral dicts: `{"type": "text", ...}` / `{"type": "image", "url", "detail"}`;
   tools are `ToolDef`; each backend converts. Don't add `if provider ==` anywhere else.
 - No usernames, portfolio names or other personal names in code or docs: they come from env (README uses placeholders).
@@ -54,6 +54,9 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - A reply that hits MAX_TOKENS while thinking about tool results is re-asked in the same conversation (2x cap, low
   reasoning), not retried without tools: that would answer from memory and deny having any data.
 - `mcp` is capped below 2: 2.x dropped `streamablehttp_client`, which `mcp/server.py` uses (CI caught it). Raise the cap only with a port.
+- z.ai: `tool_choice` is ignored (even "none", so the backend omits tools instead), its built-in `web_search` is ignored whenever function
+  tools are present (so search is a function tool run through its search API), thinking can't be disabled (default `reasoning_effort`
+  low), an invalid search recency is accepted silently (so the tool schema fixes the list), and usage has no cost (price table).
 - `must_search` requests are never retried without tools (answering from memory would invent news).
 - Telegram HTML: only b/i/u/s/code/pre/a/blockquote/tg-spoiler. `Draft` strips tags (half-written HTML is rejected).
 - No live Telegram/xAI/OpenRouter/MCP access in tests or in this sandbox; say so when behaviour can't be checked.

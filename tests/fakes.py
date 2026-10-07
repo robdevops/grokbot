@@ -40,7 +40,7 @@ class ScriptedBackend(Backend):
     def add_user_message(self, conv, text):
         conv["user"].append(text)
 
-    async def run_search(self, query):
+    async def run_search(self, query, usage, args):
         return await self.search_runner(query) if self.search_runner else None
 
 
@@ -83,16 +83,16 @@ class Stream:
             raise StopAsyncIteration from None
 
 
-def or_chunk(content=None, tool_calls=None, finish=None, usage=None, extra=None):
+def chat_chunk(content=None, tool_calls=None, finish=None, usage=None, extra=None):
     return N(usage=usage, model_extra={}, choices=[N(
         delta=N(content=content, tool_calls=tool_calls, model_extra=extra or {}), finish_reason=finish)])
 
 
-def or_tc(index, id=None, name=None, args=None):
+def chat_tc(index, id=None, name=None, args=None):
     return N(index=index, id=id, function=N(name=name, arguments=args))
 
 
-class FakeOpenRouterClient:
+class FakeChatClient:
     def __init__(self, *streams):
         self.streams = list(streams)
         self.kwargs: list[dict] = []

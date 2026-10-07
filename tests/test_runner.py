@@ -3,6 +3,7 @@ import pytest
 from openai import APIStatusError, BadRequestError
 
 from lib import config
+from lib.llm.base import Usage
 from lib.llm.gate import route, wants_tools
 from lib.llm.policy import ask
 from lib.llm.runner import call_query, run, run_calls
@@ -72,6 +73,21 @@ async def test_search_cap_unknown_and_unoffered_tools_and_bad_arguments():
                               finish="tool_calls"), step("ok")], search_runner=search)
     await run(b, registry(mcp), with_tools(mcp, search=True))
     assert all("no usable query" in r for r in b.results_log[0])
+
+
+async def test_search_cost_and_arguments_reach_the_backend():
+    mcp = FakeMcp()
+
+    class Costly(ScriptedBackend):
+        async def run_search(self, query, usage, args):
+            usage.cost += 0.01
+            return f"{query}:{args.get('recency')}"
+
+    calls = [("1", "web_search", '{"query":"a","recency":"oneDay"}'), ("2", "web_search", '{"query":"b"}')]
+    b = Costly([step(calls=calls, finish="tool_calls"), step("ok")])
+    answer = await run(b, registry(mcp), with_tools(mcp, search=True))
+    assert b.results_log[0] == ["a:oneDay", "b:None"]
+    assert answer.usage.cost == pytest.approx(0.02)
 
 
 async def test_tool_result_size_and_small_results_are_logged(caplog):
@@ -149,7 +165,7 @@ async def test_run_calls_reports_mcp_exceptions():
 
     mcp = Boom()
     out = await run_calls([__import__("lib.llm.base", fromlist=["Call"]).Call("1", "yahoo__get_quote", "{}")],
-                          ScriptedBackend([]), registry(mcp), with_tools(mcp), {}, True)
+                          ScriptedBackend([]), registry(mcp), with_tools(mcp), {}, True, Usage())
     assert out == ["Error: RuntimeError: down"]
 
 
