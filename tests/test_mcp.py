@@ -113,16 +113,16 @@ async def test_call_slims_and_caches_identical_concurrent_calls():
     assert len(s.session.calls) == 2
 
 
-async def test_sharesight_results_are_cached_for_ten_minutes(monkeypatch):
+async def test_sharesight_results_are_cached_for_thirty_minutes(monkeypatch):
     cfg = json.loads((Path(__file__).parent.parent / "mcp_servers.json").read_text())["mcpServers"]["sharesight"]
-    assert cfg["cache_ttl"] == 600
+    assert cfg["cache_ttl"] == 1800
     clock = [1000.0]
     monkeypatch.setattr("lib.mcp.server.time", N(monotonic=lambda: clock[0]))
     s = make_server(cache_ttl=cfg["cache_ttl"])
     await s.call("get_a", {"portfolio_id": 1})
-    clock[0] += 599
+    clock[0] += 1799
     await s.call("get_a", {"portfolio_id": 1})
-    assert len(s.session.calls) == 1  # still inside the 10 minutes
+    assert len(s.session.calls) == 1  # still inside the 30 minutes
     clock[0] += 2
     await s.call("get_a", {"portfolio_id": 1})
     assert len(s.session.calls) == 2  # expired, fetched again

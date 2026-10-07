@@ -40,7 +40,7 @@
       "slim": "sharesight",
       "gate": "portfolio",
       "max_concurrent": 1,
-      "cache_ttl": 600
+      "cache_ttl": 1800
     }
   }
 }
