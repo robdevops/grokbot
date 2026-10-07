@@ -32,6 +32,7 @@ from .features import dm_buttons, holding_news, post
 from .llm.base import Backend
 from .llm.openrouter import OpenRouterBackend
 from .llm.xai import XaiBackend
+from .llm.zai import ZaiBackend
 from .mcp.server import MCPServer, Registry
 from .store import Store
 from .telegram import commands
@@ -41,7 +42,7 @@ log = logging.getLogger("bot")
 
 
 def build_backend(st: config.Settings) -> Backend:
-    return OpenRouterBackend(st) if st.provider == "openrouter" else XaiBackend(st)
+    return {"openrouter": OpenRouterBackend, "zai": ZaiBackend, "xai": XaiBackend}[st.provider](st)
 
 
 def setup_logging() -> None:

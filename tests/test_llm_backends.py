@@ -5,6 +5,7 @@ from openai import BadRequestError
 from lib import config
 from lib.llm.openrouter import OpenRouterBackend
 from lib.llm.xai import XaiBackend
+from lib.llm.zai import ZaiBackend
 from lib.mcp.schema import ToolDef
 
 from .fakes import (
@@ -95,6 +96,44 @@ async def test_openrouter_run_search_and_empty_result(env):
     assert "returned no text" in await b.run_search("nvda")
     off = OpenRouterBackend(config.load({**env, "SEARCH": "off"}), C())
     assert await off.run_search("x") is None
+
+
+# ---- z.ai ----------------------------------------------------------------------------
+ZAI_ENV = {"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "key"}
+
+
+async def test_zai_request_shape_usage_cost_and_no_search():
+    from types import SimpleNamespace as N
+    usage = N(prompt_tokens=1_000_000, completion_tokens=1_000_000, prompt_tokens_details=N(cached_tokens=10))
+    client = FakeOpenRouterClient(Stream([or_chunk("hi", extra={"reasoning_content": "hmm"}),
+                                          or_chunk(finish="stop", usage=usage)]))
+    b = ZaiBackend(config.load(ZAI_ENV), client)
+    r = req(tools=[TOOL], search=True, cache_id="c", reasoning="low", model="glm-5.3-flash")
+    step = await b.step(b.start(r), r, tool_choice="required")
+    kw = client.kwargs[0]
+    assert step.text == "hi" and step.usage.tokens_in == 1_000_000 and step.usage.cached == 10
+    assert step.usage.cost == pytest.approx(0.65)
+    assert [t["type"] for t in kw["tools"]] == ["function"] and "tool_choice" not in kw
+    assert kw["extra_body"] == {"reasoning_effort": "low"} and "extra_headers" not in kw
+
+
+async def test_zai_none_leaves_tools_out_and_unknown_model_costs_zero():
+    client = FakeOpenRouterClient(Stream([or_chunk("x", finish="stop")]))
+    b = ZaiBackend(config.load(ZAI_ENV), client)
+    r = req(tools=[TOOL], model="glm-other")
+    step = await b.step(b.start(r), r, tool_choice="none")
+    assert "tools" not in client.kwargs[0] and step.usage.cost == 0
+
+
+async def test_zai_whole_tool_call_chunk_and_replay():
+    chunks = [or_chunk(tool_calls=[or_tc(0, "call_1", "y__q", '{"t":"NVDA"}')]), or_chunk(finish="tool_calls")]
+    b = ZaiBackend(config.load(ZAI_ENV), FakeOpenRouterClient(Stream(chunks)))
+    r = req()
+    conv = b.start(r)
+    step = await b.step(conv, r, tool_choice=None)
+    assert [(c.id, c.name, c.arguments) for c in step.calls] == [("call_1", "y__q", '{"t":"NVDA"}')]
+    b.add_results(conv, step, ["$239.24"])
+    assert conv["messages"][-1] == {"role": "tool", "tool_call_id": "call_1", "content": "$239.24"}
 
 
 # ---- xAI -----------------------------------------------------------------------------

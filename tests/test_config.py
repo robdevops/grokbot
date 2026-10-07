@@ -7,7 +7,7 @@ from lib import config
 
 
 def test_both_keys_refused():
-    with pytest.raises(config.ConfigError, match="Both"):
+    with pytest.raises(config.ConfigError, match="only one"):
         config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a", "OPENROUTER_API_KEY": "b"})
 
 
@@ -26,6 +26,8 @@ def test_provider_defaults():
     assert (x.provider, x.model, x.api_key) == ("xai", "grok-4.3", "a")
     o = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "b"})
     assert (o.provider, o.model) == ("openrouter", "z-ai/glm-5.3-flash")
+    z = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "c"})
+    assert (z.provider, z.model, z.api_key, z.search) == ("zai", "glm-5.3-flash", "c", False)
 
 
 def test_model_and_reasoning(env):

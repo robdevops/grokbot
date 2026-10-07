@@ -18,7 +18,7 @@ from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (G
    message in a group (remove and re-add it to groups it is already in). Who may use the bot is
    controlled in Telegram/BotFather; the bot itself has no allow-list.
 2. Python 3.13.5 (production; GitHub CI runs the latest stable Python and Node.js as an early warning): `pip install -r requirements.txt` (plus Node.js for npx-based MCP servers such as Yahoo Finance).
-3. Export `TELEGRAM_BOT_TOKEN` and **exactly one** of `XAI_API_KEY` or `OPENROUTER_API_KEY`.
+3. Export `TELEGRAM_BOT_TOKEN` and **exactly one** of `XAI_API_KEY`, `OPENROUTER_API_KEY` or `ZAI_API_KEY`.
 4. Optional: edit `mcp_servers.json` (see [MCP data tools](#mcp-data-tools)).
 5. `python bot.py [label]`
 
@@ -29,10 +29,12 @@ or `EnvironmentFile=` for the variables below.
 ## Providers
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
 - `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
-- **Both set, or neither: the bot refuses to start** with a message saying so.
-- `MODEL` and `REASONING` (low/medium/high) apply to either provider.
-- The two providers share all code except one adapter each (`lib/llm/xai.py` on the Responses
-  API, `lib/llm/openrouter.py` on chat completions).
+- `ZAI_API_KEY` set -> z.ai directly (default model `glm-5.3-flash`). It has **no web search** (`SEARCH` is forced off),
+  and its cost is estimated from a price table in `lib/llm/zai.py` because z.ai's usage reports none.
+- **More than one key set, or none: the bot refuses to start** with a message saying so.
+- `MODEL` and `REASONING` (low/medium/high) apply to every provider.
+- The providers share all code except one adapter each (`lib/llm/xai.py` on the Responses API;
+  `lib/llm/openrouter.py` and `lib/llm/zai.py` on chat completions, sharing `lib/llm/chat.py`).
 
 ## How it answers
 - **Groups:** the bot answers when it is @mentioned or when someone replies to one of its messages. Every message is logged;
@@ -206,12 +208,13 @@ token size of the tool definitions. The `Starting ...` line shows the git commit
 | Variable | Meaning |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
-| `XAI_API_KEY` | xAI key; selects the xAI provider. Set exactly one of the two keys. |
+| `XAI_API_KEY` | xAI key; selects the xAI provider. Set exactly one of the three keys. |
 | `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider. |
-| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter). |
+| `ZAI_API_KEY` | z.ai key; selects the z.ai provider (no web search). |
+| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai). |
 | `FAST_MODEL` | Optional cheaper/faster model used for simple requests (TOKEN_SAVER only). |
 | `REASONING` | Reasoning effort: low, medium or high; empty = the model's default. |
-| `SEARCH` | on|off. Web search (and X search on xAI). Default on. |
+| `SEARCH` | on|off. Web search (and X search on xAI); always off on z.ai. Default on. |
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
@@ -264,7 +267,7 @@ fails, it sends a Telegram message if the repository secrets `TELEGRAM_BOT_TOKEN
 Secrets and variables, Actions); without them it skips the message.
 
 ## Troubleshooting
-- **"Both XAI_API_KEY and OPENROUTER_API_KEY are set"**: set only one.
+- **"More than one API key is set"**: set only one of `XAI_API_KEY`, `OPENROUTER_API_KEY`, `ZAI_API_KEY`.
 - **The bot ignores messages in a group**: run `/setprivacy` -> Disable in @BotFather and re-add it.
 - **An MCP server shows as down**: the alert includes the server's own error (often a missing
   environment variable or `npx` not installed). Fix it and restart the bot.
