@@ -12,29 +12,29 @@ from zoneinfo import ZoneInfo
 # mention each name (tests/test_config.py enforces it).
 ENV_VARS: dict[str, str] = {
     # Common
-    "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
-    "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
-    "OPENROUTER_API_KEY": "OpenRouter key; selects the OpenRouter provider.",
-    "ZAI_API_KEY": "z.ai key; selects the z.ai provider.",
-    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai).",
+    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits and /usage; a group's chat ID gets the alerts only. Empty = neither.",
     "FAST_MODEL": "Optional cheaper/faster model used for simple requests (TOKEN_SAVER only).",
+    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai).",
+    "OPENROUTER_API_KEY": "OpenRouter key; selects the OpenRouter provider.",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
     "SEARCH": "on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on.",
-    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits and /usage; a group's chat ID gets the alerts only. Empty = neither.",
+    "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
+    "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
+    "ZAI_API_KEY": "z.ai key; selects the z.ai provider.",
     # Advanced and optional
-    "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
-    "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
-    "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
-    "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
-    "DB_PATH": "SQLite file for chat history (default chat_log.db). Instances may share it.",
     "BOT_TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
+    "DB_PATH": "SQLite file for chat history (default chat_log.db). Instances may share it.",
+    "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
+    "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "MCP_CONFIG": "MCP server config file (default mcp_servers.json; missing = no MCP tools).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
+    "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
     "POST_TO_GROUPS_FROM_DM": "on|off. Lets an admin of a group the bot is in make it post there from a DM (default off).",
-    "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
+    "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
-    "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
+    "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
+    "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
 }
 
 DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash", "zai": "glm-5.3-flash"}
