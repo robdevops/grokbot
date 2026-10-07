@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
-
-log = logging.getLogger("bot")
 
 # Every environment variable the bot reads, with a one-line description. README.md must
 # mention each name (tests/test_config.py enforces it).
@@ -152,11 +149,6 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     search = env.get("SEARCH", "on").strip().lower() != "off"
     if provider == "openrouter" and not search_model:
         search = False  # nothing to run the searches with
-    admins = _ids(env.get("ADMIN_CHAT_IDS", ""))
-    if env.get("OWNER_USER_ID", "").strip():  # merged into ADMIN_CHAT_IDS; still honoured for now
-        log.warning("OWNER_USER_ID is deprecated: add %s to ADMIN_CHAT_IDS and remove it",
-                    env["OWNER_USER_ID"].strip())
-        admins |= _ids(env["OWNER_USER_ID"])
     recipients = _pairs(env.get("SHARESIGHT_HOLDING_NEWS_RECIPIENTS", ""))
     return Settings(
         telegram_token=token,
@@ -172,7 +164,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         db_path=env.get("DB_PATH", "chat_log.db"),
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
         mcp_config=env.get("MCP_CONFIG", "mcp_servers.json"),
-        admin_chats=admins,
+        admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
         movers_bots=frozenset(
             u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "").replace(",", " ").split()
         ),

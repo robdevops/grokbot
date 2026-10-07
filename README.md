@@ -239,8 +239,6 @@ token size of the tool definitions. The `Starting ...` line shows the git commit
 | `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
 | `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
 
-`OWNER_USER_ID` (the old variable for `/credits` and `/usage`) was merged into `ADMIN_CHAT_IDS`: put that ID there. It is still read, with a startup warning, and will be removed.
-
 ## Choosing a model
 Figures from search results and Artificial Analysis at the time of writing (October 2026), so
 treat them as rough; speed varies by provider.

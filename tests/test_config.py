@@ -65,14 +65,6 @@ def test_admin_chats_and_recipients(env):
     assert s.admin_chats == {-1, -2, 3} and s.holding_news_recipients == {"bob": "me"}
 
 
-def test_owner_user_id_is_merged_into_admin_chats_with_a_warning(env, caplog):
-    s = config.load({**env, "ADMIN_CHAT_IDS": "-1", "OWNER_USER_ID": "5"})
-    assert s.admin_chats == {-1, 5}
-    assert "OWNER_USER_ID is deprecated: add 5 to ADMIN_CHAT_IDS" in caplog.text
-    caplog.clear()
-    assert config.load({**env, "OWNER_USER_ID": " "}).admin_chats == frozenset() and not caplog.text
-
-
 def test_no_names_in_code_defaults(env):
     s = config.load(env)
     assert s.holding_news_recipients == {} and s.movers_bots == frozenset() and s.portfolio_names == frozenset()
