@@ -7,7 +7,8 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - `make check`: ruff + pytest (no network, a few seconds). Run it before every commit, on Python 3.13.5 (production;
   `uv venv --python 3.13.5`). GitHub CI runs the latest stable Python and Node.js instead, to catch breakage from the next upgrade early.
 - `make prompt-report`: token breakdown of a sample request. `python bot.py [label]` runs the bot.
-- `/merge-green-prs` (`.claude/skills/merge-green-prs/SKILL.md`): check open PRs and merge the green ones from `claude/*` branches.
+- Merging: tick "Auto-merge when ready" in the PR's CI button; GitHub merges once the required `check` passes (needs "Allow auto-merge" in
+  the repo settings and `check` as a required status on `main`).
 - Tests use fakes (`tests/conftest.py`: FakeBot, user_msg; `tests/fakes.py`: ScriptedBackend,
   FakeMcp, fake SDK clients; `tests/fixtures/` real anonymised MCP output). Add a test next to the module you change;
   don't write scratch scripts.
