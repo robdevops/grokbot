@@ -6,7 +6,7 @@ from .conftest import make_msg
 
 
 def test_is_dm():
-    assert is_dm(5467329077) and not is_dm(-100) and not is_dm(-1001234567890)
+    assert is_dm(1234567890) and not is_dm(-100) and not is_dm(-1001234567890)
 
 
 def test_group_history_is_shared_between_bots(tmp_path):
@@ -19,7 +19,7 @@ def test_group_history_is_shared_between_bots(tmp_path):
 def test_dm_history_is_per_bot_and_ids_do_not_collide(tmp_path):
     a, b = Store(str(tmp_path / "x.db")), Store(str(tmp_path / "x.db"))
     a.bot_id, b.bot_id = 111, 222
-    me = 5467329077
+    me = 1234567890
     a.save(make_msg(50, "news please", chat_id=me, ts=1))
     a.save(make_msg(51, "Fresh headlines", sender="BotA", chat_id=me, ts=2))
     b.save(make_msg(10, "zeitgeist?", chat_id=me, ts=3))
@@ -69,3 +69,14 @@ def test_kv_users_news_and_usage(store):
     assert store.recent_news("bob", 0) == ["• A: thing happened"]
     store.add_usage(-1, "m", "chat", 2, 1000, 400, 50, 0.01)
     assert store.usage_summary(0)[0][:5] == ("m", 1, 1000, 400, 50)
+
+
+def test_writes_are_committed_immediately(tmp_path):
+    path = str(tmp_path / "shared.db")
+    first = Store(path)
+    first.bot_id = 7
+    first.kv_set("k", "v")
+    first.remember_chat(-1, "Group")
+    second = Store(path)  # another process sharing the file sees the writes without any explicit commit
+    second.bot_id = 7
+    assert second.kv_get("k") == "v" and second.chats() == [(-1, "Group")]

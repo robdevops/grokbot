@@ -55,7 +55,7 @@ class Store:
     serialised by a lock; results are fetched under it."""
 
     def __init__(self, path: str):
-        self._conn = sqlite3.connect(path, check_same_thread=False, timeout=30)
+        self._conn = sqlite3.connect(path, check_same_thread=False, timeout=30, autocommit=True)
         self._lock = threading.RLock()
         self.bot_id: int | None = None  # set once the bot has started (DMs are stored per bot)
         self._run("PRAGMA journal_mode=WAL")
@@ -65,14 +65,10 @@ class Store:
             self._conn.execute(
                 "DELETE FROM holding_news WHERE length(text) < 40 AND upper(text) LIKE '%NOTHING%'"
             )
-            self._conn.commit()
 
-    def _run(self, sql: str, params=(), commit: bool = False) -> list[tuple]:
+    def _run(self, sql: str, params=()) -> list[tuple]:
         with self._lock:
-            rows = self._conn.execute(sql, params).fetchall()
-            if commit:
-                self._conn.commit()
-            return rows
+            return self._conn.execute(sql, params).fetchall()
 
     def _own_id(self) -> int:
         if self.bot_id is None:
@@ -88,15 +84,15 @@ class Store:
         )
         if is_dm(msg.chat_id):
             self._run("INSERT OR REPLACE INTO dm_messages VALUES (?,?,?,?,?,?,?)",
-                      (self._own_id(), *row), commit=True)
+                      (self._own_id(), *row))
         else:
-            self._run("INSERT OR REPLACE INTO messages VALUES (?,?,?,?,?,?)", row, commit=True)
+            self._run("INSERT OR REPLACE INTO messages VALUES (?,?,?,?,?,?)", row)
 
     def remember_chat(self, chat_id: int, title: str) -> None:
-        self._run("INSERT OR REPLACE INTO chats VALUES (?,?,?)", (chat_id, title, int(time.time())), commit=True)
+        self._run("INSERT OR REPLACE INTO chats VALUES (?,?,?)", (chat_id, title, int(time.time())))
 
     def forget_chat(self, chat_id: int) -> None:
-        self._run("DELETE FROM chats WHERE chat_id=?", (chat_id,), commit=True)
+        self._run("DELETE FROM chats WHERE chat_id=?", (chat_id,))
 
     def chats(self) -> list[tuple[int, str]]:
         return [(r[0], r[1]) for r in self._run("SELECT chat_id, title FROM chats")]
@@ -129,8 +125,7 @@ class Store:
     def remember_user(self, msg: Message) -> None:
         u = msg.from_user
         if u and u.username and not u.is_bot:
-            self._run("INSERT OR REPLACE INTO users VALUES (?, ?)", (u.username.lower(), u.id),
-                      commit=True)
+            self._run("INSERT OR REPLACE INTO users VALUES (?, ?)", (u.username.lower(), u.id))
 
     def user_id_for(self, username: str) -> int | None:
         rows = self._run("SELECT user_id FROM users WHERE username = ?", (username.lower(),))
@@ -142,7 +137,7 @@ class Store:
         return rows[0][0] if rows else None
 
     def kv_set(self, key: str, value: str) -> None:
-        self._run("INSERT OR REPLACE INTO kv VALUES (?,?,?)", (self._own_id(), key, value), commit=True)
+        self._run("INSERT OR REPLACE INTO kv VALUES (?,?,?)", (self._own_id(), key, value))
 
     # -- holding news ------------------------------------------------------------------
     def recent_news(self, username: str, since_ts: int) -> list[str]:
@@ -151,8 +146,7 @@ class Store:
         return [r[0] for r in rows]
 
     def add_news(self, username: str, text: str) -> None:
-        self._run("INSERT INTO holding_news VALUES (?,?,?)", (username, int(time.time()), text),
-                  commit=True)
+        self._run("INSERT INTO holding_news VALUES (?,?,?)", (username, int(time.time()), text))
 
     def muted_codes(self, username: str) -> set[str]:
         rows = self._run("SELECT code FROM holding_news_mutes WHERE username = ?", (username,))
@@ -160,15 +154,14 @@ class Store:
 
     def set_muted(self, username: str, code: str, muted: bool) -> None:
         if muted:
-            self._run("INSERT OR IGNORE INTO holding_news_mutes VALUES (?,?)", (username, code),
-                      commit=True)
+            self._run("INSERT OR IGNORE INTO holding_news_mutes VALUES (?,?)", (username, code))
         else:
             self._run("DELETE FROM holding_news_mutes WHERE username = ? AND code = ?",
-                      (username, code), commit=True)
+                      (username, code))
 
     def remember_news_message(self, chat_id: int, message_id: int, codes: list[str]) -> None:
         self._run("INSERT OR REPLACE INTO holding_news_msgs VALUES (?,?,?)",
-                  (chat_id, message_id, ",".join(codes)), commit=True)
+                  (chat_id, message_id, ",".join(codes)))
 
     def news_message_codes(self, chat_id: int, message_id: int) -> list[str]:
         rows = self._run("SELECT codes FROM holding_news_msgs WHERE chat_id = ? AND message_id = ?",
@@ -180,7 +173,7 @@ class Store:
                   tokens_in: int, tokens_cached: int, tokens_out: int, cost: float) -> None:
         self._run("INSERT INTO usage VALUES (?,?,?,?,?,?,?,?,?,?)",
                   (int(time.time()), self.bot_id or 0, chat_id, model, kind, rounds,
-                   tokens_in, tokens_cached, tokens_out, cost), commit=True)
+                   tokens_in, tokens_cached, tokens_out, cost))
 
     def usage_summary(self, since_ts: int) -> list[tuple]:
         """(model, requests, tokens_in, tokens_cached, tokens_out, cost) per model since a time."""

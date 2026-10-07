@@ -17,7 +17,7 @@ from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (G
 1. Create a bot with @BotFather. Run `/setprivacy` and choose **Disable**, so the bot sees every
    message in a group (remove and re-add it to groups it is already in). Who may use the bot is
    controlled in Telegram/BotFather; the bot itself has no allow-list.
-2. `pip install -r requirements.txt` (plus Node.js for npx-based MCP servers such as Yahoo Finance).
+2. Python 3.13 (CI runs 3.13.5): `pip install -r requirements.txt` (plus Node.js for npx-based MCP servers such as Yahoo Finance).
 3. Export `TELEGRAM_BOT_TOKEN` and **exactly one** of `XAI_API_KEY` or `OPENROUTER_API_KEY`.
 4. Optional: edit `mcp_servers.json` (see [MCP data tools](#mcp-data-tools)).
 5. `python bot.py [label]`
@@ -197,7 +197,7 @@ different label (`python bot.py grok`, `python bot.py mimo`) to tell them apart 
 
 ## Logs
 One line per event, without a timestamp when run under systemd (journald adds one):
-`[Jane Doe (@jane) 5467329077] first 60 characters of the message ...` (groups add ` @ <chat id>`),
+`[Jane Doe (@jane) 1234567890] first 60 characters of the message ...` (groups add ` @ <chat id>`),
 `Round 2: in 14158 (7400 cached) out 738, stop`, and a per-request summary with rounds, tool calls,
 tokens, cached % and cost. Tool servers log their tools in short wrapped lines; startup logs the
 token size of the tool definitions. The `Starting ...` line shows the git commit the checkout is on.
