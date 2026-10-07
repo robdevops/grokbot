@@ -222,16 +222,16 @@ Set exactly one of the three keys.
 | `REASONING` | Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off). |
 | `SEARCH` | on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on. |
 
-### Telegram settings
+### Common settings
 | Variable | Meaning |
 |---|---|
-| `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/credits` and `/usage`; a group's chat ID gets the down-server messages only. Empty (default) = no alerts and no admin commands. |
+| `BOT_TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
 
 ### Advanced and optional
 | Variable | Meaning |
 |---|---|
-| `BOT_TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
+| `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/credits` and `/usage`; a group's chat ID gets the down-server messages only. Empty (default) = no alerts and no admin commands. |
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
