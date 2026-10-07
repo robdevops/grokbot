@@ -84,7 +84,8 @@ Per-server keys: `command`/`args`/`env` (local, stdio) or `url`/`headers` (remot
 `allowed_tools` (an explicit allow-list); `disabled`; `max_concurrent` (default 4, stops a 20-stock
 request hammering Yahoo); `cache_ttl` seconds during which identical calls share one result (0 =
 off); `slim` (result slimming, defaults to the server's name; `sharesight` flattens holdings);
-`gate` (`portfolio` = only offered when the question is about portfolios/holdings);
+`hide_params` (optional parameters kept out of the tool definition because the model never needs them,
+saving tokens every round; a required parameter is never hidden); `gate` (`portfolio` = only offered when the question is about portfolios/holdings);
 `current_holdings_only` (Sharesight: never include sold holdings).
 - **Tool names are exact:** `blocked_tools` and `allowed_tools` take the server's real tool names, as
   printed in the startup log (`get_analyst_estimates`, not `analyst_estimates`). An entry that matches

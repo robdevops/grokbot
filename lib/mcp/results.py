@@ -26,7 +26,7 @@ def is_open(h) -> bool:
 # objects, logos...). Keep only what's useful, flattened, so a big portfolio
 # fits in one tool result.
 HOLDING_KEEP = (
-    "id", "quantity", "value", "instrument_price", "average_purchase_price",
+    "quantity", "value", "instrument_price", "average_purchase_price",
     "capital_gain", "capital_gain_percent", "payout_gain", "payout_gain_percent",
     "currency_gain", "total_gain", "total_gain_percent", "inception_date",
     "group_name", "cost_base", "values_over_time",
@@ -64,6 +64,9 @@ def clean_name(name, code: str | None = None):
     return name
 
 
+TYPE_SHORT = {"Exchange Traded Fund": "ETF", "Depository Receipt": "ADR"}
+
+
 def slim_holding(h):
     if not isinstance(h, dict):
         return h
@@ -79,7 +82,8 @@ def slim_holding(h):
     out.update({k: h.get(k) for k in HOLDING_KEEP})
     if out.get("type") == "Ordinary Shares":    # the default; only say when it's something else
         del out["type"]
-    if out.get("group_name") == "All Holdings": # ungrouped report
+    out["type"] = TYPE_SHORT.get(out.get("type"), out.get("type"))
+    if out.get("group_name") in ("All Holdings", out.get("market")):  # ungrouped, or just the market again
         del out["group_name"]
     return {k: v for k, v in out.items() if v not in (None, [], {})}
 
@@ -135,6 +139,9 @@ def tidy_sharesight(text: str, drop_closed: bool = False) -> str:
             if report.get("grouping") == "ungrouped":
                 report.pop("grouping")
                 report.pop("sub_totals", None)  # one group, same as the report totals
+            if isinstance(report.get("sub_totals"), list):
+                report["sub_totals"] = [{k: v for k, v in s.items() if k != "group_id"}
+                                        for s in report["sub_totals"] if isinstance(s, dict)]
             if isinstance(report.get("cash_accounts"), list):
                 report["cash_accounts"] = [
                     {

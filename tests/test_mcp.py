@@ -208,3 +208,11 @@ def test_squeeze_tables_drops_padding_and_rule_rows_and_shortens_numbers():
         "|Code|9988.HK|1.23457M|\n\nplain text 1.5e+11 stays")
     assert slim_result("no tables here, 1.5e+11", "yahoo") == "no tables here, 1.5e+11"
     assert slim_result("{\"a\": 1.23456789}", "yahoo") == '{"a":1.23457}'  # JSON is still handled as before
+
+
+def test_compact_schema_hides_listed_params_but_never_required_ones_and_drops_schema_noise():
+    schema = {"$schema": "http://json-schema.org/draft-07/schema#", "type": "object", "additionalProperties": False,
+              "properties": {"a": {"type": "string"}, "b": {"type": "string"}, "c": {"type": "string"}},
+              "required": ["a"]}
+    out = compact_schema(schema, hide=frozenset({"a", "b"}))
+    assert set(out["properties"]) == {"a", "c"} and "$schema" not in out and "additionalProperties" not in out

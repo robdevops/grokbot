@@ -41,12 +41,16 @@ def test_real_performance_report_is_flattened_to_a_fraction_of_its_size(key):
     text = (FIX / "sharesight" / f"performance_report_{key}.json").read_text()
     slim = slim_result(text, "sharesight", drop_closed=True)
     report, original = json.loads(slim)["report"], json.loads(text)["report"]
-    assert len(slim) < len(text) / 5
+    assert len(slim) < len(text) / 8
     rows = table_records(report["holdings"])
     assert [(r["code"], r["quantity"], r["value"]) for r in rows] == [
         (h["instrument"]["code"], h["quantity"], h["value"]) for h in original["holdings"]]
     assert report["value"] == original["value"] and report["total_gain"] == original["total_gain"]
     assert "logo" not in slim and "light_url" not in slim  # the bulky per-instrument extras are gone
+    holdings = json.loads(slim)["report"]["holdings"]
+    assert "id" not in holdings["columns"] and "group_name" not in holdings["columns"]  # internal ID; market again
+    assert {r["type"] for r in rows if r.get("type")} == {"ETF", "ADR"}  # shortened; plain shares say nothing
+    assert all("group_id" not in s for s in json.loads(slim)["report"]["sub_totals"])
 
 
 class SharesightFixtures(FakeMcp):
@@ -68,6 +72,18 @@ async def test_holding_news_reads_current_holdings_from_real_shaped_reports():
     only_beta = await holding_news.current_holdings(SharesightFixtures("sharesight"), ["beta smsf"])
     assert set(only_beta) < set(holdings) and "GNP (ASX)" not in only_beta
     assert await holding_news.current_holdings(SharesightFixtures("sharesight"), ["no such portfolio"]) == {}
+
+
+def test_sharesight_tool_definitions_hide_the_parameters_the_model_never_needs():
+    cfg = json.loads((FIX.parent.parent / "mcp_servers.json").read_text())["mcpServers"]["sharesight"]
+    tools = {t["name"]: t for t in json.loads((FIX / "sharesight" / "tools.json").read_text())}
+    hide = frozenset(cfg["hide_params"])
+    report = compact_schema(tools["get_performance_report"]["inputSchema"], hide=hide)
+    assert set(report["properties"]) == {"portfolio_id", "start_date", "end_date", "grouping", "benchmark_code"}
+    assert report["required"] == ["portfolio_id"]
+    assert compact_schema(tools["list_portfolios"]["inputSchema"], hide=hide)["properties"] == {}
+    sizes = [len(json.dumps(compact_schema(t["inputSchema"], hide=hide))) for t in tools.values()]
+    assert sum(sizes) < 700  # was ~1,300 characters
 
 
 @pytest.mark.parametrize("server", ["sharesight", "yahoo"])
