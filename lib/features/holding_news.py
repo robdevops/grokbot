@@ -9,6 +9,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta
+from itertools import batched
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.error import Forbidden
@@ -53,8 +54,7 @@ def news_codes(news: str, holdings: dict[str, str]) -> list[str]:
 
 
 def unsubscribe_menu(codes: list[str]) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(c, callback_data=f"hn:mute:{c}") for c in codes[i:i + 3]]
-            for i in range(0, len(codes), 3)]
+    rows = [[InlineKeyboardButton(c, callback_data=f"hn:mute:{c}") for c in row] for row in batched(codes, 3, strict=False)]
     rows.append([InlineKeyboardButton("All holding news", callback_data="hn:mute:*")])
     rows.append([InlineKeyboardButton("Cancel", callback_data="hn:cancel")])
     return InlineKeyboardMarkup(rows)

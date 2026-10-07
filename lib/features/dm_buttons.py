@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import logging
+from itertools import batched
 
 from telegram import ReplyKeyboardMarkup
 from telegram.constants import ParseMode
@@ -29,7 +30,7 @@ PUSH_DELAY = 0.1  # seconds between startup messages (Telegram allows ~30 per se
 
 def keyboard() -> ReplyKeyboardMarkup:
     labels = list(PRESETS)
-    return ReplyKeyboardMarkup([labels[i:i + 2] for i in range(0, len(labels), 2)],
+    return ReplyKeyboardMarkup([list(row) for row in batched(labels, 2, strict=False)],
                                resize_keyboard=True, is_persistent=True)
 
 
