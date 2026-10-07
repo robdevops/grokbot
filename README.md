@@ -60,7 +60,7 @@ or `EnvironmentFile=` for the variables below.
 ## Search
 - **xAI:** server-side `web_search` and `x_search` (X/Twitter) tools.
 - **OpenRouter:** OpenRouter's `web_search` tool; when it hands a search call back, the bot runs the
-  query through `SEARCH_MODEL` (default `xiaomi/mimo-v2.6-flash:online`) and returns the write-up.
+  query through `SEARCH_MODEL` (default `xiaomi/mimo-v2.6-flash:online`) and returns the write-up; that call's cost is added to the answer's cost.
   Some models print a search call as text instead of making it; the bot recovers those queries too.
 - At most 5 searches per round; extras get a "skipped" note.
 - `SEARCH=off` turns search off (the prompt then says the model has no web search).

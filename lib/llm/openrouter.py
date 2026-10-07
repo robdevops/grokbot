@@ -9,7 +9,7 @@ from openai import AsyncOpenAI
 
 from .. import config
 from ..config import Settings
-from .base import Request
+from .base import Request, Usage
 from .chat import ChatBackend
 
 log = logging.getLogger("bot")
@@ -83,14 +83,16 @@ class OpenRouterBackend(ChatBackend):
     def _cost(self, usage_obj, model: str) -> float:
         return float(getattr(usage_obj, "cost", 0) or 0)
 
-    async def run_search(self, query: str) -> str | None:
+    async def run_search(self, query: str, usage: Usage, args: dict) -> str | None:
         """Run one search through the cheap ':online' search model and return what it found."""
         if not (self.st.search and self.st.search_model):
             return None
         log.info("Search: %s", query)
         resp = await self.client.chat.completions.create(
             model=self.st.search_model, max_tokens=config.SEARCH_TOKENS, temperature=0.2,
-            messages=[{"role": "system", "content": SEARCH_PROMPT}, {"role": "user", "content": query}])
+            messages=[{"role": "system", "content": SEARCH_PROMPT}, {"role": "user", "content": query}],
+            extra_body={"usage": {"include": True}})
+        usage.cost += self._cost(resp.usage, self.st.search_model)  # the search model's own bill
         text = (resp.choices[0].message.content or "").strip()
         if not text:
             log.warning("Search model returned no text for %r (finish_reason=%s)",

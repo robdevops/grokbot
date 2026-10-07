@@ -98,9 +98,10 @@ class Backend:
         """Append a plain user turn (used to hand recovered search results back)."""
         raise NotImplementedError
 
-    async def run_search(self, query: str) -> str | None:
-        """Run a search the model handed back as a function call; None if the provider runs
-        searches server-side (then a stray search call is simply unavailable)."""
+    async def run_search(self, query: str, usage: Usage, args: dict) -> str | None:
+        """Run a search the model handed back as a function call (`args` are its parsed
+        arguments) and add the search's own cost to `usage`; None if the provider runs searches
+        server-side (then a stray search call is simply unavailable)."""
         return None
 
     async def credits(self) -> str | None:

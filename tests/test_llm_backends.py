@@ -3,6 +3,7 @@ import pytest
 from openai import BadRequestError
 
 from lib import config
+from lib.llm.base import Usage
 from lib.llm.openrouter import OpenRouterBackend
 from lib.llm.xai import XaiBackend
 from lib.mcp.schema import ToolDef
@@ -79,8 +80,8 @@ async def test_openrouter_provider_error_in_stream_raises(env):
 async def test_openrouter_run_search_and_empty_result(env):
     from types import SimpleNamespace as N
 
-    def reply(text, finish="stop"):
-        return N(choices=[N(message=N(content=text), finish_reason=finish)])
+    def reply(text, finish="stop", cost=0.002):
+        return N(choices=[N(message=N(content=text), finish_reason=finish)], usage=N(cost=cost))
 
     class C:
         def __init__(self, *replies):
@@ -91,10 +92,12 @@ async def test_openrouter_run_search_and_empty_result(env):
             return self.replies.pop(0)
 
     b = OpenRouterBackend(config.load(env), C(reply("- NVDA 100 [Reuters]"), reply("", "length")))
-    assert await b.run_search("nvda") == "- NVDA 100 [Reuters]"
-    assert "returned no text" in await b.run_search("nvda")
+    spent = Usage()
+    assert await b.run_search("nvda", spent, {}) == "- NVDA 100 [Reuters]"
+    assert "returned no text" in await b.run_search("nvda", spent, {})
+    assert spent.cost == pytest.approx(0.004)  # the search model's cost is counted, even when empty
     off = OpenRouterBackend(config.load({**env, "SEARCH": "off"}), C())
-    assert await off.run_search("x") is None
+    assert await off.run_search("x", Usage(), {}) is None
 
 
 # ---- xAI -----------------------------------------------------------------------------

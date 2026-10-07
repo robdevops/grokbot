@@ -28,14 +28,18 @@ WRITE_NOW = "Write the answer now, from the tool results above. Keep any thinkin
 TOO_MANY_SEARCHES = "Skipped: too many searches at once. Use what you already have."
 
 
-def call_query(arguments: str) -> str:
-    """The search string in a tool call's JSON arguments, whatever the model named the field."""
+def call_args(arguments: str) -> dict:
+    """A tool call's JSON arguments as a dict ({} if they aren't a JSON object)."""
     try:
         args = json.loads(arguments or "{}")
     except ValueError:
-        return ""
-    if not isinstance(args, dict):
-        return ""
+        return {}
+    return args if isinstance(args, dict) else {}
+
+
+def call_query(arguments: str) -> str:
+    """The search string in a tool call's JSON arguments, whatever the model named the field."""
+    args = call_args(arguments)
     for key in ("query", "q", "search_query", "keywords", "input"):
         if args.get(key):
             return str(args[key])
@@ -93,19 +97,19 @@ async def _run_local(call: Call, fn) -> str:
         return f"Error: {type(e).__name__}: {e}"
 
 
-async def _run_search(call: Call, backend: Backend) -> str:
+async def _run_search(call: Call, backend: Backend, usage: Usage) -> str:
     query = call_query(call.arguments)
     if not query:
         return "Search call had no usable query (expected JSON with a 'query' field)."
     try:
-        result = await backend.run_search(query)
+        result = await backend.run_search(query, usage, call_args(call.arguments))
     except Exception as e:
         return f"Search failed: {e}"
     return result if result is not None else f"Error: tool {call.name} isn't available."
 
 
 async def run_calls(calls: list[Call], backend: Backend, registry: Registry, req: Request,
-                    seen: dict[tuple[str, str], int], dedupe: bool) -> list[str]:
+                    seen: dict[tuple[str, str], int], dedupe: bool, usage: Usage) -> list[str]:
     """Reply to every call the model made: offered MCP tools, searches the provider handed
     back (capped), repeats of an earlier call (a short note when `dedupe`), or an error note."""
     offered = {t.name for t in req.tools}
@@ -123,7 +127,7 @@ async def run_calls(calls: list[Call], backend: Backend, registry: Registry, req
         else:
             searches += 1
             jobs.append(_note(TOO_MANY_SEARCHES) if searches > config.MAX_SEARCHES
-                        else _run_search(c, backend))
+                        else _run_search(c, backend, usage))
         seen[key] = seen.get(key, 0) + 1
     return list(await asyncio.gather(*jobs))
 
@@ -142,12 +146,12 @@ async def _step(backend: Backend, conv, req: Request, choice: str | None) -> Ste
         return await backend.step(conv, req, tool_choice=None)
 
 
-async def _recover_fake_calls(step: Step, backend: Backend) -> str | None:
+async def _recover_fake_calls(step: Step, backend: Backend, usage: Usage) -> str | None:
     """A model that prints a search call as text: run its queries and return the nudge message."""
     queries = [q.strip() for q in FAKE_CALL_RE.findall(step.text) if q.strip()][:config.MAX_SEARCHES]
     if not queries:
         return None
-    results = await asyncio.gather(*(backend.run_search(q) for q in queries), return_exceptions=True)
+    results = await asyncio.gather(*(backend.run_search(q, usage, {}) for q in queries), return_exceptions=True)
     if all(r is None for r in results):
         return None  # this provider runs searches itself; there's nothing to recover
     parts = []
@@ -181,10 +185,10 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
             break
         if step.calls:
             tool_calls += len(step.calls)
-            results = await run_calls(step.calls, backend, registry, req, seen, dedupe)
+            results = await run_calls(step.calls, backend, registry, req, seen, dedupe, total)
             backend.add_results(conv, step, results)
             continue
-        nudge = await _recover_fake_calls(step, backend) if req.search else None
+        nudge = await _recover_fake_calls(step, backend, total) if req.search else None
         if nudge:
             backend.add_user_message(conv, nudge)
             req = dataclasses.replace(req, search=False)  # recovery happens once
