@@ -209,18 +209,24 @@ tokens, cached % and cost. Tool servers log their tools in short wrapped lines; 
 token size of the tool definitions. The `Starting ...` line shows the git commit the checkout is on.
 
 ## Environment variables
-### Common settings
+### Model settings
+Set exactly one of the three keys.
+
+| Variable | Meaning |
+|---|---|
+| `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider (default model `z-ai/glm-5.3-flash`). |
+| `XAI_API_KEY` | xAI key; selects the xAI provider (default model `grok-4.3`). |
+| `ZAI_API_KEY` | z.ai key; selects the z.ai provider (default model `glm-5.3-flash`). |
+| `FAST_MODEL` | Optional cheaper/faster model used for simple requests (TOKEN_SAVER only). |
+| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai). |
+| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off). |
+| `SEARCH` | on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on. |
+
+### Telegram settings
 | Variable | Meaning |
 |---|---|
 | `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/credits` and `/usage`; a group's chat ID gets the down-server messages only. Empty (default) = no alerts and no admin commands. |
-| `FAST_MODEL` | Optional cheaper/faster model used for simple requests (TOKEN_SAVER only). |
-| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai). |
-| `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider. |
-| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off). |
-| `SEARCH` | on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on. |
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
-| `XAI_API_KEY` | xAI key; selects the xAI provider. Set exactly one of the three keys. |
-| `ZAI_API_KEY` | z.ai key; selects the z.ai provider. |
 
 ### Advanced and optional
 | Variable | Meaning |
