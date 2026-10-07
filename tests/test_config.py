@@ -59,8 +59,8 @@ def test_search_off_without_search_model(env):
 
 
 def test_admin_chats_and_recipients(env):
-    s = config.load({**env, "ADMIN_CHAT_IDS": "-1, -2 3", "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Alex:@Me"})
-    assert s.admin_chats == {-1, -2, 3} and s.holding_news_recipients == {"alex": "me"}
+    s = config.load({**env, "ADMIN_CHAT_IDS": "-1, -2 3", "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:@Me"})
+    assert s.admin_chats == {-1, -2, 3} and s.holding_news_recipients == {"bob": "me"}
 
 
 def test_no_names_in_code_defaults(env):
@@ -69,9 +69,9 @@ def test_no_names_in_code_defaults(env):
 
 
 def test_portfolio_names_default_to_the_recipients_portfolios_and_can_be_overridden(env):
-    base = {**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Alex:me, AlexSMSF:me"}
-    assert config.load(base).portfolio_names == {"alex", "alexsmsf"}
-    assert config.load({**base, "PORTFOLIO_NAMES": "Family Trust, Alex"}).portfolio_names == {"family trust", "alex"}
+    base = {**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:me, BobSMSF:me"}
+    assert config.load(base).portfolio_names == {"bob", "bobsmsf"}
+    assert config.load({**base, "PORTFOLIO_NAMES": "Family Trust, Bob"}).portfolio_names == {"family trust", "bob"}
 
 
 def test_movers_bots_normalised(env):

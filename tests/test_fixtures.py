@@ -81,12 +81,24 @@ def test_real_tool_definitions_survive_the_schema_diet(server):
         assert 0 < len(compact_description(t["description"])) <= len(t["description"])
 
 
-def test_real_yahoo_results_are_markdown_so_slimming_leaves_them_alone():
+def test_real_yahoo_results_are_markdown_tables_squeezed_and_other_text_left_alone():
     files = sorted((FIX / "yahoo").glob("*.txt"))
     assert len(files) >= 8
     for f in files:
         text = f.read_text().rstrip("\n")
-        assert slim_result(text, "yahoo") == text  # not JSON, so passed through unchanged
+        slim = slim_result(text, "yahoo")
+        assert (len(slim) < len(text)) if "\n|" in text else (slim == text)
+
+
+def test_nvda_financial_statements_fit_the_tool_result_cap_with_margin(settings):
+    text = (FIX / "yahoo" / "get_financial_statements__NVDA.txt").read_text().rstrip("\n")
+    slim = slim_result(text, "yahoo")
+    assert len(text) > settings.max_tool_output  # as captured it would be cut off mid-table
+    assert len(slim) < settings.max_tool_output * 0.6  # squeezed: whole statements fit, with room to spare
+    assert "|Net Income|120.067B|72.88B|29.76B|4.368B|-|" in slim
+    assert not any(bad in slim for bad in ("00:00:00", "|nan|", "---", "  "))
+    assert [h for h in slim.splitlines() if h.startswith("## ")] == [
+        "## Income Statement (Annual)", "## Balance Sheet (Annual)", "## Cash Flow Statement (Annual)"]
 
 
 def test_real_yahoo_error_and_empty_news_results():

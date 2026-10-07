@@ -177,7 +177,8 @@ Each answer's log line shows the cached percentage.
 - **Smaller tool definitions:** descriptions cut to 220 characters, parameter descriptions to their
   first sentence, titles/defaults/examples dropped.
 - **Smaller results:** floats rounded to 6 significant digits, long price series thinned to 60
-  points, Sharesight holdings flattened into tables, results capped at 12,000 characters; an
+  points, Sharesight holdings flattened into tables, markdown tables (Yahoo) squeezed (padding and rule
+  rows dropped, `1.20067e+11` shown as `120.067B`, NaN as `-`), results capped at 12,000 characters; an
   identical call within one request gets a short "same as earlier" note instead of a second copy;
   `cache_ttl` shares results between concurrent users.
 - **Compact history:** stored HTML is shown to the model as plain text (ticker links become the

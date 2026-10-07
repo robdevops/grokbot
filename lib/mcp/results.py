@@ -192,13 +192,50 @@ def diet(node):
     return node
 
 
+TABLE_NUMBER = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?|[+-]?(?:nan|inf)", re.IGNORECASE)
+TABLE_RULE = re.compile(r":?-+:?")
+UNITS = ((1e12, "T"), (1e9, "B"), (1e6, "M"))
+
+
+def _cell(cell: str) -> str:
+    """One markdown table cell: numbers to 6 significant digits (1.20067e+11 -> 120.067B), NaN to "-",
+    and a midnight timestamp to its date."""
+    cell = cell.strip()
+    if cell.endswith(" 00:00:00"):
+        return cell[:-9]
+    if not TABLE_NUMBER.fullmatch(cell):
+        return cell
+    value = float(cell)
+    if value != value:
+        return "-"
+    for limit, unit in UNITS:
+        if abs(value) >= limit:
+            return f"{value / limit:.{SIG_DIGITS}g}{unit}"
+    return f"{value:.{SIG_DIGITS}g}"
+
+
+def squeeze_tables(text: str) -> str:
+    """Compact the padded markdown tables some servers return (Yahoo's statements are mostly spaces,
+    separator dashes and 12-digit numbers): drop the padding and the separator row, shorten numbers."""
+    lines = []
+    for line in text.split("\n"):
+        if not line.startswith("|"):
+            lines.append(line)
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if all(TABLE_RULE.fullmatch(c) for c in cells if c) and any(cells):
+            continue
+        lines.append("|" + "|".join(_cell(c) for c in cells) + "|")
+    return "\n".join(lines)
+
+
 def slim_result(text: str, kind: str | None, drop_closed: bool = False) -> str:
-    """Compact a JSON tool result: server-specific flattening, then rounding/down-sampling.
-    Anything that isn't JSON is returned unchanged."""
+    """Compact a tool result. JSON: server-specific flattening, then rounding/down-sampling. Markdown
+    tables are squeezed; any other text is returned unchanged."""
     try:
         data = json.loads(text)
     except ValueError:
-        return text
+        return squeeze_tables(text) if "\n|" in text else text
     if kind == "sharesight":
         data = json.loads(tidy_sharesight(json.dumps(data), drop_closed))
     return json.dumps(diet(data), separators=(",", ":"), ensure_ascii=False)

@@ -30,7 +30,7 @@ def store(tmp_path):
     return s
 
 
-def make_msg(mid, text, sender="Alex", chat_id=-100, ts=1, reply_to=None, username=None,
+def make_msg(mid, text, sender="Bob", chat_id=-100, ts=1, reply_to=None, username=None,
              is_bot=False, chat_title=None, **extra):
     """A minimal fake telegram.Message."""
     media = dict(photo=None, video=None, animation=None, voice=None, video_note=None, audio=None,
@@ -84,9 +84,9 @@ class FakeBot:
         self.drafts.append(text)
 
 
-def user_msg(bot: FakeBot, text, *, chat_id=-100, mid=1, sender="Alex", user_id=5, **kw):
+def user_msg(bot: FakeBot, text, *, chat_id=-100, mid=1, sender="Bob", user_id=5, **kw):
     """A message from a person that records bot replies in `.replies`."""
-    m = make_msg(mid, text, sender=sender, chat_id=chat_id, username="alex", **kw)
+    m = make_msg(mid, text, sender=sender, chat_id=chat_id, username="bob", **kw)
     m.from_user.id = user_id
     m.replies = []
 
