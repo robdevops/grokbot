@@ -102,27 +102,59 @@ async def test_openrouter_run_search_and_empty_result(env):
 ZAI_ENV = {"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "key"}
 
 
-async def test_zai_request_shape_usage_cost_and_no_search():
+async def test_zai_request_shape_usage_cost_and_search_tool():
     from types import SimpleNamespace as N
     usage = N(prompt_tokens=1_000_000, completion_tokens=1_000_000, prompt_tokens_details=N(cached_tokens=10))
     client = FakeOpenRouterClient(Stream([or_chunk("hi", extra={"reasoning_content": "hmm"}),
                                           or_chunk(finish="stop", usage=usage)]))
     b = ZaiBackend(config.load(ZAI_ENV), client)
-    r = req(tools=[TOOL], search=True, cache_id="c", reasoning="low", model="glm-5.3-flash")
+    r = req(tools=[TOOL], search=True, cache_id="c", model="glm-5.3-flash")
     step = await b.step(b.start(r), r, tool_choice="required")
     kw = client.kwargs[0]
     assert step.text == "hi" and step.usage.tokens_in == 1_000_000 and step.usage.cached == 10
     assert step.usage.cost == pytest.approx(0.65)
-    assert [t["type"] for t in kw["tools"]] == ["function"] and "tool_choice" not in kw
-    assert kw["extra_body"] == {"reasoning_effort": "low"} and "extra_headers" not in kw
+    assert [t["function"]["name"] for t in kw["tools"]] == ["web_search", "yahoo__q"]
+    assert "tool_choice" not in kw and "extra_headers" not in kw
+    assert kw["extra_body"] == {"reasoning_effort": "low"}  # the default
 
 
-async def test_zai_none_leaves_tools_out_and_unknown_model_costs_zero():
-    client = FakeOpenRouterClient(Stream([or_chunk("x", finish="stop")]))
+async def test_zai_reasoning_maps_to_its_efforts_and_none_leaves_tools_out():
+    client = FakeOpenRouterClient(Stream([or_chunk("x", finish="stop")]), Stream([or_chunk("y", finish="stop")]))
     b = ZaiBackend(config.load(ZAI_ENV), client)
-    r = req(tools=[TOOL], model="glm-other")
+    r = req(tools=[TOOL], search=True, reasoning="medium", model="glm-other")
     step = await b.step(b.start(r), r, tool_choice="none")
-    assert "tools" not in client.kwargs[0] and step.usage.cost == 0
+    assert "tools" not in client.kwargs[0] and client.kwargs[0]["extra_body"] == {"reasoning_effort": "high"}
+    assert step.usage.cost == 0
+    r = req(reasoning="high")
+    await b.step(b.start(r), r, tool_choice=None)
+    assert client.kwargs[1]["extra_body"] == {"reasoning_effort": "high"} and "tools" not in client.kwargs[1]
+
+
+async def test_zai_run_search_uses_the_search_api():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"], seen["auth"], seen["body"] = str(request.url), request.headers["authorization"], request.read()
+        return httpx.Response(200, json={"search_result": [
+            {"title": "NVDA close", "link": "https://x.test/a", "content": "closed at $238.90", "publish_date": ""},
+            {"title": "News", "link": "https://x.test/b", "content": "c" * 900, "publish_date": "2026-10-06"}]})
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    b = ZaiBackend(config.load(ZAI_ENV), FakeOpenRouterClient(), http)
+    out = await b.run_search("nvda close")
+    assert seen["url"].endswith("/paas/v4/web_search") and seen["auth"] == "Bearer key"
+    assert b"search-prime" in seen["body"] and b"nvda close" in seen["body"]
+    lines = out.splitlines()
+    assert lines[0] == "- NVDA close (https://x.test/a): closed at $238.90"
+    assert ", 2026-10-06)" in lines[1] and len(lines[1]) < 500
+    off = ZaiBackend(config.load({**ZAI_ENV, "SEARCH": "off"}), FakeOpenRouterClient(), http)
+    assert await off.run_search("x") is None
+
+
+async def test_zai_search_with_no_results():
+    http = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"search_result": []})))
+    b = ZaiBackend(config.load(ZAI_ENV), FakeOpenRouterClient(), http)
+    assert "no results" in await b.run_search("zzz")
 
 
 async def test_zai_whole_tool_call_chunk_and_replay():

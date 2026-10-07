@@ -14,11 +14,11 @@ ENV_VARS: dict[str, str] = {
     "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
     "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
     "OPENROUTER_API_KEY": "OpenRouter key; selects the OpenRouter provider.",
-    "ZAI_API_KEY": "z.ai key; selects the z.ai provider (no web search).",
+    "ZAI_API_KEY": "z.ai key; selects the z.ai provider.",
     "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai).",
     "FAST_MODEL": "Optional cheaper/faster model used for simple requests (TOKEN_SAVER only).",
-    "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
-    "SEARCH": "on|off. Web search (and X search on xAI); always off on z.ai. Default on.",
+    "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
+    "SEARCH": "on|off. Web search (and X search on xAI); on z.ai it uses z.ai's search API. Default on.",
     "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
@@ -147,8 +147,8 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     model = env.get("MODEL", "").strip() or DEFAULT_MODELS[provider]
     search_model = env.get("SEARCH_MODEL", "xiaomi/mimo-v2.6-flash:online").strip()
     search = env.get("SEARCH", "on").strip().lower() != "off"
-    if provider == "zai" or (provider == "openrouter" and not search_model):
-        search = False  # z.ai has no search here; OpenRouter has nothing to run the searches with
+    if provider == "openrouter" and not search_model:
+        search = False  # nothing to run the searches with
     recipients = _pairs(env.get("SHARESIGHT_HOLDING_NEWS_RECIPIENTS", ""))
     return Settings(
         telegram_token=token,

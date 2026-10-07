@@ -27,7 +27,7 @@ def test_provider_defaults():
     o = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "b"})
     assert (o.provider, o.model) == ("openrouter", "z-ai/glm-5.3-flash")
     z = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "c"})
-    assert (z.provider, z.model, z.api_key, z.search) == ("zai", "glm-5.3-flash", "c", False)
+    assert (z.provider, z.model, z.api_key, z.search) == ("zai", "glm-5.3-flash", "c", True)
 
 
 def test_model_and_reasoning(env):

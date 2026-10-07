@@ -29,8 +29,9 @@ or `EnvironmentFile=` for the variables below.
 ## Providers
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
 - `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
-- `ZAI_API_KEY` set -> z.ai directly (default model `glm-5.3-flash`). It has **no web search** (`SEARCH` is forced off),
-  and its cost is estimated from a price table in `lib/llm/zai.py` because z.ai's usage reports none.
+- `ZAI_API_KEY` set -> z.ai directly (default model `glm-5.3-flash`). Search runs through z.ai's search API (about $0.01 a search, not included in the cost line).
+  z.ai always thinks, so the bot sends `reasoning_effort` low unless `REASONING` says otherwise
+  (medium maps to high). Cost is estimated from a price table in `lib/llm/zai.py` because z.ai's usage reports none.
 - **More than one key set, or none: the bot refuses to start** with a message saying so.
 - `MODEL` and `REASONING` (low/medium/high) apply to every provider.
 - The providers share all code except one adapter each (`lib/llm/xai.py` on the Responses API;
@@ -210,11 +211,11 @@ token size of the tool definitions. The `Starting ...` line shows the git commit
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
 | `XAI_API_KEY` | xAI key; selects the xAI provider. Set exactly one of the three keys. |
 | `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider. |
-| `ZAI_API_KEY` | z.ai key; selects the z.ai provider (no web search). |
+| `ZAI_API_KEY` | z.ai key; selects the z.ai provider. |
 | `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai). |
 | `FAST_MODEL` | Optional cheaper/faster model used for simple requests (TOKEN_SAVER only). |
-| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default. |
-| `SEARCH` | on|off. Web search (and X search on xAI); always off on z.ai. Default on. |
+| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off). |
+| `SEARCH` | on|off. Web search (and X search on xAI); on z.ai it uses z.ai's search API. Default on. |
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
