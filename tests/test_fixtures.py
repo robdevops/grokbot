@@ -13,7 +13,7 @@ from lib.mcp.schema import compact_description, compact_schema
 from .fakes import FakeMcp
 
 FIX = Path(__file__).parent / "fixtures"
-REPORTS = ("alpha", "beta")
+REPORTS = ("bob", "alice")
 
 
 def sharesight(name: str) -> dict:
@@ -22,11 +22,11 @@ def sharesight(name: str) -> dict:
 
 def test_sharesight_fixtures_are_two_distinct_small_portfolios():
     ports = sharesight("list_portfolios.json")["portfolios"]
-    assert [p["name"] for p in ports] == ["Alpha SMSF", "Beta SMSF"] and len({p["id"] for p in ports}) == 2
+    assert [p["name"] for p in ports] == ["BobSMSF", "AliceSMSF"] and len({p["id"] for p in ports}) == 2
     reports = {k: sharesight(f"performance_report_{k}.json")["report"] for k in REPORTS}
     assert [reports[k]["portfolio_id"] for k in REPORTS] == [p["id"] for p in ports]
     codes = {k: {h["instrument"]["code"] for h in r["holdings"]} for k, r in reports.items()}
-    assert codes["alpha"] != codes["beta"]
+    assert codes["bob"] != codes["alice"]
     ids = [h["id"] for r in reports.values() for h in r["holdings"]]
     assert len(ids) == len(set(ids))
     for r in reports.values():
@@ -67,10 +67,10 @@ class SharesightFixtures(FakeMcp):
 
 async def test_holding_news_reads_current_holdings_from_real_shaped_reports():
     holdings = await holding_news.current_holdings(
-        SharesightFixtures("sharesight", tools=("list_portfolios",)), ["alpha smsf", "beta smsf"])
+        SharesightFixtures("sharesight", tools=("list_portfolios",)), ["bobsmsf", "alicesmsf"])
     assert holdings["GNP (ASX)"] == "Genusplus Group" and "NVDA (NASDAQ)" in holdings
-    only_beta = await holding_news.current_holdings(SharesightFixtures("sharesight"), ["beta smsf"])
-    assert set(only_beta) < set(holdings) and "GNP (ASX)" not in only_beta
+    only_alice = await holding_news.current_holdings(SharesightFixtures("sharesight"), ["alicesmsf"])
+    assert set(only_alice) < set(holdings) and "GNP (ASX)" not in only_alice
     assert await holding_news.current_holdings(SharesightFixtures("sharesight"), ["no such portfolio"]) == {}
 
 
