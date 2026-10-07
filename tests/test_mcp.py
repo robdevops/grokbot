@@ -1,5 +1,6 @@
 import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace as N
 
 from lib.mcp.results import diet, slim_result, squeeze_tables, table_records, tidy_sharesight
@@ -110,6 +111,21 @@ async def test_call_slims_and_caches_identical_concurrent_calls():
     assert len(s.session.calls) == 1
     await s.call("get_a", {"t": "Y"})
     assert len(s.session.calls) == 2
+
+
+async def test_sharesight_results_are_cached_for_ten_minutes(monkeypatch):
+    cfg = json.loads((Path(__file__).parent.parent / "mcp_servers.json").read_text())["mcpServers"]["sharesight"]
+    assert cfg["cache_ttl"] == 600
+    clock = [1000.0]
+    monkeypatch.setattr("lib.mcp.server.time", N(monotonic=lambda: clock[0]))
+    s = make_server(cache_ttl=cfg["cache_ttl"])
+    await s.call("get_a", {"portfolio_id": 1})
+    clock[0] += 599
+    await s.call("get_a", {"portfolio_id": 1})
+    assert len(s.session.calls) == 1  # still inside the 10 minutes
+    clock[0] += 2
+    await s.call("get_a", {"portfolio_id": 1})
+    assert len(s.session.calls) == 2  # expired, fetched again
 
 
 async def test_no_cache_by_default_and_not_connected_message():
