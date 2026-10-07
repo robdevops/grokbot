@@ -11,18 +11,19 @@ from zoneinfo import ZoneInfo
 # Every environment variable the bot reads, with a one-line description. README.md must
 # mention each name (tests/test_config.py enforces it).
 ENV_VARS: dict[str, str] = {
-    # Common
-    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits and /usage; a group's chat ID gets the alerts only. Empty = neither.",
-    "FAST_MODEL": "Optional cheaper/faster model used for simple requests (TOKEN_SAVER only).",
-    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai).",
+    # Getting started
     "OPENROUTER_API_KEY": "OpenRouter key; selects the OpenRouter provider.",
-    "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
-    "SEARCH": "on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on.",
-    "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
     "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
     "ZAI_API_KEY": "z.ai key; selects the z.ai provider.",
-    # Advanced and optional
+    "FAST_MODEL": "Optional cheaper/faster model used for simple requests (TOKEN_SAVER only).",
+    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai).",
+    "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
+    "SEARCH": "on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on.",
+    # Common settings
     "BOT_TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
+    "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
+    # Advanced and optional
+    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits and /usage; a group's chat ID gets the alerts only. Empty = neither.",
     "DB_PATH": "SQLite file for chat history (default chat_log.db). Instances may share it.",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
