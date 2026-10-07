@@ -31,7 +31,7 @@ def test_handlers_follow_the_flags(env, store):
 
     plain, st = build()
     assert handler_kinds(plain) == ["MessageHandler"] and app.allowed_updates(st) == ["message", "edited_message"]
-    full, st = build(OWNER_USER_ID="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
+    full, st = build(ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
     kinds = handler_kinds(full)
     assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler"]
     assert "callback_query" in app.allowed_updates(st)

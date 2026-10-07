@@ -156,8 +156,8 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 |---|---|---|
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
-| `/credits` | `OWNER_USER_ID` | Provider balance (OpenRouter; xAI and z.ai have none to show) |
-| `/usage` | `OWNER_USER_ID` | Requests, tokens (and % cached) and cost per model, last 24 h and 7 days |
+| `/credits` | a user ID in `ADMIN_CHAT_IDS` | Provider balance (OpenRouter; xAI and z.ai have none to show) |
+| `/usage` | a user ID in `ADMIN_CHAT_IDS` | Requests, tokens (and % cached) and cost per model, last 24 h and 7 days |
 
 ## Caching and token saving
 **Provider prompt caching** (xAI and OpenRouter keep a conversation on the server holding its cached
@@ -209,6 +209,7 @@ tokens, cached % and cost. Tool servers log their tools in short wrapped lines; 
 token size of the tool definitions. The `Starting ...` line shows the git commit the checkout is on.
 
 ## Environment variables
+### Common settings
 | Variable | Meaning |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
@@ -219,21 +220,26 @@ token size of the tool definitions. The `Starting ...` line shows the git commit
 | `FAST_MODEL` | Optional cheaper/faster model used for simple requests (TOKEN_SAVER only). |
 | `REASONING` | Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off). |
 | `SEARCH` | on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on. |
+| `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/credits` and `/usage`; a group's chat ID gets the down-server messages only. Empty (default) = no alerts and no admin commands. |
+
+### Advanced and optional
+| Variable | Meaning |
+|---|---|
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
+| `TOKEN_SAVER` | on|off. Master switch for the token-saving heuristics (default on). |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `BOT_TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
 | `MCP_CONFIG` | MCP server config file (default mcp_servers.json; missing = no MCP tools). |
-| `ADMIN_CHAT_IDS` | Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts). |
-| `OWNER_USER_ID` | Telegram user ID allowed to use /credits and /usage. |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
 | `POST_TO_GROUPS_FROM_DM` | on|off. A group admin can have the bot post in that group from a DM (default off). |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
-| `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |
+| `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
 | `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
-| `TOKEN_SAVER` | on|off. Master switch for the token-saving heuristics (default on). |
+
+`OWNER_USER_ID` (the old variable for `/credits` and `/usage`) was merged into `ADMIN_CHAT_IDS`: put that ID there. It is still read, with a startup warning, and will be removed.
 
 ## Choosing a model
 Figures from search results and Artificial Analysis at the time of writing (October 2026), so

@@ -123,7 +123,7 @@ def build_app(ctx: Ctx) -> Application:
         return wrapper
 
     # Commands first: the first matching handler wins, and the catch-all would swallow them.
-    if st.owner_id:
+    if st.admin_chats:
         app.add_handler(CommandHandler("credits", command(commands.credits)))
         app.add_handler(CommandHandler("usage", command(commands.usage)))
     app.add_handler(MessageHandler(

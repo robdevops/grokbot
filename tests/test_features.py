@@ -165,8 +165,8 @@ def test_movers_helpers():
 
 
 # ---- commands --------------------------------------------------------------------------
-async def test_credits_and_usage_are_owner_only_and_logged(env, store):
-    st = config.load({**env, "OWNER_USER_ID": "5"})
+async def test_credits_and_usage_are_admin_only_and_logged(env, store):
+    st = config.load({**env, "ADMIN_CHAT_IDS": "5, -100"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
     store.add_usage(-1, "m", "chat", 1, 1000, 500, 20, 0.5)
     stranger = user_msg(ctx.bot, "/usage", user_id=9, mid=1)
