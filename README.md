@@ -248,6 +248,9 @@ treat them as rough; speed varies by provider.
 | `z-ai/glm-5.3-flash` (default on OpenRouter) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 | itself (a flash model) |
 | `grok-4.3` / `x-ai/grok-4.3` (default on xAI) | 1.25 / 2.50 | ~105-146 tok/s | 25 (at high reasoning) | none (see below) |
 | `glm-5.3-flash` (default on z.ai) | 0.15 / 0.50 (cached input 0.03) | ~50 tok/s | 57 | itself (a flash model) |
+| `glm-5.3-flashx` (z.ai) | 0.37 / 1.25 (cached input 0.075) | not found | not found | itself (a flash model) |
+| `glm-5.3` (z.ai) | 1.40 / 4.40 (cached input 0.26) | not found | not found | `glm-5.3-flash` |
+| `glm-5.2` (z.ai) | 1.40 / 4.40 (cached input 0.26) | not found | not found | `glm-5.3-flash` |
 | `xiaomi/mimo-v2.5-pro` | 0.30 / 0.61 | ~29-46 tok/s | unreliable (retires 21 Oct 2026) | `xiaomi/mimo-v2.5` (also retiring) |
 | `xiaomi/mimo-v2.5` | 0.12 / 0.24 | ~44-58 tok/s | not found (retires 21 Oct 2026) | itself |
 
@@ -256,8 +259,8 @@ Most of the delay is reasoning time before the first answer token, not typing sp
 same provider as your API key:
 - **OpenRouter:** any model, for example `FAST_MODEL=xiaomi/mimo-v2.6-flash` or `z-ai/glm-5.3-flash`
   alongside a bigger `MODEL`.
-- **z.ai:** a GLM model. `glm-5.3-flash` is the flash one; for a bigger GLM, add its price to `PRICES` in
-  `lib/llm/zai.py`, otherwise its cost shows $0.
+- **z.ai:** a GLM model: for example `MODEL=glm-5.3` with `FAST_MODEL=glm-5.3-flash` (or `glm-5.3-flashx`).
+  A z.ai model missing from the price table in `lib/llm/zai.py` shows $0 cost.
 - **xAI:** a Grok model, and there is no fast one to pick: Grok 4 Fast and Grok 4.1 Fast were reportedly
   retired on 15 May 2026 and now redirect to `grok-4.3`.
 
