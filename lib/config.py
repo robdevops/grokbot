@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 # Every environment variable the bot reads, with a one-line description. README.md must
 # mention each name (tests/test_config.py enforces it).
 ENV_VARS: dict[str, str] = {
+    # Common
     "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
     "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
     "OPENROUTER_API_KEY": "OpenRouter key; selects the OpenRouter provider.",
@@ -19,21 +20,21 @@ ENV_VARS: dict[str, str] = {
     "FAST_MODEL": "Optional cheaper/faster model used for simple requests (TOKEN_SAVER only).",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
     "SEARCH": "on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on.",
+    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits and /usage; a group's chat ID gets the alerts only. Empty = neither.",
+    # Advanced and optional
     "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
+    "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
     "DB_PATH": "SQLite file for chat history (default chat_log.db). Instances may share it.",
     "BOT_TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
     "MCP_CONFIG": "MCP server config file (default mcp_servers.json; missing = no MCP tools).",
-    "ADMIN_CHAT_IDS": "Chat IDs told when an MCP server goes down (comma/space separated; empty = no alerts).",
-    "OWNER_USER_ID": "Telegram user ID allowed to use /credits and /usage.",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
     "POST_TO_GROUPS_FROM_DM": "on|off. Lets an admin of a group the bot is in make it post there from a DM (default off).",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
-    "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
+    "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
-    "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
 }
 
 DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash", "zai": "glm-5.3-flash"}
@@ -70,8 +71,7 @@ class Settings:
     db_path: str
     tz: ZoneInfo
     mcp_config: str
-    admin_chats: frozenset[int]
-    owner_id: int
+    admin_chats: frozenset[int]  # user IDs (alerts + admin commands) and group chat IDs (alerts only)
     movers_bots: frozenset[str]
     dm_buttons: bool
     post_to_groups: bool
@@ -165,7 +165,6 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
         mcp_config=env.get("MCP_CONFIG", "mcp_servers.json"),
         admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
-        owner_id=int(env.get("OWNER_USER_ID") or 0),
         movers_bots=frozenset(
             u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "").replace(",", " ").split()
         ),

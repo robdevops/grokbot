@@ -16,10 +16,10 @@ log = logging.getLogger("bot")
 
 async def _gate(ctx: Ctx, update: Update) -> bool:
     """Log the command message (these handlers take it before on_message would) and say
-    whether the sender is the owner."""
+    whether the sender is an admin (a user ID in ADMIN_CHAT_IDS)."""
     await asyncio.to_thread(ctx.store.save, update.effective_message)
     user = update.effective_user
-    return bool(user and ctx.st.owner_id and user.id == ctx.st.owner_id)
+    return bool(user and user.id in ctx.st.admin_chats)
 
 
 async def _reply(ctx: Ctx, update: Update, text: str) -> None:
@@ -28,7 +28,7 @@ async def _reply(ctx: Ctx, update: Update, text: str) -> None:
 
 
 async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/credits - owner only: how much provider credit is left (OpenRouter)."""
+    """/credits - admins only: how much provider credit is left (OpenRouter)."""
     if not await _gate(ctx, update):
         return
     try:
@@ -51,7 +51,7 @@ def usage_text(rows: list[tuple], label: str) -> str:
 
 
 async def usage(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/usage - owner only: tokens and cost per model for the last 24 hours and 7 days."""
+    """/usage - admins only: tokens and cost per model for the last 24 hours and 7 days."""
     if not await _gate(ctx, update):
         return
     now = int(time.time())
