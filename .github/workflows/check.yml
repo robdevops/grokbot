@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 3 * * 1"  # weekly, Mondays 03:17 UTC: catches new Python, Node or library releases breaking the code
+  workflow_dispatch:  # the "Run workflow" button on the Actions tab
 
 concurrency:
   group: check-${{ github.ref }}
@@ -24,3 +27,19 @@ jobs:
           node-version: latest  # the latest Node.js, for the npx-based MCP servers (e.g. Yahoo Finance)
       - run: pip install -r requirements-dev.txt
       - run: make check
+      - name: Tell Telegram the check failed
+        # Not for pull requests (every red push would ping): scheduled runs, manual runs and pushes to main.
+        if: failure() && github.event_name != 'pull_request'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MESSAGE: "⚠️ ${{ github.repository }}: the check failed (${{ github.event_name }} on ${{ github.ref_name }}) ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set as a repository secret; skipping"
+            exit 0
+          fi
+          curl -sS --fail-with-body "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${MESSAGE}" \
+            --data-urlencode "disable_web_page_preview=true"
