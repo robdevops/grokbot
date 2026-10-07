@@ -212,24 +212,24 @@ tokens, cached % and cost. Tool servers log their tools in short wrapped lines; 
 token size of the tool definitions. The `Starting ...` line shows the git commit the checkout is on.
 
 ## Environment variables
-### Getting started
-Set exactly one of the three keys.
+### Essential
+Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 
 | Variable | Meaning |
 |---|---|
 | `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider (default model `z-ai/glm-5.3-flash`). |
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
 | `XAI_API_KEY` | xAI key; selects the xAI provider (default model `grok-4.3`). |
 | `ZAI_API_KEY` | z.ai key; selects the z.ai provider (default model `glm-5.3-flash`). |
-| `FAST_MODEL` | Optional cheaper/faster model used for simple requests (TOKEN_SAVER only). |
-| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai). |
-| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off). |
-| `SEARCH` | on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on. |
 
 ### Common settings
 | Variable | Meaning |
 |---|---|
 | `BOT_TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
-| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
+| `FAST_MODEL` | Optional cheaper/faster model used for simple requests (TOKEN_SAVER only). |
+| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai). |
+| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off). |
+| `SEARCH` | on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on. |
 
 ### Advanced and optional
 | Variable | Meaning |
