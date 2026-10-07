@@ -20,8 +20,8 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   (md_to_html, split_html, plain_text, TG_TAG_RE). `tickers.py` Yahoo links (+ `tickers_data.py`).
 - `mcp/`: `server.py` (MCPServer lifecycle, TTL cache, `Registry`), `schema.py` (neutral `ToolDef`,
   schema diet), `results.py` (result slimming).
-- `llm/`: `base.py` (Request/Step/Answer/Backend), `xai.py` + `openrouter.py` (the only provider-specific
-  code), `runner.py` (THE tool loop), `policy.py` (THE retry ladder), `gate.py` (which tools a message needs).
+- `llm/`: `base.py` (Request/Step/Answer/Backend), `chat.py` (shared chat-completions loop), `xai.py` +
+  `openrouter.py` (the only provider-specific code), `runner.py` (THE tool loop), `policy.py` (THE retry ladder), `gate.py` (which tools a message needs).
 - `prompts.py` all prompts. `ask.py` one entry point: route -> Request -> policy.ask -> usage -> NEEDS_TOOLS rerun.
 - `telegram/`: `handlers.py` (trigger -> request -> reply), `send.py`, `draft.py` (typing + streaming
   drafts), `commands.py` (/credits, /usage). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`.

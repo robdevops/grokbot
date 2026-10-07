@@ -8,11 +8,11 @@ from lib.llm.xai import XaiBackend
 from lib.mcp.schema import ToolDef
 
 from .fakes import (
-    FakeOpenRouterClient,
+    FakeChatClient,
     FakeXaiClient,
     Stream,
-    or_chunk,
-    or_tc,
+    chat_chunk,
+    chat_tc,
     req,
     xai_call,
     xai_final,
@@ -29,7 +29,7 @@ def bad_request():
 # ---- OpenRouter ----------------------------------------------------------------------
 async def test_openrouter_cache_headers_and_tool_shapes(env):
     st = config.load(env)
-    client = FakeOpenRouterClient(Stream([or_chunk("hello"), or_chunk(finish="stop")]))
+    client = FakeChatClient(Stream([chat_chunk("hello"), chat_chunk(finish="stop")]))
     b = OpenRouterBackend(st, client)
     r = req(tools=[TOOL], search=True, cache_id="Bot-chat-1", reasoning="low",
             parts=[{"type": "text", "text": "hi"}, {"type": "image", "url": "data:x", "detail": "low"}])
@@ -47,7 +47,7 @@ async def test_openrouter_cache_headers_and_tool_shapes(env):
 
 
 async def test_openrouter_no_cache_key_means_no_session_headers(env):
-    client = FakeOpenRouterClient(Stream([or_chunk("x", finish="stop")]))
+    client = FakeChatClient(Stream([chat_chunk("x", finish="stop")]))
     b = OpenRouterBackend(config.load(env), client)
     r = req()
     await b.step(b.start(r), r, tool_choice=None)
@@ -55,9 +55,9 @@ async def test_openrouter_no_cache_key_means_no_session_headers(env):
 
 
 async def test_openrouter_tool_calls_without_index_and_replay(env):
-    chunks = [or_chunk(tool_calls=[or_tc(None, "a", "y__q", "{")]), or_chunk(tool_calls=[or_tc(None, None, None, "}")]),
-              or_chunk(tool_calls=[or_tc(None, "b", "web_search", '{"query":"z"}')]), or_chunk(finish="tool_calls")]
-    b = OpenRouterBackend(config.load(env), FakeOpenRouterClient(Stream(chunks)))
+    chunks = [chat_chunk(tool_calls=[chat_tc(None, "a", "y__q", "{")]), chat_chunk(tool_calls=[chat_tc(None, None, None, "}")]),
+              chat_chunk(tool_calls=[chat_tc(None, "b", "web_search", '{"query":"z"}')]), chat_chunk(finish="tool_calls")]
+    b = OpenRouterBackend(config.load(env), FakeChatClient(Stream(chunks)))
     r = req()
     conv = b.start(r)
     step = await b.step(conv, r, tool_choice="required")
@@ -68,9 +68,9 @@ async def test_openrouter_tool_calls_without_index_and_replay(env):
 
 
 async def test_openrouter_provider_error_in_stream_raises(env):
-    bad = or_chunk()
+    bad = chat_chunk()
     bad.model_extra = {"error": {"code": 429, "message": "slow down"}}
-    b = OpenRouterBackend(config.load(env), FakeOpenRouterClient(Stream([bad])))
+    b = OpenRouterBackend(config.load(env), FakeChatClient(Stream([bad])))
     r = req()
     with pytest.raises(RuntimeError, match="slow down"):
         await b.step(b.start(r), r, tool_choice=None)
