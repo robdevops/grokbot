@@ -4,3 +4,6 @@ chat_log.db*
 captures/
 .pytest_cache/
 .ruff_cache/
+*.env
+*.sqlite
+venv
