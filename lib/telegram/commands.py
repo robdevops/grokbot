@@ -19,7 +19,10 @@ async def _gate(ctx: Ctx, update: Update) -> bool:
     whether the sender is an admin (a user ID in ADMIN_CHAT_IDS)."""
     await asyncio.to_thread(ctx.store.save, update.effective_message)
     user = update.effective_user
-    return bool(user and user.id in ctx.st.admin_chats)
+    if user and user.id in ctx.st.admin_chats:
+        return True
+    log.info("Ignored %s from user %s: not in ADMIN_CHAT_IDS", update.effective_message.text, user and user.id)
+    return False
 
 
 async def _reply(ctx: Ctx, update: Update, text: str) -> None:
