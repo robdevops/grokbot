@@ -41,7 +41,7 @@
       "gate": "portfolio",
       "max_concurrent": 1,
       "cache_ttl": 1800,
-      "keep_warm": {"list_portfolios": null, "get_performance_report": 1}
+      "keep_warm": {"list_portfolios": null, "get_performance_report": 0}
     }
   }
 }

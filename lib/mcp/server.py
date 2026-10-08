@@ -61,7 +61,7 @@ class MCPServer:
         self._cache: dict[str, _Entry] = {}
         self._inflight: dict[str, asyncio.Task] = {}
         # Tools whose cached results are refetched just before they expire, so asking never waits on a cold fetch:
-        # {tool: longest start_date..end_date window in days that stays warm, or None for any call}.
+        # {tool: longest start_date..end_date window in days that stays warm (0 = one date), or None for any call}.
         warm = cfg.get("keep_warm", [])
         self._warm: dict[str, int | None] = ({t: None for t in warm} if isinstance(warm, list) else dict(warm)) \
             if self._ttl > 0 else {}

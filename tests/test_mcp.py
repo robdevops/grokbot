@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace as N
 
+import pytest
+
 from lib.mcp.results import diet, slim_result, squeeze_tables, table_records, tidy_sharesight
 from lib.mcp.schema import ToolDef, compact_description, compact_schema, looks_read_only
 from lib.mcp.server import MCPServer, Registry
@@ -164,9 +166,10 @@ async def test_keep_warm_lets_a_result_nobody_repeats_go(monkeypatch):
     assert len(s.session.calls) == 2 and not s._cache  # nobody asked since: dropped, no more API calls
 
 
-async def test_keep_warm_only_refreshes_reports_for_a_one_day_window(monkeypatch):
+@pytest.mark.parametrize("days,warm", [(0, ["same_day"]), (1, ["day", "same_day"])])
+async def test_keep_warm_only_refreshes_reports_for_a_short_window(monkeypatch, days, warm):
     clock = fake_clock(monkeypatch)
-    s = make_server(cache_ttl=1800, keep_warm={"get_performance_report": 1})
+    s = make_server(cache_ttl=1800, keep_warm={"get_performance_report": days})
     day = {"portfolio_id": 1, "start_date": "2026-10-06", "end_date": "2026-10-07"}
     same_day = {"portfolio_id": 1, "start_date": "2026-10-07", "end_date": "2026-10-07"}
     others = [{"portfolio_id": 1, "start_date": "2026-10-01", "end_date": "2026-10-07"},  # a week
@@ -177,7 +180,7 @@ async def test_keep_warm_only_refreshes_reports_for_a_one_day_window(monkeypatch
         await s.call("get_performance_report", args)
     clock[0] += 1780
     await s._warm_once()
-    assert [a for _, a in s.session.calls[6:]] == [day, same_day]
+    assert [a for _, a in s.session.calls[6:]] == [{"day": day, "same_day": same_day}[n] for n in warm]
 
 
 async def test_keep_warm_drops_a_result_whose_refresh_fails(monkeypatch, caplog):
@@ -200,9 +203,9 @@ async def test_unknown_keep_warm_names_are_warned_about(caplog):
     assert "get_aa" in caplog.text and "matches no tool" in caplog.text
 
 
-def test_sharesight_keeps_the_portfolio_list_and_one_day_reports_warm():
+def test_sharesight_keeps_the_portfolio_list_and_single_day_reports_warm():
     cfg = json.loads((Path(__file__).parent.parent / "mcp_servers.json").read_text())["mcpServers"]["sharesight"]
-    assert cfg["keep_warm"] == {"list_portfolios": None, "get_performance_report": 1}
+    assert cfg["keep_warm"] == {"list_portfolios": None, "get_performance_report": 0}
 
 
 async def test_no_cache_by_default_and_not_connected_message():
