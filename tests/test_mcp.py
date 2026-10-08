@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace as N
 
+import pytest
+
 from lib.mcp.results import diet, slim_result, squeeze_tables, table_records, tidy_sharesight
 from lib.mcp.schema import ToolDef, compact_description, compact_schema, looks_read_only
 from lib.mcp.server import MCPServer, Registry
@@ -126,6 +128,84 @@ async def test_sharesight_results_are_cached_for_thirty_minutes(monkeypatch):
     clock[0] += 2
     await s.call("get_a", {"portfolio_id": 1})
     assert len(s.session.calls) == 2  # expired, fetched again
+
+
+def fake_clock(monkeypatch, start=1000.0):
+    clock = [start]
+    monkeypatch.setattr("lib.mcp.server.time", N(monotonic=lambda: clock[0]))
+    return clock
+
+
+async def test_keep_warm_refetches_before_expiry_and_serves_the_fresh_copy(monkeypatch):
+    clock = fake_clock(monkeypatch)
+    s = make_server(cache_ttl=1800, keep_warm=["list_portfolios"])
+    await s.call("list_portfolios", {})
+    await s.call("get_b", {})  # not kept warm
+    clock[0] += 1700
+    await s._warm_once()
+    assert len(s.session.calls) == 2  # too early
+    clock[0] += 80  # 1,780 s old: inside the last 30 s before it expires
+    await s._warm_once()
+    assert [c[0] for c in s.session.calls] == ["list_portfolios", "get_b", "list_portfolios"]
+    clock[0] += 100  # 1,880 s after the first fetch, when it would have expired
+    await s.call("list_portfolios", {})
+    assert len(s.session.calls) == 3  # answered from the refreshed copy
+    await s.call("get_b", {})
+    assert len(s.session.calls) == 4  # the tool that isn't kept warm expired as before
+
+
+async def test_keep_warm_lets_a_result_nobody_repeats_go(monkeypatch):
+    clock = fake_clock(monkeypatch)
+    s = make_server(cache_ttl=1800, keep_warm=["list_portfolios"])
+    await s.call("list_portfolios", {})
+    clock[0] += 1780
+    await s._warm_once()
+    assert len(s.session.calls) == 2  # asked once, so refreshed once
+    clock[0] += 1780
+    await s._warm_once()
+    assert len(s.session.calls) == 2 and not s._cache  # nobody asked since: dropped, no more API calls
+
+
+@pytest.mark.parametrize("days,warm", [(0, ["same_day"]), (1, ["day", "same_day"])])
+async def test_keep_warm_only_refreshes_reports_for_a_short_window(monkeypatch, days, warm):
+    clock = fake_clock(monkeypatch)
+    s = make_server(cache_ttl=1800, keep_warm={"get_performance_report": days})
+    day = {"portfolio_id": 1, "start_date": "2026-10-06", "end_date": "2026-10-07"}
+    same_day = {"portfolio_id": 1, "start_date": "2026-10-07", "end_date": "2026-10-07"}
+    others = [{"portfolio_id": 1, "start_date": "2026-10-01", "end_date": "2026-10-07"},  # a week
+              {"portfolio_id": 1},  # undated: the tool's default window is long
+              {"portfolio_id": 1, "start_date": "2026-10-07", "end_date": "2026-10-06"},  # backwards
+              {"portfolio_id": 1, "start_date": "later", "end_date": "2026-10-07"}]  # malformed
+    for args in [day, same_day, *others]:
+        await s.call("get_performance_report", args)
+    clock[0] += 1780
+    await s._warm_once()
+    assert [a for _, a in s.session.calls[6:]] == [{"day": day, "same_day": same_day}[n] for n in warm]
+
+
+async def test_keep_warm_drops_a_result_whose_refresh_fails(monkeypatch, caplog):
+    clock = fake_clock(monkeypatch)
+    s = make_server(cache_ttl=1800, keep_warm=["list_portfolios"])
+    await s.call("list_portfolios", {})
+
+    async def boom(tool, args):
+        raise RuntimeError("down")
+
+    s.session.call_tool = boom
+    clock[0] += 1780
+    await s._warm_once()
+    assert not s._cache and "list_portfolios refresh failed" in caplog.text
+
+
+async def test_unknown_keep_warm_names_are_warned_about(caplog):
+    s = make_server(cache_ttl=1800, keep_warm=["get_aa"])
+    await s._load_tools(s.session)
+    assert "get_aa" in caplog.text and "matches no tool" in caplog.text
+
+
+def test_sharesight_keeps_the_portfolio_list_and_single_day_reports_warm():
+    cfg = json.loads((Path(__file__).parent.parent / "mcp_servers.json").read_text())["mcpServers"]["sharesight"]
+    assert cfg["keep_warm"] == {"list_portfolios": None, "get_performance_report": 0}
 
 
 async def test_no_cache_by_default_and_not_connected_message():

@@ -12,6 +12,8 @@ import textwrap
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
+from dataclasses import dataclass
+from datetime import date, timedelta
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -23,6 +25,17 @@ from .schema import ToolDef, compact_description, compact_schema, expand_env, lo
 log = logging.getLogger("bot")
 
 START_TIMEOUT = 180  # generous: the first npx run downloads the package
+
+
+@dataclass
+class _Entry:
+    """A cached result, with what it takes to fetch it again."""
+
+    at: float
+    out: str
+    tool: str
+    args: dict
+    used: bool = True  # someone asked for it since it was fetched (a warm entry is only kept warm while used)
 
 
 class MCPServer:
@@ -45,8 +58,14 @@ class MCPServer:
         self._stop = asyncio.Event()
         self._task: asyncio.Task | None = None
         self._ttl = float(cfg.get("cache_ttl", 0))  # seconds identical calls are shared; 0 = off
-        self._cache: dict[str, tuple[float, str]] = {}
+        self._cache: dict[str, _Entry] = {}
         self._inflight: dict[str, asyncio.Task] = {}
+        # Tools whose cached results are refetched just before they expire, so asking never waits on a cold fetch:
+        # {tool: longest start_date..end_date window in days that stays warm (0 = one date), or None for any call}.
+        warm = cfg.get("keep_warm", [])
+        self._warm: dict[str, int | None] = ({t: None for t in warm} if isinstance(warm, list) else dict(warm)) \
+            if self._ttl > 0 else {}
+        self._warm_every = min(30.0, max(1.0, self._ttl / 10))  # seconds between checks, and how early to refetch
 
     def start(self) -> None:
         """Connect in the background; tools appear once the server is up. Idempotent."""
@@ -92,7 +111,12 @@ class MCPServer:
                 await self._load_tools(session)
                 self.session, self.error = session, None
                 self._ready.set()
-                await self._stop.wait()
+                warmer = asyncio.create_task(self._warm_loop()) if self._warm else None
+                try:
+                    await self._stop.wait()
+                finally:
+                    if warmer:
+                        warmer.cancel()
         except Exception as e:
             self.error = describe_failure(e, errlog)
             log.error("MCP server %s failed: %s", self.label, self.error, exc_info=True)
@@ -117,7 +141,7 @@ class MCPServer:
                 fn, compact_description(t.description or ""),
                 compact_schema(t.inputSchema or {"type": "object", "properties": {}},
                                hide=frozenset(self.cfg.get("hide_params", [])))))
-        self._warn_unknown_names(listed, allow | blocked)
+        self._warn_unknown_names(listed, allow | blocked | set(self._warm))
         enabled = sorted(self.fn_names.values())
         skipped = sorted(t.name for t in listed if t.name not in enabled)
         log_names(f"MCP {self.label}: {len(enabled)} tools:", enabled)
@@ -143,8 +167,13 @@ class MCPServer:
             return await self._call(tool, args)
         key = f"{tool}:{json.dumps(args, sort_keys=True, default=str)}"
         hit = self._cache.get(key)
-        if hit and time.monotonic() - hit[0] < self._ttl:
-            return hit[1]
+        if hit and time.monotonic() - hit.at < self._ttl:
+            hit.used = True
+            return hit.out
+        return await self._fetch(key, tool, args)
+
+    async def _fetch(self, key: str, tool: str, args: dict) -> str:
+        """Fetch and cache one result; concurrent fetches of the same call share one request."""
         task = self._inflight.get(key)
         if task is None:
             task = self._inflight[key] = asyncio.create_task(self._call(tool, args))
@@ -155,9 +184,51 @@ class MCPServer:
                 self._inflight.pop(key, None)
         if not out.startswith(("Tool error", "Error")):
             now = time.monotonic()
-            self._cache = {k: v for k, v in self._cache.items() if now - v[0] < self._ttl}
-            self._cache[key] = (now, out)
+            # Expired entries go, except warm ones: _warm_once decides about those.
+            self._cache = {k: v for k, v in self._cache.items() if now - v.at < self._ttl or self._warmable(v.tool, v.args)}
+            self._cache[key] = _Entry(now, out, tool, args)
         return out
+
+    def _warmable(self, tool: str, args: dict) -> bool:
+        """Is this call kept warm? A tool with a day limit only when it asks for a window of at most that many days."""
+        if tool not in self._warm:
+            return False
+        days = self._warm[tool]
+        if days is None:
+            return True
+        try:
+            window = date.fromisoformat(args["end_date"]) - date.fromisoformat(args["start_date"])
+        except (KeyError, ValueError, TypeError):
+            return False  # undated or malformed: the tool's default window is a long one
+        return timedelta(0) <= window <= timedelta(days=days)
+
+    async def _warm_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._warm_every)
+            try:
+                await self._warm_once()
+            except Exception:
+                log.exception("MCP %s cache refresh failed", self.label)
+
+    async def _warm_once(self) -> None:
+        """Refetch warm results about to expire if someone asked for them since the last fetch; drop the idle ones,
+        so a query nobody repeats stops costing API calls."""
+        now = time.monotonic()
+        for key, entry in list(self._cache.items()):
+            if not self._warmable(entry.tool, entry.args) or now - entry.at < self._ttl - self._warm_every:
+                continue
+            if not entry.used:
+                self._cache.pop(key, None)
+                continue
+            try:
+                await self._fetch(key, entry.tool, entry.args)
+            except Exception as e:
+                log.warning("MCP %s.%s refresh failed: %s", self.label, entry.tool, e)
+            fresh = self._cache.get(key)
+            if fresh is None or fresh is entry:  # the refetch failed or came back as an error: let it go
+                self._cache.pop(key, None)
+            else:
+                fresh.used = False
 
     async def _call(self, tool: str, args: dict) -> str:
         holdings_only = bool(self.cfg.get("current_holdings_only"))
