@@ -65,6 +65,11 @@ def test_admin_chats_and_recipients(env):
     assert s.admin_chats == {-1, -2, 3} and s.holding_news_recipients == {"bob": "me"}
 
 
+def test_admin_only_is_on_unless_turned_off(env):
+    assert not config.load(env).admin_only
+    assert config.load({k: v for k, v in env.items() if k != "ADMIN_ONLY"}).admin_only
+
+
 def test_no_names_in_code_defaults(env):
     s = config.load(env)
     assert s.holding_news_recipients == {} and s.movers_bots == frozenset() and s.portfolio_names == frozenset()

@@ -165,20 +165,43 @@ def test_movers_helpers():
 
 
 # ---- commands --------------------------------------------------------------------------
-async def test_credits_and_usage_are_admin_only_and_logged(env, store):
+async def test_credits_shows_balance_and_usage_to_admins_only(env, store):
     st = config.load({**env, "ADMIN_CHAT_IDS": "5, -100"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
     store.add_usage(-1, "m", "chat", 1, 1000, 500, 20, 0.5)
-    stranger = user_msg(ctx.bot, "/usage", user_id=9, mid=1)
-    await commands.usage(ctx, update_for(stranger), None)
-    assert stranger.replies == [] and store.history(-100, 20)[0].text == "/usage"
-    owner = user_msg(ctx.bot, "/usage", user_id=5, mid=2)
-    await commands.usage(ctx, update_for(owner), None)
-    assert "m: 1 requests, in 1,000 (50% cached)" in owner.replies[0]["text"]
-    owner2 = user_msg(ctx.bot, "/credits", user_id=5, mid=3)
-    await commands.credits(ctx, update_for(owner2), None)
-    assert "no credit balance" in owner2.replies[0]["text"]
+    stranger = user_msg(ctx.bot, "/credits", user_id=9, mid=1)
+    await commands.credits(ctx, update_for(stranger), None)
+    assert stranger.replies == [] and store.history(-100, 20)[0].text == "/credits"
+    owner = user_msg(ctx.bot, "/credits", user_id=5, mid=2)
+    await commands.credits(ctx, update_for(owner), None)
+    text = owner.replies[0]["text"]
+    assert "no credit balance" in text and "m: 1 requests, in 1,000 (50% cached)" in text
     assert commands.usage_text([], "last 24 hours") == "No usage recorded in the last 24 hours."
+
+
+async def test_credits_still_shows_usage_when_the_balance_fails(env, store):
+    class Broken(ScriptedBackend):
+        async def credits(self):
+            raise RuntimeError("boom")
+
+    ctx = Ctx(config.load({**env, "ADMIN_CHAT_IDS": "5"}), store, Broken([]), registry(), FakeBot())
+    store.add_usage(-1, "m", "chat", 1, 10, 0, 2, 0.1)
+    msg = user_msg(ctx.bot, "/credits", user_id=5)
+    await commands.credits(ctx, update_for(msg), None)
+    assert "Couldn't fetch credits: boom" in msg.replies[0]["text"] and "m: 1 requests" in msg.replies[0]["text"]
+
+
+async def test_group_admin_can_run_credits_in_the_group_and_in_a_dm(env, store):
+    ctx = Ctx(config.load(env), store, ScriptedBackend([]), registry(), FakeBot())
+    store.remember_chat(-100, "Stocks")
+    ctx.bot.admins[-100] = [7]
+    for chat_id, mid in ((-100, 1), (7, 2)):
+        msg = user_msg(ctx.bot, "/credits", user_id=7, chat_id=chat_id, mid=mid)
+        await commands.credits(ctx, update_for(msg), None)
+        assert "Usage" in msg.replies[0]["text"] or "No usage" in msg.replies[0]["text"]
+    other = user_msg(ctx.bot, "/credits", user_id=8, mid=3)
+    await commands.credits(ctx, update_for(other), None)
+    assert other.replies == []
 
 
 @pytest.mark.parametrize("cached,tin,pct", [(0, 0, 0), (50, 100, 50)])

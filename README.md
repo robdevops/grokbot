@@ -160,8 +160,15 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 |---|---|---|
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
-| `/credits` | a user ID in `ADMIN_CHAT_IDS` | Provider balance (OpenRouter; xAI and z.ai have none to show) |
-| `/usage` | a user ID in `ADMIN_CHAT_IDS` | Requests, tokens (and % cached) and cost per model, last 24 h and 7 days |
+| `/credits` | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI and z.ai have none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days |
+
+**Admins** are the user IDs in `ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with
+Telegram, cached for five minutes). The bot only knows a group once someone has written in it, or it was added, since
+it started tracking groups. Admins who post anonymously (as the group) can't be recognised. With `ADMIN_ONLY` on (the
+default), only admins can DM the bot, and Sharesight data is for admins only: anyone else asking about a portfolio
+gets "Portfolio data is for admins only." Holding-news DMs, buttons and down-server messages the bot sends itself are
+unaffected. With nobody in `ADMIN_CHAT_IDS` and no known group, nobody can DM the bot or reach Sharesight: set
+`ADMIN_ONLY=off` to allow everyone.
 
 ## Caching and token saving
 **Provider prompt caching** (xAI and OpenRouter keep a conversation on the server holding its cached
@@ -198,7 +205,7 @@ Each answer's log line shows the cached percentage.
   symbol, tags and Yahoo URLs dropped), lines cut to 240 characters and the bot's own to 160.
 - **Smaller prompts:** the system prompt is about half its previous size, the repeated instruction
   tail lives in the (cached) system prompt, images go at low detail.
-- **Measure it:** every request is recorded in the `usage` table (`/usage`), and
+- **Measure it:** every request is recorded in the `usage` table (`/credits`), and
   `make prompt-report` prints where a typical request's tokens go.
 
 ## Running several instances
@@ -237,7 +244,8 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 ### Advanced and optional
 | Variable | Meaning |
 |---|---|
-| `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/credits` and `/usage`; a group's chat ID gets the down-server messages only. Empty (default) = no alerts and no admin commands. |
+| `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/credits`; a group's chat ID gets the down-server messages only. Admins of the groups the bot is in count as admins too. |
+| `ADMIN_ONLY` | on|off. Only admins may DM the bot or get Sharesight data (default on). |
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |

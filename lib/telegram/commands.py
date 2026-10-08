@@ -1,4 +1,4 @@
-"""Owner commands: /credits (provider balance, where there is one) and /usage (token ledger)."""
+"""Admin command: /credits (provider balance, where there is one, and the token ledger)."""
 
 from __future__ import annotations
 
@@ -10,33 +10,25 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ..context import Ctx
+from .access import is_admin
 
 log = logging.getLogger("bot")
 
 
 async def _gate(ctx: Ctx, update: Update) -> bool:
     """Log the command message (these handlers take it before on_message would) and say
-    whether the sender is an admin (a user ID in ADMIN_CHAT_IDS)."""
+    whether the sender is an admin (see access.is_admin)."""
     await asyncio.to_thread(ctx.store.save, update.effective_message)
     user = update.effective_user
-    return bool(user and user.id in ctx.st.admin_chats)
+    if user and await is_admin(ctx, user.id):
+        return True
+    log.info("Ignored %s from user %s: not an admin", update.effective_message.text, user and user.id)
+    return False
 
 
 async def _reply(ctx: Ctx, update: Update, text: str) -> None:
     sent = await update.effective_message.reply_text(text, disable_notification=True)
     await asyncio.to_thread(ctx.store.save, sent)
-
-
-async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/credits - admins only: how much provider credit is left (OpenRouter)."""
-    if not await _gate(ctx, update):
-        return
-    try:
-        text = await ctx.backend.credits() or "This provider has no credit balance to show."
-    except Exception as e:
-        log.exception("Credit check failed")
-        text = f"Couldn't fetch credits: {e}"
-    await _reply(ctx, update, text)
 
 
 def usage_text(rows: list[tuple], label: str) -> str:
@@ -50,12 +42,18 @@ def usage_text(rows: list[tuple], label: str) -> str:
     return "\n".join(lines)
 
 
-async def usage(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/usage - admins only: tokens and cost per model for the last 24 hours and 7 days."""
+async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/credits - admins only: the provider balance (OpenRouter has one), then tokens and cost per
+    model for the last 24 hours and 7 days."""
     if not await _gate(ctx, update):
         return
+    try:
+        balance = await ctx.backend.credits() or "This provider has no credit balance to show."
+    except Exception as e:
+        log.exception("Credit check failed")
+        balance = f"Couldn't fetch credits: {e}"
     now = int(time.time())
-    parts = []
+    parts = [balance]
     for label, secs in (("last 24 hours", 86_400), ("last 7 days", 7 * 86_400)):
         rows = await asyncio.to_thread(ctx.store.usage_summary, now - secs)
         parts.append(usage_text(rows, label))

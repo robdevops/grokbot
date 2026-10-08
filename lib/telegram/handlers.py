@@ -23,10 +23,12 @@ from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, chat_prompt, down_note
 from ..store import is_dm
 from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
+from .access import is_admin
 from .draft import Draft, start_typing
 from .send import reply_chunks, reply_html
 
 log = logging.getLogger("bot")
+PORTFOLIO_ADMINS_ONLY = "Portfolio data is for admins only."
 READ_IMAGE_WORDS = re.compile(r"\b(read|text|says?|chart|table|number|screenshot|ocr|zoom|detail|label)\b", re.I)
 
 
@@ -77,7 +79,7 @@ class Handlers:
             self.ctx.store.remember_user(msg)
         self.ctx.store.save(msg)
         chat = getattr(msg, "chat", None)
-        if self.ctx.st.post_to_groups and chat and chat.type in post.GROUP_TYPES and chat.title:
+        if chat and chat.type in post.GROUP_TYPES and chat.title:
             self.ctx.store.remember_chat(chat.id, chat.title)
 
     async def on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -90,9 +92,15 @@ class Handlers:
         trig = self._trigger(msg)
         if trig is None:
             return
+        if trig.private and self.ctx.st.admin_only and not await self._is_admin(msg):
+            log.info("Ignored a DM from user %s: not an admin", msg.from_user and msg.from_user.id)
+            return
         if await self._command(msg, trig):
             return
         await self._answer(msg, trig)
+
+    async def _is_admin(self, msg: Message) -> bool:
+        return bool(msg.from_user and await is_admin(self.ctx, msg.from_user.id))
 
     def _trigger(self, msg: Message) -> Trigger | None:
         """Is this message for the bot? Other bots are logged but never answered (avoids bot
@@ -111,7 +119,7 @@ class Handlers:
         return Trigger(text, private, is_movers, reply_target, replied_to_bot)
 
     async def _command(self, msg: Message, trig: Trigger) -> bool:
-        """Private-chat commands handled here (/credits and /usage have their own handlers)."""
+        """Private-chat commands handled here (/credits has its own handler)."""
         if not trig.private or not trig.text.startswith("/"):
             return False
         command = trig.text.split()[0].split("@")[0].lower()
@@ -216,6 +224,10 @@ class Handlers:
         else:
             context = trig.text + " " + (describe(trig.reply_target) if trig.reply_target else "")
             chosen = route(context, st, ctx.registry)
+            admin = not st.admin_only or await self._is_admin(msg)
+            if not admin and is_portfolio_question(context, st) and any(
+                    s.cfg.get("gate") == "portfolio" for s in ctx.registry.up()):
+                return PORTFOLIO_ADMINS_ONLY
             extra = []
             if st.post_to_groups and trig.private and post.wants_post(trig.text):
                 extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
@@ -225,7 +237,8 @@ class Handlers:
             parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]
             parts += await self._images(msg, trig)
             answer = await ask(ctx, parts, chosen,
-                               cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra)
+                               cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,
+                               admin=admin)
         return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers)
 
 

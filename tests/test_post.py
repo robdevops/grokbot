@@ -113,13 +113,10 @@ async def test_flag_off_or_a_group_chat_or_a_normal_message_gets_no_post_tool(en
     assert all("send_to_group" not in s["tools"] for s in backend.seen)
 
 
-async def test_groups_are_remembered_from_messages_only_when_the_flag_is_on(env, store):
-    ctx, backend, h = make_ctx(env, store, [], POST_TO_GROUPS_FROM_DM="on")
+async def test_groups_are_remembered_from_their_messages(env, store):
+    ctx, backend, h = make_ctx(env, store, [])
     await run(h, user_msg(ctx.bot, "hello all", chat_id=GROUP, chat_title="Finance Alliance"))
     await run(h, user_msg(ctx.bot, "hi", chat_id=ME, user_id=ME, mid=2))  # a DM is not a group
-    assert store.chats() == [(GROUP, "Finance Alliance")]
-    ctx2, _, h2 = make_ctx(env, store, [])
-    await run(h2, user_msg(ctx2.bot, "hello", chat_id=OTHER, chat_title="Chess", mid=3))
     assert store.chats() == [(GROUP, "Finance Alliance")]
 
 

@@ -123,16 +123,14 @@ def build_app(ctx: Ctx) -> Application:
         return wrapper
 
     # Commands first: the first matching handler wins, and the catch-all would swallow them.
-    if st.admin_chats:
-        app.add_handler(CommandHandler("credits", command(commands.credits)))
-        app.add_handler(CommandHandler("usage", command(commands.usage)))
+    app.add_handler(CommandHandler("credits", command(commands.credits)))
     app.add_handler(MessageHandler(
         (filters.ChatType.GROUPS | filters.ChatType.PRIVATE)
         & (filters.UpdateType.MESSAGE | filters.UpdateType.EDITED_MESSAGE)
         & ~filters.StatusUpdate.ALL, handlers.on_message))
     if st.holding_news:  # the Unsubscribe / Undo buttons on holding-news messages
         app.add_handler(CallbackQueryHandler(command(holding_news.on_button), pattern=r"^hn:"))
-    if st.post_to_groups:  # keeps the list of groups the bot can post in
+    if st.post_to_groups or st.admin_only:  # keeps the list of groups the bot is in
         app.add_handler(ChatMemberHandler(command(post.on_membership), ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_error_handler(on_error)
     return app
@@ -140,7 +138,7 @@ def build_app(ctx: Ctx) -> Application:
 
 def allowed_updates(st: config.Settings) -> list[str]:
     return (["message", "edited_message"] + (["callback_query"] if st.holding_news else [])
-            + (["my_chat_member"] if st.post_to_groups else []))
+            + (["my_chat_member"] if st.post_to_groups or st.admin_only else []))
 
 
 def git_hash() -> str:

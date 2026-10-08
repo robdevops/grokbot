@@ -23,7 +23,8 @@ ENV_VARS: dict[str, str] = {
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
     "SEARCH": "on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on.",
     # Advanced and optional
-    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits and /usage; a group's chat ID gets the alerts only. Empty = neither.",
+    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
+    "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
     "DB_PATH": "SQLite file for chat history (default chat_log.db). Instances may share it.",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
@@ -73,6 +74,7 @@ class Settings:
     tz: ZoneInfo
     mcp_config: str
     admin_chats: frozenset[int]  # user IDs (alerts + admin commands) and group chat IDs (alerts only)
+    admin_only: bool
     movers_bots: frozenset[str]
     dm_buttons: bool
     post_to_groups: bool
@@ -166,6 +168,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
         mcp_config=env.get("MCP_CONFIG", "mcp_servers.json"),
         admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
+        admin_only=_flag(env, "ADMIN_ONLY", default=True),
         movers_bots=frozenset(
             u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "").replace(",", " ").split()
         ),

@@ -10,7 +10,7 @@ from telegram.error import TelegramError
 from lib import config
 from lib.store import Store
 
-BASE_ENV = {"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "key"}
+BASE_ENV = {"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "key", "ADMIN_ONLY": "off"}  # admin-only has its own tests
 
 
 @pytest.fixture
