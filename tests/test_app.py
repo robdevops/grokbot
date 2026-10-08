@@ -30,13 +30,15 @@ def test_handlers_follow_the_flags(env, store):
         return app.build_app(Ctx(st, store, ScriptedBackend([]), registry())), st
 
     plain, st = build()
-    assert handler_kinds(plain) == ["MessageHandler"] and app.allowed_updates(st) == ["message", "edited_message"]
+    assert handler_kinds(plain) == ["CommandHandler", "MessageHandler"] and app.allowed_updates(st) == ["message", "edited_message"]
     full, st = build(ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
     kinds = handler_kinds(full)
-    assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler"]
+    assert kinds == ["CommandHandler", "MessageHandler", "CallbackQueryHandler"]
     assert "callback_query" in app.allowed_updates(st)
-    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits", "usage"}
+    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits"}
     assert any(isinstance(h, MessageHandler) for h in full.handlers[0])
+    locked, st = build(ADMIN_ONLY="on")  # remembers the groups it is in, to know who their admins are
+    assert "ChatMemberHandler" in handler_kinds(locked) and "my_chat_member" in app.allowed_updates(st)
     assert any(isinstance(h, CallbackQueryHandler) for h in full.handlers[0])
 
 
@@ -57,6 +59,7 @@ def test_main_accepts_and_ignores_a_label_and_unknown_args(monkeypatch, tmp_path
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "1:x")
     monkeypatch.setenv("OPENROUTER_API_KEY", "b")
     monkeypatch.delenv("XAI_API_KEY", raising=False)
+    monkeypatch.setenv("ADMIN_ONLY", "off")
     monkeypatch.setenv("DB_PATH", str(tmp_path / "x.db"))
     monkeypatch.setenv("MCP_CONFIG", str(tmp_path / "none.json"))
     monkeypatch.setattr(app.Application, "run_polling", lambda self, **kw: started.update(kw))

@@ -217,3 +217,52 @@ def test_dm_buttons_hash_changes_with_presets(monkeypatch):
     before = dm_buttons.keyboard_hash()
     monkeypatch.setitem(dm_buttons.PRESETS, "New", "x")
     assert dm_buttons.keyboard_hash() != before
+
+
+# ---- admin-only (the default) ---------------------------------------------------------
+async def test_dm_from_a_non_admin_is_logged_but_ignored(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", ADMIN_CHAT_IDS="5")
+    stranger = user_msg(ctx.bot, "hello", chat_id=9, user_id=9)
+    await run(h, stranger)
+    assert stranger.replies == [] and backend.seen == [] and store.history(9, 20)
+    admin = user_msg(ctx.bot, "hello", chat_id=5, user_id=5)
+    await run(h, admin)
+    assert admin.replies[0]["text"] == "hi"
+
+
+async def test_group_admin_can_dm_but_admin_only_off_lets_everyone_in(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("hi"), step("hi")], ADMIN_ONLY="on")
+    store.remember_chat(-100, "Stocks")
+    ctx.bot.admins[-100] = [7]
+    m = user_msg(ctx.bot, "hello", chat_id=7, user_id=7)
+    await run(h, m)
+    assert m.replies[0]["text"] == "hi"
+    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="off")
+    open_dm = user_msg(ctx.bot, "hello", chat_id=9, user_id=9, mid=5)
+    await run(h, open_dm)
+    assert open_dm.replies[0]["text"] == "hi"
+
+
+async def test_non_admin_gets_no_portfolio_data_in_a_group(env, store):
+    sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
+    ctx, backend, h = make_ctx(env, store, [step("ok")], servers=[sharesight], ADMIN_ONLY="on",
+                               ADMIN_CHAT_IDS="5")
+    asked = user_msg(ctx.bot, "@stockbot how is my portfolio doing?", user_id=9)
+    await run(h, asked)
+    assert asked.replies[0]["text"] == "Portfolio data is for admins only." and backend.seen == []
+    admin = user_msg(ctx.bot, "@stockbot how is my portfolio doing?", user_id=5, mid=2)
+    await run(h, admin)
+    assert backend.seen[0]["tools"] == ["sharesight__list_portfolios"]
+
+
+async def test_non_admin_never_gets_portfolio_tools_even_on_the_rerun(env, store):
+    yahoo, sharesight = FakeMcp("yahoo"), FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
+    ctx, backend, h = make_ctx(env, store, [step("ok")], servers=[yahoo, sharesight], ADMIN_ONLY="on")
+    m = user_msg(ctx.bot, "@stockbot how is NVDA looking?", user_id=9)
+    await run(h, m)
+    assert backend.seen[0]["tools"] == ["yahoo__get_quote"]
+    ctx, backend, h = make_ctx(env, store, [step("NEEDS_TOOLS"), step("done")], servers=[yahoo, sharesight],
+                               ADMIN_ONLY="on")
+    m = user_msg(ctx.bot, "@stockbot how is NVDA looking?", user_id=9)
+    await run(h, m)
+    assert backend.seen[1]["tools"] == ["yahoo__get_quote"] and m.replies[0]["text"] == "done"

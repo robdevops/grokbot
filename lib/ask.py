@@ -37,17 +37,25 @@ def _hide_needs_tools(on_text):
     return forward
 
 
+def _public(servers: list) -> list:
+    """The MCP servers anyone may use: not the ones gated on portfolio questions (Sharesight)."""
+    return [s for s in servers if s.cfg.get("gate") != "portfolio"]
+
+
 async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = False,
               cache_key: str | None = None, on_text=None, kind: str = "chat",
-              chat_id: int = 0, extra_tools=()) -> Answer:
+              chat_id: int = 0, extra_tools=(), admin: bool = True) -> Answer:
     """Ask the configured provider and record the usage. `route` says which tools to offer;
     must_search forces a search (and offers nothing else). A message the gate gave fewer tools
-    than exist that gets back NEEDS_TOOLS is asked again with everything on."""
+    than exist that gets back NEEDS_TOOLS is asked again with everything on. A non-admin never
+    gets the portfolio tools, in either request."""
     st = ctx.st
     if must_search:
         if not st.search:
             raise RuntimeError("search is disabled, but this request needs it")
         route = Route([], True)
+    elif not admin:
+        route = dataclasses.replace(route, servers=_public(route.servers))
     saver = st.token_saver
     req = Request(
         system=system_prompt(ctx.first_name, route, ctx.backend.search_what, saver=saver),
@@ -65,7 +73,7 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
     await _record(ctx, req.model, kind, chat_id, answer)
     if (route.simple or route.partial) and wants_tools(answer.text):
         log.info("Gate offered fewer tools, the model asked for more: asking again with everything on")
-        full = Route(ctx.registry.up(), st.search)
+        full = Route(ctx.registry.up() if admin else _public(ctx.registry.up()), st.search)
         req = dataclasses.replace(
             req, system=system_prompt(ctx.first_name, full, ctx.backend.search_what, saver=saver),
             model=st.model, tools=[t for s in full.servers for t in s.tools] + [t for t, _ in extra_tools],

@@ -24,7 +24,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   `openrouter.py` + `zai.py` (the only provider-specific code), `runner.py` (THE tool loop), `policy.py` (THE retry ladder), `gate.py` (which tools a message needs).
 - `prompts.py` all prompts. `ask.py` one entry point: route -> Request -> policy.ask -> usage -> NEEDS_TOOLS rerun.
 - `telegram/`: `handlers.py` (trigger -> request -> reply), `send.py`, `draft.py` (typing + streaming
-  drafts), `commands.py` (/credits, /usage). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`.
+  drafts), `commands.py` (/credits), `access.py` (who is an admin). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`.
 - `app.py` wiring/startup; `context.py` `Ctx` (settings, store, backend, registry, bot).
 - `lib/` holds only what the bot needs to run. Developer helpers live in `tools/`: `report.py` (`make prompt-report`),
   `capture.py` (real MCP output for fixtures); the bot never imports them.

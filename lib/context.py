@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -19,6 +19,7 @@ class Ctx:
     backend: Backend
     registry: Registry
     bot: Any = None  # telegram.Bot, set at startup
+    group_admins: dict = field(default_factory=dict)  # chat id -> (admin user IDs, expiry); see telegram/access.py
 
     @property
     def first_name(self) -> str:
