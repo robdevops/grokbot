@@ -167,8 +167,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     ctx = build_ctx(st)
     app = build_app(ctx)
     commit = git_hash()
-    log.info("Starting%s%s: %s on %s, reasoning %s, MCP servers: %s, admin commands %s",
+    log.info("Starting%s%s: %s on %s, reasoning %s, MCP servers: %s",
              f" instance {args.label}" if args.label else "", f" ({commit})" if commit else "", st.model, st.provider,
-             st.reasoning or "default", ", ".join(ctx.registry.servers) or "none",
-             "on" if st.admin_chats else "off (ADMIN_CHAT_IDS unset)")
+             st.reasoning or "default", ", ".join(ctx.registry.servers) or "none")
     app.run_polling(allowed_updates=allowed_updates(st))
