@@ -91,7 +91,9 @@ Per-server keys: `command`/`args`/`env` (local, stdio) or `url`/`headers` (remot
 `${VAR}` in `env`/`headers` is taken from the environment; `description`; `blocked_tools`;
 `allowed_tools` (an explicit allow-list); `disabled`; `max_concurrent` (default 4, stops a 20-stock
 request hammering Yahoo); `cache_ttl` seconds during which identical calls share one result (0 =
-off); `slim` (result slimming, defaults to the server's name; `sharesight` flattens holdings);
+off); `keep_warm` (tools whose cached results are refetched just before they expire, while people keep asking: a list of
+tool names, or `{name: longest start_date..end_date window in days}` for tools with dates, so a longer or undated call is
+cached but not refreshed); `slim` (result slimming, defaults to the server's name; `sharesight` flattens holdings);
 `hide_params` (optional parameters kept out of the tool definition because the model never needs them,
 saving tokens every round; a required parameter is never hidden); `gate` (`portfolio` = only offered when the question is about portfolios/holdings);
 `current_holdings_only` (Sharesight: never include sold holdings).
@@ -190,7 +192,8 @@ Each answer's log line shows the cached percentage.
   rows dropped, `1.20067e+11` shown as `120.067B`, NaN as `-`), results capped at 12,000 characters; an
   identical call within one request gets a short "same as earlier" note instead of a second copy;
   `cache_ttl` shares results between users: 30 seconds for Yahoo, 30 minutes for Sharesight (so a portfolio
-  answer can be up to 30 minutes old).
+  answer can be up to 30 minutes old). Sharesight's portfolio list and its one-day performance reports are refetched in the background
+  just before they expire while people keep asking for them; a query nobody repeats is dropped.
 - **Compact history:** stored HTML is shown to the model as plain text (ticker links become the
   symbol, tags and Yahoo URLs dropped), lines cut to 240 characters and the bot's own to 160.
 - **Smaller prompts:** the system prompt is about half its previous size, the repeated instruction
