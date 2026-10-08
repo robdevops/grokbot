@@ -1,6 +1,6 @@
 ---
 name: merge-after-ci
-description: Merge pull requests from claude/* branches yourself once their CI passes, silently. Use right after opening a PR, when a claude/* PR is pointed out, or when a CI-finished event arrives for one. Never merges anything that is not from a claude/* branch in this repo, and never uses GitHub's own auto-merge.
+description: Merge pull requests from claude/* branches yourself once their CI passes, silently. Use right after pushing a claude/* branch (open its PR first), when a claude/* PR is pointed out, or when a CI-finished event arrives for one. Never merges anything that is not from a claude/* branch in this repo, and never uses GitHub's own auto-merge.
 ---
 
 # Merge after CI passes
@@ -13,6 +13,8 @@ or merges, and do not answer PR events (opened, checks finished, merged, subscri
 Open, not a draft, head branch starts with `claude/` in this same repo, base is the default branch. Anything else: do nothing.
 
 ## Steps
+0. Right after pushing a `claude/*` branch, open its PR (`create_pull_request`, base the default branch) if it has none, so
+   Claude Code shows the PR/CI button. The user should never have to ask for the PR.
 1. Right after a PR is opened (or when one is pointed out), subscribe to it (`subscribe_pr_activity`) so you hear when CI completes.
 2. When its `check` finishes (a `check_suite.completed` event) or if CI is already done, read the PR fresh from GitHub:
    `pull_request_read` `get`, `get_check_runs`, `get_reviews`, `get_review_comments`. Never rely on earlier results.
