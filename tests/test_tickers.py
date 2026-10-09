@@ -58,6 +58,14 @@ def test_raw_links_go_behind_citation_numbers():
     assert "quote/NVDA" not in out  # the ticker inside the URL is not linked
 
 
+def test_citations_on_their_own_lines_join_the_preceding_text():
+    a, b = '<a href="https://a.com/1">[1]</a>', '<a href="https://b.com/2">[2]</a>'
+    assert link_tickers("Thin volume.\n\nhttps://a.com/1\nhttps://b.com/2") == f"Thin volume.{a}{b}"
+    assert link_tickers("One.\n\nhttps://a.com/1\n\nTwo.\nhttps://b.com/2") == f"One.{a}\n\nTwo.{b}"
+    assert link_tickers("Said https://a.com/1 then more") == f"Said {a} then more"  # inline: untouched
+    assert link_tickers("Thin.\nhttps://a.com/1 and more") == f"Thin.\n{a} and more"  # not a citation-only line
+
+
 def test_link_labelled_with_its_own_url_is_numbered_but_named_links_and_code_are_not():
     assert link_tickers('<a href="https://y.com/p">https://y.com/p…</a> ok') == '<a href="https://y.com/p">[1]</a> ok'
     assert link_tickers('<a href="https://y.com/p">Reuters</a>') == '<a href="https://y.com/p">Reuters</a>'
