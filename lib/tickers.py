@@ -19,7 +19,9 @@ COMBINED_RE = re.compile(f"{TICKER_RE.pattern}|{ONE_LETTER_RE.pattern}")
 PROTECTED_TAG_RE = re.compile(r"<(/?)(a|code|pre)\b", re.I)
 BOLD_TAG_RE = re.compile(r"<(/?)(b|strong)\b", re.I)
 URL_RE = re.compile(r'https?://[^\s<>"]+')
-RAW_ANCHOR_RE = re.compile(r'<a href="(https?://[^"]+)">\s*https?://[^<]*</a>')
+_CITE = r'<a href="[^"]*">\[\d+\]</a>'
+CITE_ONLY_RUN_RE = re.compile(rf"\s*\n\s*({_CITE}(?:\s+{_CITE})*)[ \t]*(?=\n|$)")  # lines holding only citations
+RAW_ANCHOR_RE =re.compile(r'<a href="(https?://[^"]+)">\s*https?://[^<]*</a>')
 # "Micron (MU)": up to four capitalised words (or a number) right before a parenthesised ticker.
 _WORD = r"[A-Z0-9][\w&'’-]*(?:\.[\w&'’-]+)*"
 NAME_TICKER_RE = re.compile(
@@ -94,7 +96,9 @@ def number_links(text: str) -> str:
         return f'<a href="{url}">[{n}]</a>{tail}'
 
     text = RAW_ANCHOR_RE.sub(lambda m: m.group(1), text)
-    return _rewrite(text, lambda seg, bold: URL_RE.sub(cite, seg))
+    text = _rewrite(text, lambda seg, bold: URL_RE.sub(cite, seg))
+    # Links the model put on their own lines join the text before them: "volume.[1][2]"
+    return CITE_ONLY_RUN_RE.sub(lambda m: re.sub(r"(?<=</a>)\s+", "", m.group(1)), text)
 
 
 def link_tickers(text: str) -> str:
