@@ -6,6 +6,16 @@ import pytest
 from lib import config
 
 
+def test_data_dir_holds_the_data_files():
+    base = {"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"}
+    plain = config.load(base)
+    assert (plain.db_path, plain.mcp_config) == ("chat_log.db", "mcp_servers.json")
+    s = config.load({**base, "DATA_DIR": "/data"})
+    assert (s.db_path, s.mcp_config) == ("/data/chat_log.db", "/data/mcp_servers.json")
+    s = config.load({**base, "DATA_DIR": "/data", "DB_PATH": "other.db", "MCP_CONFIG": "/etc/mcp.json"})
+    assert (s.db_path, s.mcp_config) == ("/data/other.db", "/etc/mcp.json")  # relative joins, absolute stays
+
+
 def test_both_keys_refused():
     with pytest.raises(config.ConfigError, match="only one"):
         config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a", "OPENROUTER_API_KEY": "b"})

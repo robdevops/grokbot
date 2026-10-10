@@ -246,6 +246,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 |---|---|
 | `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/credits`; a group's chat ID gets the down-server messages only. Admins of the groups the bot is in count as admins too. |
 | `ADMIN_ONLY` | on|off. Only admins may DM the bot or get Sharesight data (default on). |
+| `DATA_DIR` | Directory for the bot's data files (the database, `mcp_servers.json`); a relative `DB_PATH` / `MCP_CONFIG` resolves inside it, an absolute one is used as given. Default: the working directory. In Docker, set `DATA_DIR=/data` and bind-mount a host directory there so history survives upgrades. |
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |

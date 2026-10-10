@@ -106,7 +106,7 @@ async def capture(server: MCPServer, days: int) -> None:
 
 
 async def run(label: str, days: int) -> int:
-    registry = Registry.load(os.environ.get("MCP_CONFIG", "mcp_servers.json"), timeout=config.MCP_TIMEOUT,
+    registry = Registry.load(config.data_path(os.environ, "MCP_CONFIG", "mcp_servers.json"), timeout=config.MCP_TIMEOUT,
                              max_output=10**7)
     server = registry.servers.get(label)
     if server is None:

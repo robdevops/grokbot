@@ -25,6 +25,7 @@ ENV_VARS: dict[str, str] = {
     # Advanced and optional
     "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
+    "DATA_DIR": "Directory for the bot's data files (the database, mcp_servers.json); relative DB_PATH / MCP_CONFIG resolve inside it. Default: the working directory.",
     "DB_PATH": "SQLite file for chat history (default chat_log.db). Instances may share it.",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
@@ -108,6 +109,14 @@ class Settings:
         return 160 if self.token_saver else None
 
 
+def data_path(env: Mapping[str, str], var: str, default: str) -> str:
+    """A data file named by env var `var` (or `default`), inside DATA_DIR when that is set.
+    An absolute path is used as given."""
+    name = env.get(var, "").strip() or default
+    data_dir = env.get("DATA_DIR", "").strip()
+    return os.path.join(data_dir, name) if data_dir else name  # join keeps an absolute `name` as is
+
+
 def _flag(env: Mapping[str, str], name: str, default: bool = False) -> bool:
     value = env.get(name, "").strip().lower()
     if not value:
@@ -164,9 +173,9 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         search_model=search_model,
         max_tokens=int(env.get("MAX_TOKENS") or 3000),
         history_limit=int(env.get("HISTORY_LIMIT") or 20),
-        db_path=env.get("DB_PATH", "chat_log.db"),
+        db_path=data_path(env, "DB_PATH", "chat_log.db"),
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
-        mcp_config=env.get("MCP_CONFIG", "mcp_servers.json"),
+        mcp_config=data_path(env, "MCP_CONFIG", "mcp_servers.json"),
         admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
         admin_only=_flag(env, "ADMIN_ONLY", default=True),
         movers_bots=frozenset(
