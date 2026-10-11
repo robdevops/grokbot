@@ -49,7 +49,8 @@ async def test_months_run_from_inception_with_sold_holdings_and_best_worst(env, 
     out = await fn({"portfolio_id": 7, "end": "2026-03"})
     assert defn.name == "period_returns" and "Total return per month (AUD)" in out
     assert "2025-12 -2.00% -200" in out and "2026-02 +5.00% +500" in out
-    assert "Best: 2026-02 +5.00%. Worst: 2025-12 -2.00%. 1 months had no data." in out  # March: no data
+    assert "Best by %: 2026-02 +5.00% (+500). Worst by %: 2025-12 -2.00% (-200)." in out
+    assert "Best by money: 2026-02 +5.00% (+500). Worst by money: 2025-12 -2.00% (-200). 1 months had no data." in out  # March: no data
     first = reports(ss)[0]
     assert (first["start_date"], first["end_date"]) == ("2025-12-20", "2025-12-31")  # clipped to inception
     assert all(r["_keep_sales"] is True for r in reports(ss))
@@ -161,3 +162,17 @@ def test_flush_scope_understands_portfolio_year_month_day_and_all():
     assert f(["2024-05-17"]) == (None, date(2024, 5, 17), date(2024, 5, 17))
     assert f(["nope"]) is None and f(["684141", "702349"]) is None and f(["2024", "2025"]) is None
     assert f(["1234"]) is None  # 4 digits that aren't a year in range
+
+
+async def test_best_by_money_can_differ_from_best_by_percent(env, store):
+    class Mixed(Sharesight):
+        async def call(self, tool, args):
+            self.calls.append((tool, args))
+            pct, gain = {"2026-01": (10.0, 100.0), "2026-02": (2.0, 900.0)}[args["start_date"][:7]]
+            return json.dumps({"report": {"total_gain_percent": pct, "total_gain": gain, "currency": "AUD"}})
+
+    ctx, _ = make(env, store, Mixed("sharesight", tools=("list_portfolios", "get_performance_report")))
+    _, fn = periods.tool(ctx)
+    out = await fn({"portfolio_id": 7, "start": "2026-01", "end": "2026-02"})
+    assert "Best by %: 2026-01 +10.00% (+100)" in out and "Best by money: 2026-02 +2.00% (+900)" in out
+    assert "Worst by money: 2026-01 +10.00% (+100)" in out

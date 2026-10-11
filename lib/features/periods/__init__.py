@@ -17,8 +17,8 @@ log = logging.getLogger("bot")
 
 TOOL = ToolDef(
     "period_returns",
-    "Total return of a Sharesight portfolio for each day, week, month, quarter or year, with the best and "
-    "worst one and the holdings behind them. Use it for best/worst day, week, month, quarter or year, or any "
+    "Total return of a Sharesight portfolio for each day, week, month, quarter or year, as a percentage and a "
+    "money gain, with the best and worst one by each measure and the holdings behind them. Use it for best/worst day, week, month, quarter or year, or any "
     "period-by-period question, instead of fetching one get_performance_report per period. Sold holdings are "
     "included. Omit start for 'since inception'. History that isn't cached yet is fetched live, which is slow "
     "for days and weeks: if the tool refuses a range, tell the user why and offer the start it suggests.",
@@ -88,11 +88,13 @@ def tool(ctx: Ctx):
         lines = [f"Total return per {period} ({rows[0][1].currency}), {rows[0][0]} to {rows[-1][0]}, "
                  "sold holdings included:"]
         lines += [f"{label} {r.pct:+.2f}% {r.gain:+,.0f}" for label, r in rows]
-        lines.append(f"Best: {best[0]} {best[1].pct:+.2f}%. Worst: {worst[0]} {worst[1].pct:+.2f}%."
+        rich, poor = max(rows, key=lambda r: r[1].gain), min(rows, key=lambda r: r[1].gain)
+        both = lambda row: f"{row[0]} {row[1].pct:+.2f}% ({row[1].gain:+,.0f})"  # noqa: E731
+        lines.append(f"Best by %: {both(best)}. Worst by %: {both(worst)}. "
+                     f"Best by money: {both(rich)}. Worst by money: {both(poor)}."
                      + (f" {missing} {period}s had no data." if missing else ""))
         # What moved the extremes (best/worst by percent and by money), so the answer can say why.
-        extremes = dict.fromkeys(label for label, _ in (best, worst, max(rows, key=lambda r: r[1].gain),
-                                                        min(rows, key=lambda r: r[1].gain)))
+        extremes = dict.fromkeys(label for label, _ in (best, worst, rich, poor))
         for label, r in rows:
             if label in extremes and (text := drivers(r.movers)):
                 lines.append(f"Holdings behind {label}: {text}")

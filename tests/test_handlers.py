@@ -97,6 +97,22 @@ async def test_market_question_offers_tools_up_front(env, store):
     assert backend.seen[0]["tools"] == ["yahoo__get_quote"] and backend.seen[0]["search"] is True
 
 
+async def test_a_short_follow_up_to_a_portfolio_reply_still_gets_the_portfolio_tools(env, store):
+    sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
+    ctx, backend, h = make_ctx(env, store, [step("Your portfolio best month was May"), step("In dollars: ..."), step("c"), step("d")],
+                               servers=[sharesight])
+    await run(h, user_msg(ctx.bot, "@stockbot how is my portfolio doing?", mid=1))
+    await run(h, user_msg(ctx.bot, "@stockbot what about in dollar terms?", mid=2000))
+    assert "sharesight__list_portfolios" in backend.seen[1]["tools"] and "period_returns" in backend.seen[1]["tools"]
+    # too long after the reply: a plain message again
+    await run(h, user_msg(ctx.bot, "@stockbot and what about the other one?", mid=3000, ts=100_000))
+    assert backend.seen[2]["tools"] == []
+    # a long unrelated message right after a reply is not read as a follow-up
+    long = "@stockbot " + " ".join(["tell me a long story about the history of the word mortgage"] * 3)
+    await run(h, user_msg(ctx.bot, long, mid=4000))
+    assert backend.seen[3]["tools"] == []
+
+
 async def test_portfolio_question_reminds_the_model_to_fetch_fresh_figures(env, store):
     sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
     ctx, backend, h = make_ctx(env, store, [step("a"), step("b")], servers=[sharesight])
