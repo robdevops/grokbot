@@ -8,12 +8,21 @@ from lib import config
 
 def test_data_dir_holds_the_data_files():
     base = {"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"}
+    mcp = str(config.ROOT / "mcp_servers.json")  # next to bot.py, whatever DATA_DIR is
     plain = config.load(base)
-    assert (plain.db_path, plain.mcp_config) == ("chat_log.db", "mcp_servers.json")
+    assert (plain.db_path, plain.mcp_config) == ("chat_log.db", mcp)
     s = config.load({**base, "DATA_DIR": "/data"})
-    assert (s.db_path, s.mcp_config) == ("/data/chat_log.db", "/data/mcp_servers.json")
+    assert (s.db_path, s.mcp_config) == ("/data/chat_log.db", mcp)
     s = config.load({**base, "DATA_DIR": "/data", "DB_PATH": "other.db", "MCP_CONFIG": "/etc/mcp.json"})
     assert (s.db_path, s.mcp_config) == ("/data/other.db", "/etc/mcp.json")  # relative joins, absolute stays
+
+
+def test_data_dir_defaults_to_systemd_state_directory():
+    base = {"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"}
+    assert config.load({**base, "STATE_DIRECTORY": "/var/lib/x"}).db_path == "/var/lib/x/chat_log.db"
+    assert config.load({**base, "STATE_DIRECTORY": "/a:/b"}).db_path == "/a/chat_log.db"  # first of several
+    assert config.load({**base, "STATE_DIRECTORY": "/a", "DATA_DIR": "/data"}).db_path == "/data/chat_log.db"
+    assert config.load({**base, "STATE_DIRECTORY": "/a", "DB_PATH": "/x/y.db"}).db_path == "/x/y.db"
 
 
 def test_both_keys_refused():
