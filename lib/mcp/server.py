@@ -158,6 +158,11 @@ class MCPServer:
             log.warning("MCP %s: blocked_tools/allowed_tools entry '%s' matches no tool%s",
                         self.label, name, hint)
 
+    @property
+    def busy(self) -> bool:
+        """Is every call slot taken right now? (Background work waits for this to clear.)"""
+        return self._sem.locked()
+
     async def call(self, tool: str, args: dict) -> str:
         """Run one tool and return its (slimmed, size-capped) text. Identical concurrent or
         recent calls share one result when cache_ttl is set."""

@@ -29,6 +29,7 @@ from telegram.ext import (
 from . import config
 from .context import Ctx
 from .features import dm_buttons, holding_news, post
+from .features.periods import backfill
 from .llm.base import Backend
 from .llm.openrouter import OpenRouterBackend
 from .llm.xai import XaiBackend
@@ -101,6 +102,8 @@ def build_app(ctx: Ctx) -> Application:
             background.append(asyncio.create_task(holding_news.daily_loop(ctx)))
         if st.dm_buttons:
             background.append(asyncio.create_task(dm_buttons.push_on_startup(ctx)))
+        if st.period_backfill:
+            background.append(asyncio.create_task(backfill.loop(ctx)))
 
     async def post_shutdown(app: Application) -> None:
         for task in background:
@@ -124,6 +127,7 @@ def build_app(ctx: Ctx) -> Application:
 
     # Commands first: the first matching handler wins, and the catch-all would swallow them.
     app.add_handler(CommandHandler("credits", command(commands.credits)))
+    app.add_handler(CommandHandler("flushcache", command(commands.flush_cache)))
     app.add_handler(MessageHandler(
         (filters.ChatType.GROUPS | filters.ChatType.PRIVATE)
         & (filters.UpdateType.MESSAGE | filters.UpdateType.EDITED_MESSAGE)
@@ -151,12 +155,26 @@ def git_hash() -> str:
     return done.stdout.strip() if done.returncode == 0 else ""
 
 
+def flush_cache(which: str) -> str:
+    """--flush-cache: needs only the database path, not the bot's keys. Returns the message to print."""
+    if which != "all" and not which.isdigit():
+        return f"Give a portfolio ID (a number) or nothing for all, not '{which}'."
+    n = Store(config.data_path(os.environ, "DB_PATH", "chat_log.db")).period_flush(None if which == "all" else int(which))
+    return f"Flushed {n} cached periods."
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     # The label does nothing: it only shows in ps/top, to tell instances apart when several run
     # side by side with different environments (python bot.py mimo).
     parser = argparse.ArgumentParser(description="Telegram group bot that answers @mentions with an LLM.")
     parser.add_argument("label", nargs="?", help="ignored; identifies this instance in ps/top")
+    parser.add_argument("--flush-cache", nargs="?", const="all", metavar="PORTFOLIO_ID",
+                        help="delete the cached Sharesight period returns (of one portfolio, or all) and exit")
     args, _ = parser.parse_known_args(argv)
+    if args.flush_cache:
+        message = flush_cache(args.flush_cache)
+        print(message)
+        sys.exit(0 if message.startswith("Flushed") else 1)
     try:
         st = config.load()
     except config.ConfigError as e:

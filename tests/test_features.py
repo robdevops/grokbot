@@ -207,3 +207,25 @@ async def test_group_admin_can_run_credits_in_the_group_and_in_a_dm(env, store):
 @pytest.mark.parametrize("cached,tin,pct", [(0, 0, 0), (50, 100, 50)])
 def test_usage_text_percentages(cached, tin, pct):
     assert f"({pct}% cached)" in commands.usage_text([("m", 1, tin, cached, 1, 0.0)], "x")
+
+
+async def test_flushcache_command_is_admin_only_and_flushes_one_portfolio_or_all(env, store):
+    from lib.features.periods import backfill
+    from lib.store import PeriodRow
+
+    st = config.load({**env, "ADMIN_CHAT_IDS": "5", "PERIOD_BACKFILL": "x"})
+    ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
+    store.period_put([PeriodRow(p, f"2026-0{m}-01", f"2026-0{m}-28", 1.0, 1.0, "AUD", []) for p in (7, 8) for m in (1, 2)])
+    stranger = user_msg(ctx.bot, "/flushcache", user_id=9, mid=1)
+    await commands.flush_cache(ctx, update_for(stranger), N(args=[]))
+    assert stranger.replies == [] and store.period_count(7, "2000-01-01", "2100-01-01") == 2
+    one = user_msg(ctx.bot, "/flushcache 7", user_id=5, mid=2)
+    await commands.flush_cache(ctx, update_for(one), N(args=["7"]))
+    assert "Flushed 2 cached periods. Refilling" in one.replies[0]["text"] and store.period_count(8, "2000-01-01", "2100-01-01") == 2
+    assert backfill.wake_event().is_set()  # the background fill starts again
+    bad = user_msg(ctx.bot, "/flushcache x", user_id=5, mid=3)
+    await commands.flush_cache(ctx, update_for(bad), N(args=["x"]))
+    assert "Usage" in bad.replies[0]["text"]
+    every = user_msg(ctx.bot, "/flushcache", user_id=5, mid=4)
+    await commands.flush_cache(ctx, update_for(every), N(args=[]))
+    assert "Flushed 2 cached periods" in every.replies[0]["text"]

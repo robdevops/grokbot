@@ -15,7 +15,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - `config.py`: `Settings` from env (`load()`), `ENV_VARS` registry, tuning constants. The only place that
   knows the provider. Every env var must appear in README.md (a test enforces it).
 - `store.py`: SQLite `Store`: history (`messages` shared by groups, `dm_messages` per bot), users, kv,
-  holding-news state, `usage` ledger. Thread-safe; call through `asyncio.to_thread`.
+  holding-news state, `usage` ledger, `period_cache` (finished Sharesight periods, kept until flushed). Thread-safe; call through `asyncio.to_thread`.
 - `msgtext.py` sender_name/describe. `history.py` transcript lines. `textfmt.py` HTML helpers
   (md_to_html, split_html, plain_text, TG_TAG_RE). `tickers.py` Yahoo links (+ `tickers_data.py`).
 - `mcp/`: `server.py` (MCPServer lifecycle, TTL cache, `Registry`), `schema.py` (neutral `ToolDef`,
@@ -24,7 +24,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   `openrouter.py` + `zai.py` (the only provider-specific code), `runner.py` (THE tool loop), `policy.py` (THE retry ladder), `gate.py` (which tools a message needs).
 - `prompts.py` all prompts. `ask.py` one entry point: route -> Request -> policy.ask -> usage -> NEEDS_TOOLS rerun.
 - `telegram/`: `handlers.py` (trigger -> request -> reply), `send.py`, `draft.py` (typing + streaming
-  drafts), `commands.py` (/credits), `access.py` (who is an admin). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`, `periods.py` (local `period_returns` tool: one call instead of a report per day/week/month/quarter/year).
+  drafts), `commands.py` (/credits), `access.py` (who is an admin). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`, `periods/` (local `period_returns` tool, cache-first; `windows.py`, `rows.py`, `backfill.py` = PERIOD_BACKFILL loop).
 - `app.py` wiring/startup; `context.py` `Ctx` (settings, store, backend, registry, bot).
 - `lib/` holds only what the bot needs to run. Developer helpers live in `tools/`: `report.py` (`make prompt-report`),
   `capture.py` (real MCP output for fixtures); the bot never imports them.
@@ -57,6 +57,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - z.ai: `tool_choice` is ignored (even "none", so the backend omits tools instead), its built-in `web_search` is ignored whenever function
   tools are present (so search is a function tool run through its search API), thinking can't be disabled (default `reasoning_effort`
   low), an invalid search recency is accepted silently (so the tool schema fixes the list), and usage has no cost (price table).
+- Finished Sharesight periods are cached forever (`period_cache`); after a backdated change run `/flushcache` or `python bot.py --flush-cache`. The unfinished period is never cached. `_keep_sales` in tool args is reserved for the bot's own tools (the runner strips it from the model's).
 - `must_search` requests are never retried without tools (answering from memory would invent news).
 - Telegram HTML: only b/i/u/s/code/pre/a/blockquote/tg-spoiler. `Draft` strips tags (half-written HTML is rejected).
 - No live Telegram/xAI/OpenRouter/MCP access in tests or in this sandbox; say so when behaviour can't be checked.

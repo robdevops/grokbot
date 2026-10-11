@@ -1,3 +1,6 @@
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler
 
@@ -30,12 +33,12 @@ def test_handlers_follow_the_flags(env, store):
         return app.build_app(Ctx(st, store, ScriptedBackend([]), registry())), st
 
     plain, st = build()
-    assert handler_kinds(plain) == ["CommandHandler", "MessageHandler"] and app.allowed_updates(st) == ["message", "edited_message"]
+    assert handler_kinds(plain) == ["CommandHandler", "CommandHandler", "MessageHandler"] and app.allowed_updates(st) == ["message", "edited_message"]
     full, st = build(ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
     kinds = handler_kinds(full)
-    assert kinds == ["CommandHandler", "MessageHandler", "CallbackQueryHandler"]
+    assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler"]
     assert "callback_query" in app.allowed_updates(st)
-    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits"}
+    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits", "flushcache"}
     assert any(isinstance(h, MessageHandler) for h in full.handlers[0])
     locked, st = build(ADMIN_ONLY="on")  # remembers the groups it is in, to know who their admins are
     assert "ChatMemberHandler" in handler_kinds(locked) and "my_chat_member" in app.allowed_updates(st)
@@ -104,3 +107,41 @@ async def test_alert_down_notifies_admin_chats_only(env, store):
     quiet = Ctx(config.load(env), store, ScriptedBackend([]), registry(), FakeBot())
     await app.alert_down(quiet, server)
     assert quiet.bot.sent == []
+
+
+def test_flush_cache_cli_needs_no_keys_and_flushes_one_or_all(monkeypatch, tmp_path, capsys):
+    from lib.store import PeriodRow, Store
+
+    db = str(tmp_path / "x.db")
+    for var in ("TELEGRAM_BOT_TOKEN", "OPENROUTER_API_KEY", "XAI_API_KEY", "ZAI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("DB_PATH", db)
+    s = Store(db)
+    s.period_put([PeriodRow(7, "2026-01-01", "2026-01-31", 1.0, 1.0, "AUD", []),
+                  PeriodRow(7, "2026-02-01", "2026-02-28", 1.0, 1.0, "AUD", []),
+                  PeriodRow(8, "2026-01-01", "2026-01-31", 1.0, 1.0, "AUD", [])])
+    with pytest.raises(SystemExit) as e:
+        app.main(["--flush-cache", "7"])
+    assert e.value.code == 0 and "Flushed 2 cached periods." in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:
+        app.main(["--flush-cache"])
+    assert e.value.code == 0 and "Flushed 1 cached periods." in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:
+        app.main(["--flush-cache", "abc"])
+    assert e.value.code == 1 and "portfolio ID" in capsys.readouterr().out
+
+
+async def test_backfill_task_starts_only_when_period_backfill_is_set(env, store, monkeypatch):
+    started = []
+
+    async def fake_loop(ctx):
+        started.append(ctx)
+
+    monkeypatch.setattr(app.backfill, "loop", fake_loop)
+    for extra, expected in (({}, 0), ({"PERIOD_BACKFILL": "x"}, 1)):
+        st = config.load({**env, **extra})
+        ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
+        built = app.build_app(ctx)
+        await built.post_init(SimpleNamespace(bot=SimpleNamespace(id=1)))
+        await asyncio.sleep(0)
+        assert len(started) == expected

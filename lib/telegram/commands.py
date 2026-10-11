@@ -10,6 +10,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ..context import Ctx
+from ..features.periods import backfill
 from .access import is_admin
 
 log = logging.getLogger("bot")
@@ -58,3 +59,18 @@ async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) 
         rows = await asyncio.to_thread(ctx.store.usage_summary, now - secs)
         parts.append(usage_text(rows, label))
     await _reply(ctx, update, "\n\n".join(parts))
+
+
+async def flush_cache(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/flushcache [portfolio_id] - admins only: forget the cached Sharesight period returns (of one
+    portfolio, or all), e.g. after a backdated change. The background fill, if on, re-fetches them."""
+    if not await _gate(ctx, update):
+        return
+    which = (context.args[0] if context.args else "all").strip()
+    if which != "all" and not which.isdigit():
+        await _reply(ctx, update, "Usage: /flushcache [portfolio_id]")
+        return
+    n = await asyncio.to_thread(ctx.store.period_flush, None if which == "all" else int(which))
+    backfill.reset()
+    log.info("Flushed %d cached period returns (%s)", n, which)
+    await _reply(ctx, update, f"Flushed {n} cached periods." + (" Refilling in the background." if ctx.st.period_backfill else ""))

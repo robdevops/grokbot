@@ -178,6 +178,7 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
 | `/credits` | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI and z.ai have none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days |
+| `/flushcache [portfolio_id]` | an admin | Forget the cached Sharesight period returns (of one portfolio, or all); see [Caching Sharesight history](#caching-sharesight-history) |
 
 **Admins** are the user IDs in `ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with
 Telegram, cached for five minutes). The bot only knows a group once someone has written in it, or it was added, since
@@ -186,6 +187,21 @@ default), only admins can DM the bot, and Sharesight data is for admins only: an
 gets "Portfolio data is for admins only." Holding-news DMs, buttons and down-server messages the bot sends itself are
 unaffected. With nobody in `ADMIN_CHAT_IDS` and no known group, nobody can DM the bot or reach Sharesight: set
 `ADMIN_ONLY=off` to allow everyone.
+
+## Caching Sharesight history
+Questions like "best day / week / month / quarter / year since inception" are answered by the `period_returns` tool
+(admins only), which asks Sharesight for one report per period (about 2.4 s each). Every **finished** period is
+stored in the SQLite database (next to the chat history, so it survives upgrades with `DATA_DIR`) and **never
+expires**: the current, unfinished period is always fetched fresh. Past history rarely changes; after a backdated
+trade or correction in Sharesight, flush the cache with `/flushcache [portfolio_id]` (an admin, in Telegram) or
+`python bot.py --flush-cache [portfolio_id]` (needs only `DB_PATH`/`DATA_DIR`, not the bot's keys).
+
+Without the cache, a request may fetch at most 64 days, 26 weeks or 120 months/quarters/years that aren't cached; a
+longer range is refused with the earliest start that fits. Set `PERIOD_BACKFILL=<portfolio name>[,...]` (or `all`) to
+fill the cache in the background: months first, then quarters, years, weeks and days, one Sharesight call at a time,
+never while a user's request is using the server, with a pause between calls (about 1,650 calls per portfolio, a few
+hours the first time; progress is logged and it resumes after a restart). Once filled, any range is instant and the
+limits above no longer matter. Every six hours it fetches whatever newly finished.
 
 ## Caching and token saving
 **Provider prompt caching** (xAI and OpenRouter keep a conversation on the server holding its cached
@@ -270,6 +286,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 | `MCP_CONFIG` | MCP server config file (default mcp_servers.json next to bot.py, whatever `DATA_DIR` is; missing = no MCP tools). |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
 | `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
+| `PERIOD_BACKFILL` | Comma list of Sharesight portfolio names (or `all`) whose returns per day, week, month, quarter and year are fetched into the local cache in the background (about 1,650 Sharesight calls per portfolio the first time, a few hours), so "best day since inception" answers instantly. Empty (default) = off. See [Caching Sharesight history](#caching-sharesight-history). |
 | `POST_TO_GROUPS_FROM_DM` | on|off. A group admin can have the bot post in that group from a DM (default off). |
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |
