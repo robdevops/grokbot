@@ -40,7 +40,6 @@ class Sharesight(FakeMcp):
 
 @pytest.fixture(autouse=True)
 def fast(monkeypatch):
-    monkeypatch.setattr(backfill, "PAUSE", 0)
     monkeypatch.setattr(backfill, "BUSY_POLL", 0)
     monkeypatch.setattr(backfill, "_wake", None)
     backfill.BAD.clear()
