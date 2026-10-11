@@ -25,6 +25,7 @@ WORKERS = 2  # fetches at a time (needs max_concurrent >= 2 on the Sharesight se
 MAX_FAILS = 5  # consecutive failed fetches that end a pass (Sharesight down or throttling)
 PROGRESS_EVERY = 50
 WAIT_LOG = 30.0  # seconds held back by a user's request before the journal says so
+SAMPLE_NODATA = 3  # "no data" windows logged individually per step
 SLOW_FETCH = 20.0  # seconds one Sharesight fetch may take before the journal says so
 
 _wake: asyncio.Event | None = None  # set to start a pass now (after a flush)
@@ -112,6 +113,8 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
             elif got.kind == "nodata":
                 BAD.add((pid, *key(w)))
                 nodata += 1
+                if nodata <= SAMPLE_NODATA:  # enough of them to see what Sharesight says, not one line per empty day
+                    log.info("Period backfill: %s %s..%s has no data: %s", name, w[1], w[2], got.text[:150])
             else:  # a blip says nothing about the window itself, so it is tried again next pass
                 streak[0] += 1
                 transient += 1

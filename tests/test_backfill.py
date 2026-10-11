@@ -180,6 +180,8 @@ async def test_windows_with_no_data_do_not_stop_the_pass_and_are_not_retried(env
     stored = await backfill.fill_once(*args)
     assert stored > 0 and store.period_count(7, "2026-01-01", "2026-03-31") == stored  # later windows still got stored
     assert "had no data" in caplog.text and "fetches in a row failed" not in caplog.text
+    shown = [r.message for r in caplog.records if "has no data:" in r.message]
+    assert 0 < len(shown) <= 3 * 5 and "no data for this period" in shown[0]  # a few samples per step, with Sharesight's words
     ss.order.clear()
     assert await backfill.fill_once(*args) == 0 and ss.order == []  # the empty ones are skipped until reset()
 
