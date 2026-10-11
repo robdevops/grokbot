@@ -97,6 +97,16 @@ async def test_market_question_offers_tools_up_front(env, store):
     assert backend.seen[0]["tools"] == ["yahoo__get_quote"] and backend.seen[0]["search"] is True
 
 
+async def test_a_source_named_in_the_message_is_nudged_when_the_model_skips_it(env, store):
+    yahoo = FakeMcp("yahoo")
+    ctx, backend, h = make_ctx(env, store, [step("from memory"), step(calls=[("1", "yahoo__get_quote", "{}")],
+                                                                      finish="tool_calls"), step("quoted")],
+                               servers=[yahoo])
+    m = user_msg(ctx.bot, "@stockbot what does yahoo say about NVDA?")
+    await run(h, m)
+    assert yahoo.calls and "quoted" in m.replies[0]["text"]
+
+
 async def test_portfolio_question_reminds_the_model_to_fetch_fresh_figures(env, store):
     sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
     ctx, backend, h = make_ctx(env, store, [step("a"), step("b")], servers=[sharesight])

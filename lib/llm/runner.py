@@ -25,6 +25,8 @@ NOISY_ARGS = {"consolidated", "report_combined", "grouping", "include_limited",
               "include_sales", "response_format"}
 SAME_AS_EARLIER = "Same call as one already answered in this conversation; use that result."
 WRITE_NOW = "Write the answer now, from the tool results above. Keep any thinking brief."
+USE_NAMED = ("You were asked to use {names} and haven't called it yet. Call its tools now, using what "
+             "you've found so far, then answer.")
 TOO_MANY_SEARCHES = "Skipped: too many searches at once. Use what you already have."
 
 
@@ -163,12 +165,26 @@ async def _recover_fake_calls(step: Step, backend: Backend, usage: Usage) -> str
     return "\n\n".join(parts) + "\n\nAnswer the question now using these results."
 
 
+def _offered(req: Request, registry: Registry) -> dict[str, int]:
+    """Tools offered per MCP server label, for the log."""
+    counts: dict[str, int] = {}
+    for t in req.tools:
+        found = registry.lookup(t.name)
+        label = found[0].label if found else "local"
+        counts[label] = counts.get(label, 0) + 1
+    return counts
+
+
 async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: bool = True) -> Answer:
     t0 = time.monotonic()
     conv = backend.start(req)
     total, rounds, tool_calls = Usage(), 0, 0
     seen: dict[tuple[str, str], int] = {}
     searched = 0
+    used: set[str] = set()  # labels of the MCP servers called so far
+    nudged = False
+    log.info("Tools offered: %s%s", ", ".join(f"{label} {n}" for label, n in _offered(req, registry).items())
+             or "none", " + search" if req.search else "")
     while True:
         final = rounds >= config.MAX_TOOL_ROUNDS
         choice = "none" if final else ("required" if req.must_search and rounds == 0 else None)
@@ -185,13 +201,20 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
             break
         if step.calls:
             tool_calls += len(step.calls)
-            results = await run_calls(step.calls, backend, registry, req, seen, dedupe, total)
+            used |= {found[0].label for c in step.calls if (found := registry.lookup(c.name))}
+            results =await run_calls(step.calls, backend, registry, req, seen, dedupe, total)
             backend.add_results(conv, step, results)
             continue
         nudge = await _recover_fake_calls(step, backend, total) if req.search else None
         if nudge:
             backend.add_user_message(conv, nudge)
             req = dataclasses.replace(req, search=False)  # recovery happens once
+            continue
+        missing = [n for n in req.named_sources if n not in used]
+        if missing and not nudged:  # the user named a source the model skipped: ask once more
+            nudged = True
+            log.info("Nudging: %s named but not used", ", ".join(missing))
+            backend.add_user_message(conv, USE_NAMED.format(names=" and ".join(missing)))
             continue
         break
     if req.must_search and not (tool_calls or searched):
