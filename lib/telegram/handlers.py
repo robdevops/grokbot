@@ -236,10 +236,9 @@ class Handlers:
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)
             parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]
             parts += await self._images(msg, trig)
-            named = tuple(s.label for s in chosen.servers if re.search(rf"\b{re.escape(s.label)}\b", trig.text, re.I))
             answer = await ask(ctx, parts, chosen,
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,
-                               admin=admin, named_sources=named)
+                               admin=admin)
         return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers)
 
 

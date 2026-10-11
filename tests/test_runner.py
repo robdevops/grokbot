@@ -35,26 +35,6 @@ async def test_tool_round_trip_runs_mcp_and_returns_answer():
     assert ans.usage.tokens_in == 200 and ans.usage.cached == 80
 
 
-async def test_named_source_that_was_skipped_gets_one_nudge(caplog):
-    caplog.set_level("INFO", logger="bot")
-    sharesight, yahoo = FakeMcp("sharesight", tools=("list",)), FakeMcp("yahoo")
-    reg = registry(sharesight, yahoo)
-    tools = [ToolDef(n, "d") for m in (sharesight, yahoo) for n in m.fn_names]
-    r = req(tools=tools, named_sources=("yahoo",))
-    b = ScriptedBackend([step(calls=[("1", "sharesight__list", "{}")], finish="tool_calls"), step("no yahoo"),
-                         step(calls=[("2", "yahoo__get_quote", "{}")], finish="tool_calls"), step("compared")])
-    ans = await run(b, reg, r)
-    assert ans.text == "compared" and ans.rounds == 4 and yahoo.calls == [("get_quote", {})]
-    assert "yahoo named but not used" in caplog.text and "Tools offered: sharesight 1, yahoo 1" in caplog.text
-    # the model ignores the nudge: asked once, then the answer stands
-    b2 = ScriptedBackend([step("no yahoo"), step("still none")])
-    assert (await run(b2, reg, req(tools=tools, named_sources=("yahoo",)))).text == "still none"
-    # a source that was used, or none named, is never nudged
-    b3 = ScriptedBackend([step(calls=[("1", "yahoo__get_quote", "{}")], finish="tool_calls"), step("done")])
-    assert (await run(b3, reg, req(tools=tools, named_sources=("yahoo",)))).rounds == 2
-    assert (await run(ScriptedBackend([step("hi")]), reg, req(tools=tools))).rounds == 1
-
-
 async def test_final_round_forces_answer_without_tools():
     mcp = FakeMcp()
     loop = [step(calls=[(str(i), "yahoo__get_quote", f'{{"n":{i}}}')], finish="tool_calls")

@@ -65,7 +65,6 @@ class Request:
     no_tools_system: str = ""  # system prompt for the retry without tools
     local: dict[str, Callable[[dict], Awaitable[str]]] = field(default_factory=dict)  # tools run in the bot
     max_tokens: int | None = None  # reply cap incl. reasoning; None = the provider's setting
-    named_sources: tuple[str, ...] = ()  # MCP server labels the user named; one never called gets a nudge
 
 
 @dataclass
