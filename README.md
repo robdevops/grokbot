@@ -178,7 +178,7 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
 | `/credits` | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI and z.ai have none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days |
-| `/flushcache [portfolio_id]` | an admin | Forget the cached Sharesight period returns (of one portfolio, or all); see [Caching Sharesight history](#caching-sharesight-history) |
+| `/flushcache [portfolio_id] [year or month or day]` | an admin | Forget cached Sharesight period returns: all, or of one portfolio, or those overlapping a year (`2024`), month (`2024-05`) or day (`2024-05-17`), e.g. `/flushcache 684141 2024`; see [Caching Sharesight history](#caching-sharesight-history) |
 
 **Admins** are the user IDs in `ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with
 Telegram, cached for five minutes). The bot only knows a group once someone has written in it, or it was added, since
@@ -193,8 +193,10 @@ Questions like "best day / week / month / quarter / year since inception" are an
 (admins only), which asks Sharesight for one report per period (about 2.4 s each). Every **finished** period is
 stored in the SQLite database (next to the chat history, so it survives upgrades with `DATA_DIR`) and **never
 expires**: the current, unfinished period is always fetched fresh. Past history rarely changes; after a backdated
-trade or correction in Sharesight, flush the cache with `/flushcache [portfolio_id]` (an admin, in Telegram) or
-`python bot.py --flush-cache [portfolio_id]` (needs only `DB_PATH`/`DATA_DIR`, not the bot's keys).
+trade or correction in Sharesight, flush the cache with `/flushcache [portfolio_id] [year|month|day]` (an admin, in
+Telegram) or `python bot.py --flush-cache [portfolio_id] [year|month|day]` (needs only `DB_PATH`/`DATA_DIR`, not the
+bot's keys). With a year, month or day, only the periods overlapping it go (every day, week, month, quarter and year
+that contains it), and the background fill re-fetches just those.
 
 Without the cache, a request may fetch at most 64 days, 26 weeks or 120 months/quarters/years that aren't cached; a
 longer range is refused with the earliest start that fits. Set `PERIOD_BACKFILL=<portfolio name>[,...]` (or `all`) to

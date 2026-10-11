@@ -57,7 +57,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - z.ai: `tool_choice` is ignored (even "none", so the backend omits tools instead), its built-in `web_search` is ignored whenever function
   tools are present (so search is a function tool run through its search API), thinking can't be disabled (default `reasoning_effort`
   low), an invalid search recency is accepted silently (so the tool schema fixes the list), and usage has no cost (price table).
-- Finished Sharesight periods are cached forever (`period_cache`); after a backdated change run `/flushcache` or `python bot.py --flush-cache`. The unfinished period is never cached. `_keep_sales` in tool args is reserved for the bot's own tools (the runner strips it from the model's).
+- Finished Sharesight periods are cached forever (`period_cache`); after a backdated change run `/flushcache [portfolio] [year|month|day]` or `python bot.py --flush-cache ...`. The unfinished period is never cached. `_keep_sales` in tool args is reserved for the bot's own tools (the runner strips it from the model's).
 - `must_search` requests are never retried without tools (answering from memory would invent news).
 - Telegram HTML: only b/i/u/s/code/pre/a/blockquote/tg-spoiler. `Draft` strips tags (half-written HTML is rejected).
 - No live Telegram/xAI/OpenRouter/MCP access in tests or in this sandbox; say so when behaviour can't be checked.

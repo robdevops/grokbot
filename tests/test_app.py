@@ -138,7 +138,7 @@ async def test_alert_down_notifies_admin_chats_only(env, store):
     assert quiet.bot.sent == []
 
 
-def test_flush_cache_cli_needs_no_keys_and_flushes_one_or_all(monkeypatch, tmp_path, capsys):
+def test_flush_cache_cli_needs_no_keys_and_flushes_by_portfolio_and_period(monkeypatch, tmp_path, capsys):
     from lib.store import PeriodRow, Store
 
     db = str(tmp_path / "x.db")
@@ -146,18 +146,22 @@ def test_flush_cache_cli_needs_no_keys_and_flushes_one_or_all(monkeypatch, tmp_p
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("DB_PATH", db)
     s = Store(db)
-    s.period_put([PeriodRow(7, "2026-01-01", "2026-01-31", 1.0, 1.0, "AUD", []),
-                  PeriodRow(7, "2026-02-01", "2026-02-28", 1.0, 1.0, "AUD", []),
-                  PeriodRow(8, "2026-01-01", "2026-01-31", 1.0, 1.0, "AUD", [])])
-    with pytest.raises(SystemExit) as e:
-        app.main(["--flush-cache", "7"])
-    assert e.value.code == 0 and "Flushed 2 cached periods." in capsys.readouterr().out
-    with pytest.raises(SystemExit) as e:
-        app.main(["--flush-cache"])
-    assert e.value.code == 0 and "Flushed 1 cached periods." in capsys.readouterr().out
-    with pytest.raises(SystemExit) as e:
-        app.main(["--flush-cache", "abc"])
-    assert e.value.code == 1 and "portfolio ID" in capsys.readouterr().out
+    row = lambda pid, a, b: PeriodRow(pid, a, b, 1.0, 1.0, "AUD", [])  # noqa: E731
+    s.period_put([row(70007, "2023-12-26", "2024-01-01"), row(70007, "2024-03-01", "2024-03-31"),
+                  row(70007, "2025-01-01", "2025-12-31"), row(80008, "2024-03-01", "2024-03-31")])
+
+    def run(*words):
+        with pytest.raises(SystemExit) as e:
+            app.main(["--flush-cache", *words])
+        return e.value.code, capsys.readouterr().out
+
+    assert run("70007", "2024") == (0, "Flushed 2 cached periods (portfolio 70007, 2024-01-01 to 2024-12-31).\n")
+    assert run("2025-06") == (0, "Flushed 1 cached periods (all portfolios, 2025-06-01 to 2025-06-30).\n")
+    assert run("80008") == (0, "Flushed 1 cached periods (portfolio 80008).\n")
+    assert run() == (0, "Flushed 0 cached periods (all portfolios).\n")
+    code, out = run("abc")
+    assert code == 1 and "Usage" in out
+    assert run("70007", "70008")[0] == 1  # one portfolio at a time
 
 
 async def test_backfill_task_starts_only_when_period_backfill_is_set(env, store, monkeypatch):

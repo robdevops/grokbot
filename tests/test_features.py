@@ -209,23 +209,28 @@ def test_usage_text_percentages(cached, tin, pct):
     assert f"({pct}% cached)" in commands.usage_text([("m", 1, tin, cached, 1, 0.0)], "x")
 
 
-async def test_flushcache_command_is_admin_only_and_flushes_one_portfolio_or_all(env, store):
+async def test_flushcache_command_is_admin_only_and_flushes_by_portfolio_and_period(env, store):
     from lib.features.periods import backfill
     from lib.store import PeriodRow
 
     st = config.load({**env, "ADMIN_CHAT_IDS": "5", "PERIOD_BACKFILL": "x"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
-    store.period_put([PeriodRow(p, f"2026-0{m}-01", f"2026-0{m}-28", 1.0, 1.0, "AUD", []) for p in (7, 8) for m in (1, 2)])
+    store.period_put([PeriodRow(p, f"{y}-0{m}-01", f"{y}-0{m}-28", 1.0, 1.0, "AUD", [])
+                      for p in (70007, 80008) for y in (2024, 2025) for m in (1, 2)])
+    count = lambda p: store.period_count(p, "2000-01-01", "2100-01-01")  # noqa: E731
     stranger = user_msg(ctx.bot, "/flushcache", user_id=9, mid=1)
     await commands.flush_cache(ctx, update_for(stranger), N(args=[]))
-    assert stranger.replies == [] and store.period_count(7, "2000-01-01", "2100-01-01") == 2
-    one = user_msg(ctx.bot, "/flushcache 7", user_id=5, mid=2)
-    await commands.flush_cache(ctx, update_for(one), N(args=["7"]))
-    assert "Flushed 2 cached periods. Refilling" in one.replies[0]["text"] and store.period_count(8, "2000-01-01", "2100-01-01") == 2
-    assert backfill.wake_event().is_set()  # the background fill starts again
-    bad = user_msg(ctx.bot, "/flushcache x", user_id=5, mid=3)
+    assert stranger.replies == [] and count(70007) == 4
+    year = user_msg(ctx.bot, "/flushcache 70007 2024", user_id=5, mid=2)
+    await commands.flush_cache(ctx, update_for(year), N(args=["70007", "2024"]))
+    assert "Flushed 2 cached periods (portfolio 70007, 2024-01-01 to 2024-12-31). Refilling" in year.replies[0]["text"]
+    assert count(70007) == 2 and count(80008) == 4 and backfill.wake_event().is_set()
+    month = user_msg(ctx.bot, "/flushcache 2025-01", user_id=5, mid=3)
+    await commands.flush_cache(ctx, update_for(month), N(args=["2025-01"]))
+    assert "Flushed 2 cached periods (all portfolios, 2025-01-01 to 2025-01-31)" in month.replies[0]["text"]
+    bad = user_msg(ctx.bot, "/flushcache x", user_id=5, mid=4)
     await commands.flush_cache(ctx, update_for(bad), N(args=["x"]))
     assert "Usage" in bad.replies[0]["text"]
-    every = user_msg(ctx.bot, "/flushcache", user_id=5, mid=4)
+    every = user_msg(ctx.bot, "/flushcache", user_id=5, mid=5)
     await commands.flush_cache(ctx, update_for(every), N(args=[]))
-    assert "Flushed 2 cached periods" in every.replies[0]["text"]
+    assert "Flushed 4 cached periods (all portfolios)" in every.replies[0]["text"]

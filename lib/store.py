@@ -220,8 +220,16 @@ class Store:
         return self._run("SELECT COUNT(*) FROM period_cache WHERE portfolio_id = ? AND start >= ? AND end <= ?",
                          (portfolio_id, first, last))[0][0]
 
-    def period_flush(self, portfolio_id: int | None = None) -> int:
-        """Delete the cached windows of one portfolio (or all); returns how many went."""
+    def period_flush(self, portfolio_id: int | None = None, first: str | None = None, last: str | None = None) -> int:
+        """Delete cached windows, of one portfolio or all, and (if first/last ISO dates are given) only those
+        overlapping that date range. Returns how many went."""
+        where, args = [], []
+        if portfolio_id is not None:
+            where.append("portfolio_id = ?")
+            args.append(portfolio_id)
+        if first and last:
+            where.append("start <= ? AND end >= ?")
+            args += [last, first]
         with self._lock:
-            where, args = ("WHERE portfolio_id = ?", (portfolio_id,)) if portfolio_id is not None else ("", ())
-            return self._conn.execute(f"DELETE FROM period_cache {where}", args).rowcount
+            sql = "DELETE FROM period_cache" + (" WHERE " + " AND ".join(where) if where else "")
+            return self._conn.execute(sql, args).rowcount

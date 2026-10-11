@@ -30,6 +30,7 @@ from . import config
 from .context import Ctx
 from .features import dm_buttons, holding_news, post
 from .features.periods import backfill
+from .features.periods.windows import describe_scope, flush_scope
 from .llm.base import Backend
 from .llm.openrouter import OpenRouterBackend
 from .llm.xai import XaiBackend
@@ -175,12 +176,16 @@ def git_hash(root: Path | None = None) -> str:
         return ""
 
 
-def flush_cache(which: str) -> str:
-    """--flush-cache: needs only the database path, not the bot's keys. Returns the message to print."""
-    if which != "all" and not which.isdigit():
-        return f"Give a portfolio ID (a number) or nothing for all, not '{which}'."
-    n = Store(config.data_path(os.environ, "DB_PATH", "chat_log.db")).period_flush(None if which == "all" else int(which))
-    return f"Flushed {n} cached periods."
+def flush_cache(words: list[str]) -> str:
+    """--flush-cache [portfolio ID] [year|month|day]: needs only the database path, not the bot's keys.
+    Returns the message to print."""
+    scope = flush_scope(words)
+    if scope is None:
+        return "Usage: --flush-cache [portfolio ID] [2024 | 2024-05 | 2024-05-17]"
+    pid, first, last = scope
+    path = config.data_path(os.environ, "DB_PATH", "chat_log.db")
+    n = Store(path).period_flush(pid, first and first.isoformat(), last and last.isoformat())
+    return f"Flushed {n} cached periods ({describe_scope(pid, first, last)})."
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -188,10 +193,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     # side by side with different environments (python bot.py mimo).
     parser = argparse.ArgumentParser(description="Telegram group bot that answers @mentions with an LLM.")
     parser.add_argument("label", nargs="?", help="ignored; identifies this instance in ps/top")
-    parser.add_argument("--flush-cache", nargs="?", const="all", metavar="PORTFOLIO_ID",
-                        help="delete the cached Sharesight period returns (of one portfolio, or all) and exit")
+    parser.add_argument("--flush-cache", nargs="*", metavar="WHAT",
+                        help="delete the cached Sharesight period returns and exit: all, or of a portfolio ID "
+                             "and/or a year, month or day (2024, 2024-05, 2024-05-17)")
     args, _ = parser.parse_known_args(argv)
-    if args.flush_cache:
+    if args.flush_cache is not None:
         message = flush_cache(args.flush_cache)
         print(message)
         sys.exit(0 if message.startswith("Flushed") else 1)

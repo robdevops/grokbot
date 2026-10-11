@@ -150,3 +150,14 @@ def test_refusal_suggests_the_earliest_start_that_fits_and_ignores_cached_window
     msg = windows.refusal("week", w, set())
     assert "0 of 52 weeks are cached" in msg and f"start={w[-26][1]}" in msg
     assert windows.refusal("week", w, {windows.key(x) for x in w[:30]}) is None  # 22 uncached: fits
+
+
+def test_flush_scope_understands_portfolio_year_month_day_and_all():
+    f = windows.flush_scope
+    assert f([]) == (None, None, None) and f(["all"]) == (None, None, None)
+    assert f(["684141"]) == (684141, None, None)
+    assert f(["2024"]) == (None, date(2024, 1, 1), date(2024, 12, 31))
+    assert f(["2024-05", "684141"]) == (684141, date(2024, 5, 1), date(2024, 5, 31))
+    assert f(["2024-05-17"]) == (None, date(2024, 5, 17), date(2024, 5, 17))
+    assert f(["nope"]) is None and f(["684141", "702349"]) is None and f(["2024", "2025"]) is None
+    assert f(["1234"]) is None  # 4 digits that aren't a year in range

@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 
 from ..context import Ctx
 from ..features.periods import backfill
+from ..features.periods.windows import describe_scope, flush_scope
 from .access import is_admin
 
 log = logging.getLogger("bot")
@@ -62,15 +63,19 @@ async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def flush_cache(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/flushcache [portfolio_id] - admins only: forget the cached Sharesight period returns (of one
-    portfolio, or all), e.g. after a backdated change. The background fill, if on, re-fetches them."""
+    """/flushcache [portfolio_id] [year | month | day] - admins only: forget the cached Sharesight period
+    returns (all, or of one portfolio, or the ones overlapping a year/month/day), e.g. after a backdated
+    change. The background fill, if on, re-fetches them."""
     if not await _gate(ctx, update):
         return
-    which = (context.args[0] if context.args else "all").strip()
-    if which != "all" and not which.isdigit():
-        await _reply(ctx, update, "Usage: /flushcache [portfolio_id]")
+    scope = flush_scope(context.args or [])
+    if scope is None:
+        await _reply(ctx, update, "Usage: /flushcache [portfolio_id] [2024 | 2024-05 | 2024-05-17]")
         return
-    n = await asyncio.to_thread(ctx.store.period_flush, None if which == "all" else int(which))
+    pid, first, last = scope
+    n = await asyncio.to_thread(ctx.store.period_flush, pid, first and first.isoformat(), last and last.isoformat())
     backfill.reset()
-    log.info("Flushed %d cached period returns (%s)", n, which)
-    await _reply(ctx, update, f"Flushed {n} cached periods." + (" Refilling in the background." if ctx.st.period_backfill else ""))
+    what = describe_scope(pid, first, last)
+    log.info("Flushed %d cached period returns (%s)", n, what)
+    await _reply(ctx, update, f"Flushed {n} cached periods ({what})."
+                 + (" Refilling in the background." if ctx.st.period_backfill else ""))

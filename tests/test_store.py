@@ -98,3 +98,14 @@ def test_period_cache_round_trip_flush_and_version(tmp_path):
     s._conn.execute("UPDATE period_cache SET v = 0 WHERE portfolio_id = 8")  # an older format
     assert Store(path).period_count(8, "2000-01-01", "2100-01-01") == 0  # dropped on open
     assert s.period_flush(7) == 2 and s.period_flush() == 0
+
+
+def test_period_flush_by_date_range_removes_every_window_that_overlaps_it(tmp_path):
+    from lib.store import PeriodRow
+
+    s = Store(str(tmp_path / "p.db"))
+    row = lambda a, b: PeriodRow(7, a, b, 1.0, 1.0, "AUD", [])  # noqa: E731
+    s.period_put([row("2023-12-26", "2024-01-01"), row("2024-12-31", "2025-01-06"), row("2024-06-01", "2024-06-30"),
+                  row("2023-01-01", "2023-12-31"), row("2025-01-07", "2025-01-13")])
+    assert s.period_flush(7, "2024-01-01", "2024-12-31") == 3  # the week spanning New Year both ways, and June
+    assert sorted(s.period_get(7, "2000-01-01", "2100-01-01")) == [("2023-01-01", "2023-12-31"), ("2025-01-07", "2025-01-13")]

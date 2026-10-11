@@ -78,3 +78,28 @@ def refusal(period: str, windows: list[Window], cached: set[tuple[str, str]]) ->
     return (f"{len(windows) - len(missing)} of {len(windows)} {period}s are cached and the other {len(missing)} "
             f"would take about {len(missing) * 2.4 / 60:.0f} minutes to fetch (the background fill may still be "
             f"running or off). Ask again with start={start} or later, or try again later")
+
+
+def flush_scope(words: list[str]) -> tuple[int | None, date | None, date | None] | None:
+    """What /flushcache and --flush-cache were asked to forget: any of a portfolio ID (5+ digits), a year
+    (2024), a month (2024-05) or a day (2024-05-17), in any order, plus an optional "all". Returns
+    (portfolio ID, first day, last day), each None when not given, or None if a word isn't understood."""
+    pid, first, last = None, None, None
+    for word in words:
+        word = word.strip().lower()
+        if word in ("", "all"):
+            continue
+        if word.isdigit() and len(word) >= 5 and pid is None:
+            pid = int(word)
+        elif first is None and (d := parse_date(word)) and 1990 <= d.year <= 2100 and word[:4].isdigit():
+            first, last = d, parse_date(word, end=True)
+        else:
+            return None
+    return pid, first, last
+
+
+def describe_scope(pid: int | None, first: date | None, last: date | None) -> str:
+    parts = ["all portfolios" if pid is None else f"portfolio {pid}"]
+    if first:
+        parts.append(f"{first}" if first == last else f"{first} to {last}")
+    return ", ".join(parts)
