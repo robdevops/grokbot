@@ -19,12 +19,13 @@ log = logging.getLogger("bot")
 ORDER = ("month", "quarter", "year", "week", "day")  # what pays off first: few calls, most questions
 BUSY_POLL = 2.0
 RECHECK = 6 * 3600  # seconds between passes (a pass fetches only what newly finished)
+RETRY_AFTER_FAILURE = 600  # seconds before trying again after a pass stopped by MAX_FAILS failures in a row
 WORKERS = 2  # fetches at a time (needs max_concurrent >= 2 on the Sharesight server in mcp_servers.json)
 MAX_FAILS = 5  # consecutive failed fetches that end a pass (Sharesight down or throttling)
 PROGRESS_EVERY = 100
 
 _wake: asyncio.Event | None = None  # set to start a pass now (after a flush)
-BAD: set[tuple[int, str, str]] = set()  # windows Sharesight had nothing for; not retried until reset()
+BAD: set[tuple[int, str, str]] = set()  # windows Sharesight had no data for; not retried until restart or reset()
 
 
 def wake_event() -> asyncio.Event:
@@ -99,8 +100,7 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
             elif got.kind == "nodata":
                 BAD.add((pid, *key(w)))
                 nodata += 1
-            else:
-                BAD.add((pid, *key(w)))
+            else:  # a blip says nothing about the window itself, so it is tried again next pass
                 fails += 1
                 transient += 1
                 log.warning("Period backfill: %s %s..%s failed: %s", name, w[1], w[2], got.text[:150])
@@ -116,8 +116,9 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
     return stored, stopped
 
 
-async def fill_once(ctx: Ctx, server, portfolios: list[tuple[int, str, date]], today: date) -> int:
-    """One pass: fetch every wanted window that isn't cached yet. Returns how many were stored."""
+async def fill_pass(ctx: Ctx, server, portfolios: list[tuple[int, str, date]], today: date) -> tuple[int, bool]:
+    """One pass: fetch every wanted window that isn't cached yet. Returns (how many were stored, whether
+    failures in a row cut it short)."""
     stored = 0
     for pid, name, first in portfolios:
         windows = wanted(first, today)
@@ -129,8 +130,12 @@ async def fill_once(ctx: Ctx, server, portfolios: list[tuple[int, str, date]], t
         n, stopped = await fill_portfolio(ctx, server, pid, name, todo)
         stored += n
         if stopped:
-            break
-    return stored
+            return stored, True
+    return stored, False
+
+
+async def fill_once(ctx: Ctx, server, portfolios: list[tuple[int, str, date]], today: date) -> int:
+    return (await fill_pass(ctx, server, portfolios, today))[0]
 
 
 async def loop(ctx: Ctx) -> None:
@@ -146,8 +151,11 @@ async def loop(ctx: Ctx) -> None:
                 portfolios = selected(ctx.st, await server.call("list_portfolios", {}))
                 if not portfolios:
                     log.warning("Period backfill: no Sharesight portfolio matches PERIOD_BACKFILL")
-                n = await fill_once(ctx, server, portfolios, datetime.now(ctx.st.tz).date())
-                log.info("Period backfill: pass done, %d new windows cached", n)
+                n, stopped = await fill_pass(ctx, server, portfolios, datetime.now(ctx.st.tz).date())
+                log.info("Period backfill: pass %s, %d new windows cached%s", "stopped" if stopped else "done", n,
+                         f"; trying again in {RETRY_AFTER_FAILURE // 60} minutes" if stopped else "")
+                if stopped:
+                    wait = RETRY_AFTER_FAILURE
             except Exception:
                 log.exception("Period backfill pass failed")
         try:

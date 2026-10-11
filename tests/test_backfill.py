@@ -118,18 +118,33 @@ async def test_two_fetches_run_at_a_time_and_each_window_is_fetched_once(env, st
     assert store.period_count(7, "2026-01-01", "2026-03-31") == len(want)
 
 
-async def test_failures_end_the_pass_and_failed_windows_are_not_retried_until_reset(env, store):
+async def test_failures_end_the_pass_and_the_same_windows_are_tried_again_next_time(env, store):
     ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"), fail=True)
     ctx, _ = make(env, store, ss)
     args = ctx, ss, [(7, "RobSMSF", date(2026, 1, 15))], date(2026, 3, 3)
     assert await backfill.fill_once(*args) == 0
     assert backfill.MAX_FAILS <= len(ss.order) <= backfill.MAX_FAILS + backfill.WORKERS - 1  # gave up after five
-    first_five = list(ss.order)
+    assert not backfill.BAD  # a blip doesn't mark the windows
+    first_pass = list(ss.order)
     ss.order.clear()
     await backfill.fill_once(*args)
-    assert len(ss.order) >= backfill.MAX_FAILS and not set(ss.order) & set(first_five)  # skipped the failed ones
+    assert ss.order[:backfill.MAX_FAILS] == first_pass[:backfill.MAX_FAILS]  # same windows again
     backfill.reset()
     assert not backfill.BAD and backfill.wake_event().is_set()
+
+
+async def test_a_stopped_pass_is_retried_after_ten_minutes_not_six_hours(env, store, monkeypatch):
+    ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"), fail=True)
+    ctx, _ = make(env, store, ss)
+    monkeypatch.setattr(backfill, "RECHECK", 3600)
+    monkeypatch.setattr(backfill, "RETRY_AFTER_FAILURE", 0.05)
+    task = asyncio.create_task(backfill.loop(ctx))
+    for _ in range(200):
+        await asyncio.sleep(0.02)
+        if len(ss.order) >= 3 * backfill.MAX_FAILS:  # several passes, each stopped by failures
+            break
+    task.cancel()
+    assert len(ss.order) >= 3 * backfill.MAX_FAILS
 
 
 async def test_windows_with_no_data_do_not_stop_the_pass_and_are_not_retried(env, store, caplog):

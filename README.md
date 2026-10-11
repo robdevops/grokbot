@@ -202,7 +202,8 @@ Without the cache, a request may fetch at most 64 days, 26 weeks or 120 months/q
 longer range is refused with the earliest start that fits. Set `PERIOD_BACKFILL=<portfolio name>[,...]` (or `all`) to
 fill the cache in the background: months first, then quarters, years, weeks and days, up to two Sharesight calls at a time,
 never while a user's request is using the server (about 1,650 calls per portfolio, an hour or two the first time; progress is logged and it resumes after a restart). Once filled, any range is instant and the
-limits above no longer matter. Every six hours it fetches whatever newly finished.
+limits above no longer matter. Every six hours it fetches whatever newly finished. If five fetches in a row fail (Sharesight down or throttling),
+the pass stops and tries again after ten minutes; windows Sharesight simply has no data for are skipped until a restart.
 
 ## Caching and token saving
 **Provider prompt caching** (xAI and OpenRouter keep a conversation on the server holding its cached
