@@ -198,9 +198,8 @@ trade or correction in Sharesight, flush the cache with `/flushcache [portfolio_
 
 Without the cache, a request may fetch at most 64 days, 26 weeks or 120 months/quarters/years that aren't cached; a
 longer range is refused with the earliest start that fits. Set `PERIOD_BACKFILL=<portfolio name>[,...]` (or `all`) to
-fill the cache in the background: months first, then quarters, years, weeks and days, one Sharesight call at a time (no concurrency),
-never while a user's request is using the server (about 1,650 calls per portfolio, a few
-hours the first time; progress is logged and it resumes after a restart). Once filled, any range is instant and the
+fill the cache in the background: months first, then quarters, years, weeks and days, up to two Sharesight calls at a time,
+never while a user's request is using the server (about 1,650 calls per portfolio, an hour or two the first time; progress is logged and it resumes after a restart). Once filled, any range is instant and the
 limits above no longer matter. Every six hours it fetches whatever newly finished.
 
 ## Caching and token saving

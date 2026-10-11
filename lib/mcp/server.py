@@ -54,6 +54,7 @@ class MCPServer:
         self.fn_names: dict[str, str] = {}  # function name sent to the model -> MCP tool name
         # Cap simultaneous calls: a 20-stock request fired all at once gets rate-limited.
         self._sem = asyncio.Semaphore(int(cfg.get("max_concurrent", 4)))
+        self.in_flight = 0  # calls running or waiting for a slot (background work yields to these)
         self._ready = asyncio.Event()
         self._stop = asyncio.Event()
         self._task: asyncio.Task | None = None
@@ -158,11 +159,6 @@ class MCPServer:
             log.warning("MCP %s: blocked_tools/allowed_tools entry '%s' matches no tool%s",
                         self.label, name, hint)
 
-    @property
-    def busy(self) -> bool:
-        """Is every call slot taken right now? (Background work waits for this to clear.)"""
-        return self._sem.locked()
-
     async def call(self, tool: str, args: dict) -> str:
         """Run one tool and return its (slimmed, size-capped) text. Identical concurrent or
         recent calls share one result when cache_ttl is set."""
@@ -243,8 +239,12 @@ class MCPServer:
             args = {**args, "include_sales": bool(keep_sales)}  # Sharesight's own switch for sold holdings
         if keep_sales:
             holdings_only = False  # closed holdings stay in the report too
-        async with self._sem:
-            result = await asyncio.wait_for(self.session.call_tool(tool, args), self.timeout)
+        self.in_flight += 1
+        try:
+            async with self._sem:
+                result = await asyncio.wait_for(self.session.call_tool(tool, args), self.timeout)
+        finally:
+            self.in_flight -= 1
         parts = [c.text if c.type == "text" else f"[{c.type} content omitted]" for c in result.content]
         if not parts and getattr(result, "structuredContent", None):
             parts.append(json.dumps(result.structuredContent))

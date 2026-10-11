@@ -1,5 +1,5 @@
 """PERIOD_BACKFILL: fetch finished days, weeks, months, quarters and years of selected Sharesight portfolios into
-the period cache in the background, politely (one call at a time, never while a user's request is using the server)."""
+the period cache in the background, politely (two calls at a time, never while a user's request is using the server)."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ log = logging.getLogger("bot")
 ORDER = ("month", "quarter", "year", "week", "day")  # what pays off first: few calls, most questions
 BUSY_POLL = 2.0
 RECHECK = 6 * 3600  # seconds between passes (a pass fetches only what newly finished)
+WORKERS = 2  # fetches at a time (needs max_concurrent >= 2 on the Sharesight server in mcp_servers.json)
 MAX_FAILS = 5  # consecutive failed fetches that end a pass (Sharesight down or throttling)
 PROGRESS_EVERY = 100
 
@@ -71,6 +72,43 @@ def selected(st: config.Settings, listing: str) -> list[tuple[int, str, date]]:
     return out
 
 
+async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Window]) -> tuple[int, bool]:
+    """Fetch these windows with WORKERS fetches at a time. Returns (how many were stored, whether the pass
+    was stopped by MAX_FAILS failures in a row)."""
+    pending = iter(todo)  # shared: each window goes to exactly one worker
+    stored = done = fails = mine = 0
+    stopped = False
+
+    async def worker() -> None:
+        nonlocal stored, done, fails, mine, stopped
+        for w in pending:
+            while server.in_flight > mine and not stopped:  # a user's request comes first
+                await asyncio.sleep(BUSY_POLL)
+            if stopped:
+                return
+            mine += 1
+            try:
+                row = await fetch_row(server, pid, w[1], w[2])
+            finally:
+                mine -= 1
+            if row is None:
+                BAD.add((pid, *key(w)))
+                fails += 1
+                if fails >= MAX_FAILS and not stopped:
+                    stopped = True
+                    log.warning("Period backfill: %d fetches in a row failed; stopping this pass", fails)
+            else:
+                fails = 0
+                await asyncio.to_thread(ctx.store.period_put, [row])
+                stored += 1
+            done += 1
+            if done % PROGRESS_EVERY == 0:
+                log.info("Period backfill: %s %d/%d", name, done, len(todo))
+
+    await asyncio.gather(*(worker() for _ in range(WORKERS)))
+    return stored, stopped
+
+
 async def fill_once(ctx: Ctx, server, portfolios: list[tuple[int, str, date]], today: date) -> int:
     """One pass: fetch every wanted window that isn't cached yet. Returns how many were stored."""
     stored = 0
@@ -78,25 +116,13 @@ async def fill_once(ctx: Ctx, server, portfolios: list[tuple[int, str, date]], t
         windows = wanted(first, today)
         have = await asyncio.to_thread(ctx.store.period_get, pid, first.isoformat(), today.isoformat())
         todo = [w for w in windows if key(w) not in have and (pid, *key(w)) not in BAD]
-        if todo:
-            log.info("Period backfill: %d windows to fetch for %s", len(todo), name)
-        fails = 0
-        for i, w in enumerate(todo, 1):
-            while server.busy:  # a user's request comes first
-                await asyncio.sleep(BUSY_POLL)
-            row = await fetch_row(server, pid, w[1], w[2])
-            if row is None:
-                BAD.add((pid, *key(w)))
-                fails += 1
-                if fails >= MAX_FAILS:
-                    log.warning("Period backfill: %d fetches in a row failed; stopping this pass", fails)
-                    return stored
-            else:
-                fails = 0
-                await asyncio.to_thread(ctx.store.period_put, [row])
-                stored += 1
-            if i % PROGRESS_EVERY == 0:
-                log.info("Period backfill: %s %d/%d", name, i, len(todo))
+        if not todo:
+            continue
+        log.info("Period backfill: %d windows to fetch for %s", len(todo), name)
+        n, stopped = await fill_portfolio(ctx, server, pid, name, todo)
+        stored += n
+        if stopped:
+            break
     return stored
 
 

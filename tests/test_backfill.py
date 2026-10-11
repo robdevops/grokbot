@@ -20,12 +20,18 @@ class Sharesight(FakeMcp):
         self.inception = inception
         self.busy_for = 0  # polls during which the server counts as busy
         self.polls = 0
+        self.delay = 0
+        self.running = self.peak = 0
         self.order: list[tuple[str, str]] = []
 
     @property
-    def busy(self):
+    def in_flight(self):  # a user's request is running for the first few polls
         self.polls += 1
-        return self.polls <= self.busy_for
+        return 1 if self.polls <= self.busy_for else 0
+
+    @in_flight.setter
+    def in_flight(self, value):
+        pass
 
     async def call(self, tool, args):
         self.calls.append((tool, args))
@@ -33,6 +39,10 @@ class Sharesight(FakeMcp):
             return json.dumps({"portfolios": [{"id": 7, "name": "RobSMSF", "inception_date": self.inception},
                                               {"id": 8, "name": "Other", "inception_date": "2026-01-15"}]})
         self.order.append((args["start_date"], args["end_date"]))
+        self.running += 1
+        self.peak = max(self.peak, self.running)
+        await asyncio.sleep(self.delay)
+        self.running -= 1
         if self.fail:
             return "Error: timed out"
         return json.dumps({"report": {"total_gain_percent": 1.0, "total_gain": 10.0, "currency": "AUD"}})
@@ -93,15 +103,27 @@ async def test_it_waits_while_a_user_request_is_using_the_server(env, store):
     assert ss.polls > 3 and ss.order  # polled until free, then fetched
 
 
+async def test_two_fetches_run_at_a_time_and_each_window_is_fetched_once(env, store):
+    ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
+    ss.delay = 0.01
+    ctx, _ = make(env, store, ss)
+    want = backfill.wanted(date(2026, 1, 15), date(2026, 3, 3))
+    assert await backfill.fill_once(ctx, ss, [(7, "RobSMSF", date(2026, 1, 15))], date(2026, 3, 3)) == len(want)
+    assert ss.peak == backfill.WORKERS == 2
+    assert len(ss.order) == len(set(ss.order)) == len(want)  # none twice
+    assert store.period_count(7, "2026-01-01", "2026-03-31") == len(want)
+
+
 async def test_failures_end_the_pass_and_failed_windows_are_not_retried_until_reset(env, store):
     ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"), fail=True)
     ctx, _ = make(env, store, ss)
     args = ctx, ss, [(7, "RobSMSF", date(2026, 1, 15))], date(2026, 3, 3)
-    assert await backfill.fill_once(*args) == 0 and len(ss.order) == backfill.MAX_FAILS  # gave up after five
+    assert await backfill.fill_once(*args) == 0
+    assert backfill.MAX_FAILS <= len(ss.order) <= backfill.MAX_FAILS + backfill.WORKERS - 1  # gave up after five
     first_five = list(ss.order)
     ss.order.clear()
     await backfill.fill_once(*args)
-    assert len(ss.order) == backfill.MAX_FAILS and not set(ss.order) & set(first_five)  # skipped those five
+    assert len(ss.order) >= backfill.MAX_FAILS and not set(ss.order) & set(first_five)  # skipped the failed ones
     backfill.reset()
     assert not backfill.BAD and backfill.wake_event().is_set()
 

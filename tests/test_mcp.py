@@ -240,6 +240,30 @@ async def test_bots_own_tools_are_not_truncated_but_the_models_are():
     assert "truncated" not in whole and len(whole) > 20
 
 
+async def test_in_flight_counts_running_calls_and_returns_to_zero():
+    s = MCPServer("y", {"max_concurrent": 1}, timeout=0.05, max_output=1000)
+    gate = asyncio.Event()
+
+    class Slow(FakeSession):
+        async def call_tool(self, name, args):
+            if name == "hang":
+                await asyncio.sleep(1)  # longer than the timeout
+            await gate.wait()
+            return await super().call_tool(name, args)
+
+    s.session = Slow()
+    first = asyncio.create_task(s.call("get_a", {}))
+    second = asyncio.create_task(s.call("get_b", {}))  # waits for the only slot, still counted
+    await asyncio.sleep(0.01)
+    assert s.in_flight == 2
+    gate.set()
+    await asyncio.gather(first, second)
+    assert s.in_flight == 0
+    with pytest.raises(TimeoutError):
+        await s.call("hang", {})
+    assert s.in_flight == 0  # also after a timeout
+
+
 async def test_output_cap():
     s = MCPServer("y", {}, timeout=5, max_output=20)
     s.session = FakeSession()
