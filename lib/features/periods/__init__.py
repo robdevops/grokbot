@@ -18,7 +18,9 @@ log = logging.getLogger("bot")
 TOOL = ToolDef(
     "period_returns",
     "Total return of a Sharesight portfolio for each day, week, month, quarter or year, as a percentage and a "
-    "money gain, with the best and worst one by each measure and the holdings behind them. Use it for best/worst day, week, month, quarter or year, or any "
+    "money gain, with the best and worst one by each measure and the holdings behind them (a long range lists "
+    "only the top and bottom five, so one call answers 'best day since inception'). Call it once per portfolio "
+    "and cover every portfolio asked about. Use it for best/worst day, week, month, quarter or year, or any "
     "period-by-period question, instead of fetching one get_performance_report per period. Sold holdings are "
     "included. Omit start for 'since inception'. History that isn't cached yet is fetched live, which is slow "
     "for days and weeks: if the tool refuses a range, tell the user why and offer the start it suggests.",
@@ -43,6 +45,18 @@ async def inception(server, portfolio_id: int) -> date | None:
 def sharesight(ctx: Ctx):
     """The MCP server that has a get_performance_report tool, if it is up."""
     return next((s for s in ctx.registry.up() if "get_performance_report" in s.fn_names.values()), None)
+
+
+MAX_TABLE_ROWS = 40  # longer results list only the extremes
+TOP_N = 5
+
+
+def pct_of(row) -> float:
+    return row[1].pct
+
+
+def gain_of(row) -> float:
+    return row[1].gain
 
 
 def tool(ctx: Ctx):
@@ -87,9 +101,16 @@ def tool(ctx: Ctx):
         worst = min(rows, key=lambda r: r[1].pct)
         lines = [f"Total return per {period} ({rows[0][1].currency}), {rows[0][0]} to {rows[-1][0]}, "
                  "sold holdings included:"]
-        lines += [f"{label} {r.pct:+.2f}% {r.gain:+,.0f}" for label, r in rows]
         rich, poor = max(rows, key=lambda r: r[1].gain), min(rows, key=lambda r: r[1].gain)
         both = lambda row: f"{row[0]} {row[1].pct:+.2f}% ({row[1].gain:+,.0f})"  # noqa: E731
+        if len(rows) <= MAX_TABLE_ROWS:
+            lines += [f"{label} {r.pct:+.2f}% {r.gain:+,.0f}" for label, r in rows]
+        else:  # thousands of rows would cost tens of thousands of tokens; the extremes are what gets asked
+            lines[0] = lines[0][:-1] + f" ({len(rows)} {period}s; the full list is left out, ask for a shorter range to see it):"
+            for title, key_fn, newest_first in (("Top", pct_of, True), ("Bottom", pct_of, False),
+                                                ("Top", gain_of, True), ("Bottom", gain_of, False)):
+                picked = sorted(rows, key=key_fn, reverse=newest_first)[:TOP_N]
+                lines.append(f"{title} {TOP_N} by {'%' if key_fn is pct_of else 'money'}: " + ", ".join(both(r) for r in picked))
         lines.append(f"Best by %: {both(best)}. Worst by %: {both(worst)}. "
                      f"Best by money: {both(rich)}. Worst by money: {both(poor)}."
                      + (f" {missing} {period}s had no data." if missing else ""))

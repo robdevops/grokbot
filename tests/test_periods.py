@@ -176,3 +176,22 @@ async def test_best_by_money_can_differ_from_best_by_percent(env, store):
     out = await fn({"portfolio_id": 7, "start": "2026-01", "end": "2026-02"})
     assert "Best by %: 2026-01 +10.00% (+100)" in out and "Best by money: 2026-02 +2.00% (+900)" in out
     assert "Worst by money: 2026-01 +10.00% (+100)" in out
+
+
+async def test_long_results_list_only_the_extremes_not_every_row(env, store):
+    class Spread(Sharesight):
+        async def call(self, tool, args):
+            self.calls.append((tool, args))
+            day = int(args["start_date"][-2:]) + 31 * int(args["start_date"][5:7])  # a different number every day
+            return json.dumps({"report": {"total_gain_percent": day / 10, "total_gain": -day * 10.0, "currency": "AUD"}})
+
+    ctx, _ = make(env, store, Spread("sharesight", tools=("list_portfolios", "get_performance_report")))
+    _, fn = periods.tool(ctx)
+    out = await fn({"portfolio_id": 7, "period": "day", "start": "2026-01-01", "end": "2026-03-31"})
+    lines = out.splitlines()
+    assert len(lines) < 15 and "full list is left out" in lines[0] and "64 days" in lines[0]
+    assert lines[1].startswith("Top 5 by %: 2026-03-31 ") and lines[2].startswith("Bottom 5 by %: 2026-01-01 ")
+    assert lines[3].startswith("Top 5 by money: 2026-01-01 ") and lines[4].startswith("Bottom 5 by money: 2026-03-31 ")
+    assert "Best by %:" in out
+    short = await fn({"portfolio_id": 7, "period": "day", "start": "2026-03-02", "end": "2026-03-13"})
+    assert "Top 5" not in short and "2026-03-02 " in short  # a short range still lists every row
