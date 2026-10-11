@@ -253,7 +253,7 @@ class MCPServer:
             out = "Tool error: " + out
         else:
             out = slim_result(out, self.cfg.get("slim", self.label), drop_closed=holdings_only)
-        if len(out) > self.max_output:
+        if len(out) > self.max_output and not keep_sales:  # the cap protects the model's context; the bot's own tools aren't sent to it
             log.warning("MCP %s.%s result truncated (%d chars)", self.label, tool, len(out))
             out = out[:self.max_output] + f"\n...[truncated; {len(out)} chars total]"
         return out

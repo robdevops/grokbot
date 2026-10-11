@@ -232,6 +232,14 @@ async def test_bots_own_tools_can_keep_sold_holdings():
     assert sent["include_sales"] is True and "_keep_sales" not in sent
 
 
+async def test_bots_own_tools_are_not_truncated_but_the_models_are():
+    s = MCPServer("sharesight", {}, timeout=5, max_output=20)
+    s.session = FakeSession()
+    assert "truncated" in await s.call("get_performance_report", {"portfolio_id": 1})
+    whole = await s.call("get_performance_report", {"portfolio_id": 1, "_keep_sales": True})
+    assert "truncated" not in whole and len(whole) > 20
+
+
 async def test_output_cap():
     s = MCPServer("y", {}, timeout=5, max_output=20)
     s.session = FakeSession()
