@@ -104,6 +104,7 @@ async def test_portfolio_question_reminds_the_model_to_fetch_fresh_figures(env, 
     await run(h, user_msg(ctx.bot, "@stockbot how is NVDA looking?", mid=2))
     assert "portfolio tools before answering" in backend.seen[0]["prompt"]
     assert "tailwinds and headwinds" in backend.seen[0]["prompt"]
+    assert "your market tools" in backend.seen[0]["prompt"]  # not portfolio tools only (Yahoo comparisons)
     assert "portfolio tools before answering" not in backend.seen[1]["prompt"]
 
 
