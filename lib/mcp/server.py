@@ -232,8 +232,12 @@ class MCPServer:
 
     async def _call(self, tool: str, args: dict) -> str:
         holdings_only = bool(self.cfg.get("current_holdings_only"))
+        keep_sales = args.get("_keep_sales")  # set by the bot's own tools (history), never by the model
+        args = {k: v for k, v in args.items() if k != "_keep_sales"}
         if holdings_only and tool == "get_performance_report":
-            args = {**args, "include_sales": False}  # Sharesight's own switch for sold holdings
+            args = {**args, "include_sales": bool(keep_sales)}  # Sharesight's own switch for sold holdings
+        if keep_sales:
+            holdings_only = False  # closed holdings stay in the report too
         async with self._sem:
             result = await asyncio.wait_for(self.session.call_tool(tool, args), self.timeout)
         parts = [c.text if c.type == "text" else f"[{c.type} content omitted]" for c in result.content]

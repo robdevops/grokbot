@@ -224,6 +224,14 @@ async def test_sharesight_holdings_only_flag_sets_include_sales():
     assert s.session.calls[0][1]["include_sales"] is False
 
 
+async def test_bots_own_tools_can_keep_sold_holdings():
+    s = MCPServer("sharesight", {"current_holdings_only": True}, timeout=5, max_output=10_000)
+    s.session = FakeSession()
+    await s.call("get_performance_report", {"portfolio_id": 1, "_keep_sales": True})
+    sent = s.session.calls[0][1]
+    assert sent["include_sales"] is True and "_keep_sales" not in sent
+
+
 async def test_output_cap():
     s = MCPServer("y", {}, timeout=5, max_output=20)
     s.session = FakeSession()

@@ -35,6 +35,14 @@ async def test_tool_round_trip_runs_mcp_and_returns_answer():
     assert ans.usage.tokens_in == 200 and ans.usage.cached == 80
 
 
+async def test_the_model_cannot_ask_for_sold_holdings_to_be_kept():
+    from lib.llm.base import Call
+    mcp = FakeMcp("sharesight", tools=("get_performance_report",))
+    await run_calls([Call("1", "sharesight__get_performance_report", '{"portfolio_id":1,"_keep_sales":true}')],
+                    ScriptedBackend([]), registry(mcp), with_tools(mcp), {}, True, Usage())
+    assert mcp.calls == [("get_performance_report", {"portfolio_id": 1})]
+
+
 async def test_final_round_forces_answer_without_tools():
     mcp = FakeMcp()
     loop = [step(calls=[(str(i), "yahoo__get_quote", f'{{"n":{i}}}')], finish="tool_calls")
