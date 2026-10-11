@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
+from typing import NamedTuple
 
 from ...mcp.results import table_records
 from ...store import PeriodRow
@@ -37,13 +39,32 @@ def drivers(rows: list, n: int = 3) -> str:
     return "; ".join(f"{name}: {', '.join(map(show, group))}" for name, group in (("up", ups), ("down", downs)) if group)
 
 
-async def fetch_row(server, portfolio_id: int, first: date, last: date) -> PeriodRow | None:
-    """One window's return from Sharesight (sold holdings included), or None if no report came back."""
-    text = await server.call("get_performance_report", {
-        "portfolio_id": portfolio_id, "start_date": first.isoformat(), "end_date": last.isoformat(),
-        "_keep_sales": True})
+THROTTLE = re.compile(r"429|rate.?limit|too many|throttl|timed? ?out|unavailable|temporar|overload|\b5\d\d\b", re.I)
+
+
+class Fetched(NamedTuple):
+    row: PeriodRow | None
+    kind: str  # "ok", "nodata" (Sharesight has nothing for that window) or "transient" (outage, timeout, throttling)
+    text: str  # what came back, for the log
+
+
+async def fetch(server, portfolio_id: int, first: date, last: date) -> Fetched:
+    """One window's return from Sharesight (sold holdings included)."""
+    try:
+        text = await server.call("get_performance_report", {
+            "portfolio_id": portfolio_id, "start_date": first.isoformat(), "end_date": last.isoformat(),
+            "_keep_sales": True})
+    except Exception as e:  # a timeout or a dropped connection
+        return Fetched(None, "transient", f"{type(e).__name__}: {e}")
     report = parse_report(text)
-    if report is None:
-        return None
-    return PeriodRow(portfolio_id, first.isoformat(), last.isoformat(), float(report["total_gain_percent"]),
-                     float(report.get("total_gain") or 0), report.get("currency") or "", movers(report))
+    if report is not None:
+        row = PeriodRow(portfolio_id, first.isoformat(), last.isoformat(), float(report["total_gain_percent"]),
+                        float(report.get("total_gain") or 0), report.get("currency") or "", movers(report))
+        return Fetched(row, "ok", "")
+    transient = text.startswith("Error:") or bool(THROTTLE.search(text[:300]))
+    return Fetched(None, "transient" if transient else "nodata", text)
+
+
+async def fetch_row(server, portfolio_id: int, first: date, last: date) -> PeriodRow | None:
+    """fetch(), keeping only the row (None if no report came back)."""
+    return (await fetch(server, portfolio_id, first, last)).row

@@ -17,6 +17,8 @@ class Sharesight(FakeMcp):
     def __init__(self, *a, fail=False, inception="2026-01-15", **kw):
         super().__init__(*a, **kw)
         self.fail = fail
+        self.fail_text = "Error: timed out"
+        self.data_from = ""
         self.inception = inception
         self.busy_for = 0  # polls during which the server counts as busy
         self.polls = 0
@@ -44,7 +46,9 @@ class Sharesight(FakeMcp):
         await asyncio.sleep(self.delay)
         self.running -= 1
         if self.fail:
-            return "Error: timed out"
+            return self.fail_text
+        if args["end_date"] < self.data_from:  # nothing in Sharesight before this date
+            return "Tool error: no data for this period"
         return json.dumps({"report": {"total_gain_percent": 1.0, "total_gain": 10.0, "currency": "AUD"}})
 
 
@@ -126,6 +130,27 @@ async def test_failures_end_the_pass_and_failed_windows_are_not_retried_until_re
     assert len(ss.order) >= backfill.MAX_FAILS and not set(ss.order) & set(first_five)  # skipped the failed ones
     backfill.reset()
     assert not backfill.BAD and backfill.wake_event().is_set()
+
+
+async def test_windows_with_no_data_do_not_stop_the_pass_and_are_not_retried(env, store, caplog):
+    caplog.set_level("INFO", logger="bot")
+    ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
+    ss.data_from = "2026-02-15"  # everything ending before this has no data: dozens of empty windows in a row
+    ctx, _ = make(env, store, ss)
+    args = ctx, ss, [(7, "RobSMSF", date(2026, 1, 15))], date(2026, 3, 3)
+    stored = await backfill.fill_once(*args)
+    assert stored > 0 and store.period_count(7, "2026-01-01", "2026-03-31") == stored  # later windows still got stored
+    assert "had no data" in caplog.text and "fetches in a row failed" not in caplog.text
+    ss.order.clear()
+    assert await backfill.fill_once(*args) == 0 and ss.order == []  # the empty ones are skipped until reset()
+
+
+async def test_throttling_text_counts_as_a_transient_failure_and_is_logged(env, store, caplog):
+    ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"), fail=True)
+    ss.fail_text = "Tool error: HTTP 429 Too Many Requests"
+    ctx, _ = make(env, store, ss)
+    assert await backfill.fill_once(ctx, ss, [(7, "RobSMSF", date(2026, 1, 15))], date(2026, 3, 3)) == 0
+    assert "fetches in a row failed" in caplog.text and "429 Too Many Requests" in caplog.text
 
 
 async def test_the_loop_runs_a_pass_then_sleeps_until_woken(env, store, monkeypatch):

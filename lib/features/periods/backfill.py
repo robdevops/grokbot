@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 from ... import config
 from ...context import Ctx
 from . import sharesight
-from .rows import fetch_row
+from .rows import fetch
 from .windows import Window, key, parse_date, period_windows
 
 log = logging.getLogger("bot")
@@ -74,13 +74,14 @@ def selected(st: config.Settings, listing: str) -> list[tuple[int, str, date]]:
 
 async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Window]) -> tuple[int, bool]:
     """Fetch these windows with WORKERS fetches at a time. Returns (how many were stored, whether the pass
-    was stopped by MAX_FAILS failures in a row)."""
+    was stopped by MAX_FAILS transient failures in a row). A window Sharesight has no data for is skipped
+    (until the next restart or flush) without counting as a failure: early days before any trade are normal."""
     pending = iter(todo)  # shared: each window goes to exactly one worker
-    stored = done = fails = mine = 0
+    stored = done = fails = nodata = transient = mine = 0
     stopped = False
 
     async def worker() -> None:
-        nonlocal stored, done, fails, mine, stopped
+        nonlocal stored, done, fails, nodata, transient, mine, stopped
         for w in pending:
             while server.in_flight > mine and not stopped:  # a user's request comes first
                 await asyncio.sleep(BUSY_POLL)
@@ -88,24 +89,30 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
                 return
             mine += 1
             try:
-                row = await fetch_row(server, pid, w[1], w[2])
+                got = await fetch(server, pid, w[1], w[2])
             finally:
                 mine -= 1
-            if row is None:
+            if got.row is not None:
+                fails = 0
+                await asyncio.to_thread(ctx.store.period_put, [got.row])
+                stored += 1
+            elif got.kind == "nodata":
+                BAD.add((pid, *key(w)))
+                nodata += 1
+            else:
                 BAD.add((pid, *key(w)))
                 fails += 1
+                transient += 1
+                log.warning("Period backfill: %s %s..%s failed: %s", name, w[1], w[2], got.text[:150])
                 if fails >= MAX_FAILS and not stopped:
                     stopped = True
                     log.warning("Period backfill: %d fetches in a row failed; stopping this pass", fails)
-            else:
-                fails = 0
-                await asyncio.to_thread(ctx.store.period_put, [row])
-                stored += 1
             done += 1
             if done % PROGRESS_EVERY == 0:
                 log.info("Period backfill: %s %d/%d", name, done, len(todo))
 
     await asyncio.gather(*(worker() for _ in range(WORKERS)))
+    log.info("Period backfill: %s: %d stored, %d had no data, %d failed", name, stored, nodata, transient)
     return stored, stopped
 
 
