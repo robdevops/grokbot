@@ -26,14 +26,9 @@ class Sharesight(FakeMcp):
         self.running = self.peak = 0
         self.order: list[tuple[str, str]] = []
 
-    @property
-    def in_flight(self):  # a user's request is running for the first few polls
+    def user_calls(self):  # a user's request is running for the first few polls
         self.polls += 1
-        return 1 if self.polls <= self.busy_for else 0
-
-    @in_flight.setter
-    def in_flight(self, value):
-        pass
+        return ["get_performance_report portfolio_id=7 2024-01-01..2024-12-31"] if self.polls <= self.busy_for else []
 
     async def call(self, tool, args):
         self.calls.append((tool, args))
@@ -203,7 +198,7 @@ async def test_the_journal_says_when_it_is_held_back_or_a_fetch_is_slow(env, sto
     ss.delay = 0.01
     ctx, _ = make(env, store, ss)
     await backfill.fill_once(ctx, ss, [(7, "RobSMSF", date(2026, 3, 1))], date(2026, 3, 3))
-    assert "held back by a user's request" in caplog.text and "was slow" in caplog.text
+    assert "held back for 0 s by: get_performance_report portfolio_id=7" in caplog.text and "was slow" in caplog.text
 
 
 async def test_progress_is_logged_every_n_fetches(env, store, monkeypatch, caplog):

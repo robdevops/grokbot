@@ -84,26 +84,22 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
     (until the next restart or flush) without counting as a failure: early days before any trade are normal."""
     pending = iter(todo)  # shared: each window goes to exactly one worker
     streak = streak if streak is not None else [0]  # failures in a row; shared across a pass's steps
-    stored = done = nodata = transient = mine = 0
+    stored = done = nodata = transient = 0
     stopped = False
 
     async def worker() -> None:
-        nonlocal stored, done, nodata, transient, mine, stopped
+        nonlocal stored, done, nodata, transient, stopped
         for w in pending:
             waited, said = time.monotonic(), False
-            while server.in_flight > mine and not stopped:  # a user's request comes first
+            while (users := server.user_calls()) and not stopped:  # a user's request comes first
                 await asyncio.sleep(BUSY_POLL)
                 if not said and time.monotonic() - waited >= WAIT_LOG:
                     said = True
-                    log.info("Period backfill: %s held back by a user's request for %.0f s", name, WAIT_LOG)
+                    log.info("Period backfill: %s held back for %.0f s by: %s", name, WAIT_LOG, "; ".join(users[:3]))
             if stopped:
                 return
-            mine += 1
             began = time.monotonic()
-            try:
-                got = await fetch(server, pid, w[1], w[2])
-            finally:
-                mine -= 1
+            got = await fetch(server, pid, w[1], w[2], background=True)
             if time.monotonic() - began >= SLOW_FETCH:
                 log.warning("Period backfill: %s %s..%s was slow: %.0f s", name, w[1], w[2], time.monotonic() - began)
             if got.row is not None:

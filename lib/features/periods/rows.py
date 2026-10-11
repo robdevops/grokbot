@@ -48,12 +48,13 @@ class Fetched(NamedTuple):
     text: str  # what came back, for the log
 
 
-async def fetch(server, portfolio_id: int, first: date, last: date) -> Fetched:
-    """One window's return from Sharesight (sold holdings included)."""
+async def fetch(server, portfolio_id: int, first: date, last: date, background: bool = False) -> Fetched:
+    """One window's return from Sharesight (sold holdings included). `background`: the backfill, which yields to
+    users' calls."""
     try:
         text = await server.call("get_performance_report", {
             "portfolio_id": portfolio_id, "start_date": first.isoformat(), "end_date": last.isoformat(),
-            "_keep_sales": True})
+            "_keep_sales": True, **({"_bg": True} if background else {})})
     except Exception as e:  # a timeout or a dropped connection
         return Fetched(None, "transient", f"{type(e).__name__}: {e}")
     report = parse_report(text)

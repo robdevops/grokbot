@@ -240,6 +240,28 @@ async def test_bots_own_tools_are_not_truncated_but_the_models_are():
     assert "truncated" not in whole and len(whole) > 20
 
 
+async def test_user_calls_describe_what_is_running_but_not_background_work():
+    s = MCPServer("sharesight", {"max_concurrent": 2}, timeout=5, max_output=1000)
+    gate = asyncio.Event()
+
+    class Held(FakeSession):
+        async def call_tool(self, name, args):
+            await gate.wait()
+            return await super().call_tool(name, args)
+
+    s.session = Held()
+    chat = asyncio.create_task(s.call("get_performance_report", {"portfolio_id": 7, "start_date": "2024-01-01", "end_date": "2024-01-31"}))
+    own = asyncio.create_task(s.call("get_performance_report", {"portfolio_id": 7, "start_date": "2024-02-01", "end_date": "2024-02-29", "_keep_sales": True}))
+    bg = asyncio.create_task(s.call("get_performance_report", {"portfolio_id": 7, "start_date": "2024-03-01", "end_date": "2024-03-31", "_keep_sales": True, "_bg": True}))
+    await asyncio.sleep(0.01)
+    assert s.in_flight == 3
+    assert s.user_calls() == ["get_performance_report portfolio_id=7 2024-01-01..2024-01-31",
+                              "get_performance_report portfolio_id=7 2024-02-01..2024-02-29 (period_returns)"]
+    gate.set()
+    await asyncio.gather(chat, own, bg)
+    assert s.user_calls() == [] and s.in_flight == 0
+
+
 async def test_in_flight_counts_running_calls_and_returns_to_zero():
     s = MCPServer("y", {"max_concurrent": 1}, timeout=0.05, max_output=1000)
     gate = asyncio.Event()
