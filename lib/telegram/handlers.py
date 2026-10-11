@@ -15,7 +15,7 @@ from telegram.ext import ContextTypes
 from .. import config
 from ..ask import ask
 from ..context import Ctx
-from ..features import dm_buttons, holding_news, monthly, movers, post
+from ..features import dm_buttons, holding_news, movers, periods, post
 from ..history import compact, format_rows
 from ..llm.gate import Route, is_portfolio_question, route
 from ..msgtext import describe, sender_name
@@ -230,7 +230,7 @@ class Handlers:
                 return PORTFOLIO_ADMINS_ONLY
             extra = []
             if admin and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers):
-                extra.append(monthly.tool(ctx))
+                extra.append(periods.tool(ctx))
             if st.post_to_groups and trig.private and post.wants_post(trig.text):
                 extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
                 if chosen.simple:  # the model must not be told it has no tools

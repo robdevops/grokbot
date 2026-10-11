@@ -253,7 +253,7 @@ async def test_non_admin_gets_no_portfolio_data_in_a_group(env, store):
     assert asked.replies[0]["text"] == "Portfolio data is for admins only." and backend.seen == []
     admin = user_msg(ctx.bot, "@stockbot how is my portfolio doing?", user_id=5, mid=2)
     await run(h, admin)
-    assert backend.seen[0]["tools"] == ["sharesight__list_portfolios", "monthly_returns"]  # admins also get the monthly tool
+    assert backend.seen[0]["tools"] == ["sharesight__list_portfolios", "period_returns"]  # admins also get the period tool
 
 
 async def test_non_admin_never_gets_portfolio_tools_even_on_the_rerun(env, store):
