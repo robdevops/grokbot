@@ -17,7 +17,7 @@ from .windows import Window, key, parse_date, period_windows
 log = logging.getLogger("bot")
 
 ORDER = ("month", "quarter", "year", "week", "day")  # what pays off first: few calls, most questions
-PAUSE = 3.0  # seconds between calls
+PAUSE = 1.0  # seconds between calls
 BUSY_POLL = 2.0
 RECHECK = 6 * 3600  # seconds between passes (a pass fetches only what newly finished)
 MAX_FAILS = 5  # consecutive failed fetches that end a pass (Sharesight down or throttling)
