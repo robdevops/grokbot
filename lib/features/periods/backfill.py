@@ -49,10 +49,10 @@ def natural_end(period: str, w: Window) -> bool:
             "year": end.month == 12 and end.day == 31}[period]
 
 
-def wanted(first: date, today: date) -> list[Window]:
-    """Finished windows from `first` up to yesterday, in the order worth fetching them."""
+def wanted(first: date, today: date, periods: tuple[str, ...] = ORDER) -> list[Window]:
+    """Finished windows of these period types from `first` up to yesterday, in the order worth fetching them."""
     yesterday = today - timedelta(days=1)
-    return [w for p in ORDER for w in period_windows(p, first, yesterday) if natural_end(p, w)] \
+    return [w for p in periods for w in period_windows(p, first, yesterday) if natural_end(p, w)] \
         if first <= yesterday else []
 
 
@@ -73,16 +73,18 @@ def selected(st: config.Settings, listing: str) -> list[tuple[int, str, date]]:
     return out
 
 
-async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Window]) -> tuple[int, bool]:
+async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Window],
+                         streak: list[int] | None = None) -> tuple[int, bool]:
     """Fetch these windows with WORKERS fetches at a time. Returns (how many were stored, whether the pass
     was stopped by MAX_FAILS transient failures in a row). A window Sharesight has no data for is skipped
     (until the next restart or flush) without counting as a failure: early days before any trade are normal."""
     pending = iter(todo)  # shared: each window goes to exactly one worker
-    stored = done = fails = nodata = transient = mine = 0
+    streak = streak if streak is not None else [0]  # failures in a row; shared across a pass's steps
+    stored = done = nodata = transient = mine = 0
     stopped = False
 
     async def worker() -> None:
-        nonlocal stored, done, fails, nodata, transient, mine, stopped
+        nonlocal stored, done, nodata, transient, mine, stopped
         for w in pending:
             while server.in_flight > mine and not stopped:  # a user's request comes first
                 await asyncio.sleep(BUSY_POLL)
@@ -94,19 +96,19 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
             finally:
                 mine -= 1
             if got.row is not None:
-                fails = 0
+                streak[0] = 0
                 await asyncio.to_thread(ctx.store.period_put, [got.row])
                 stored += 1
             elif got.kind == "nodata":
                 BAD.add((pid, *key(w)))
                 nodata += 1
             else:  # a blip says nothing about the window itself, so it is tried again next pass
-                fails += 1
+                streak[0] += 1
                 transient += 1
                 log.warning("Period backfill: %s %s..%s failed: %s", name, w[1], w[2], got.text[:150])
-                if fails >= MAX_FAILS and not stopped:
+                if streak[0] >= MAX_FAILS and not stopped:
                     stopped = True
-                    log.warning("Period backfill: %d fetches in a row failed; stopping this pass", fails)
+                    log.warning("Period backfill: %d fetches in a row failed; stopping this pass", streak[0])
             done += 1
             if done % PROGRESS_EVERY == 0:
                 log.info("Period backfill: %s %d/%d", name, done, len(todo))
@@ -117,20 +119,24 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
 
 
 async def fill_pass(ctx: Ctx, server, portfolios: list[tuple[int, str, date]], today: date) -> tuple[int, bool]:
-    """One pass: fetch every wanted window that isn't cached yet. Returns (how many were stored, whether
-    failures in a row cut it short)."""
-    stored = 0
-    for pid, name, first in portfolios:
-        windows = wanted(first, today)
-        have = await asyncio.to_thread(ctx.store.period_get, pid, first.isoformat(), today.isoformat())
-        todo = [w for w in windows if key(w) not in have and (pid, *key(w)) not in BAD]
-        if not todo:
-            continue
-        log.info("Period backfill: %d windows to fetch for %s", len(todo), name)
-        n, stopped = await fill_portfolio(ctx, server, pid, name, todo)
-        stored += n
-        if stopped:
-            return stored, True
+    """One pass: fetch every wanted window that isn't cached yet, one period type at a time across all the
+    portfolios (everyone's months, then quarters, years, weeks, and the many days last). Returns (how many
+    were stored, whether failures in a row cut it short)."""
+    cached = {}
+    for pid, _, first in portfolios:
+        cached[pid] = set(await asyncio.to_thread(ctx.store.period_get, pid, first.isoformat(), today.isoformat()))
+    stored, streak = 0, [0]
+    for period in ORDER:
+        for pid, name, first in portfolios:
+            todo = [w for w in wanted(first, today, (period,))
+                    if key(w) not in cached[pid] and (pid, *key(w)) not in BAD]
+            if not todo:
+                continue
+            log.info("Period backfill: %d %ss to fetch for %s", len(todo), period, name)
+            n, stopped = await fill_portfolio(ctx, server, pid, f"{name} {period}s", todo, streak)
+            stored += n
+            if stopped:
+                return stored, True
     return stored, False
 
 

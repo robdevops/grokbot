@@ -99,6 +99,30 @@ async def test_a_pass_fetches_what_is_missing_then_only_what_is_new(env, store):
     assert ss.order == [("2026-03-03", "2026-03-03")]
 
 
+async def test_every_portfolios_cheap_periods_come_before_anyones_days(env, store):
+    ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
+    ctx, _ = make(env, store, ss)
+    seen = []
+    real = ss.call
+
+    async def spy(tool, args):
+        if tool == "get_performance_report":
+            seen.append((args["portfolio_id"], args["start_date"], args["end_date"]))
+        return await real(tool, args)
+
+    ss.call = spy
+    folios = [(7, "RobSMSF", date(2026, 1, 15)), (8, "Other", date(2026, 1, 15))]
+    today = date(2026, 3, 3)
+    total = await backfill.fill_once(ctx, ss, folios, today)
+    assert total == 2 * len(backfill.wanted(date(2026, 1, 15), today)) and len(set(seen)) == len(seen)  # once each
+    is_day = lambda x: x[1] == x[2]  # noqa: E731
+    last_cheap = max(i for i, x in enumerate(seen) if not is_day(x))
+    first_day = min(i for i, x in enumerate(seen) if is_day(x))
+    assert last_cheap < first_day  # all weeks/months of both portfolios, then days
+    assert {x[0] for x in seen[:last_cheap + 1]} == {7, 8}
+    assert await backfill.fill_once(ctx, ss, folios, today) == 0
+
+
 async def test_it_waits_while_a_user_request_is_using_the_server(env, store):
     ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
     ss.busy_for = 3
