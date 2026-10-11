@@ -21,7 +21,9 @@ class Sharesight(FakeMcp):
         pct = {"2025-12": -2.0, "2026-01": 1.0, "2026-02": 5.0}.get(args["start_date"][:7])
         if pct is None:
             return "Tool error: no data"
-        return json.dumps({"report": {"total_gain_percent": pct, "total_gain": pct * 100, "currency": "AUD"}})
+        rows = [["AAA", pct * 150, 40.0], ["BBB", -pct * 50, -10.0], ["CCC", 0, 0]]  # a sold holding could be among them
+        return json.dumps({"report": {"total_gain_percent": pct, "total_gain": pct * 100, "currency": "AUD",
+                                      "holdings": {"columns": ["code", "total_gain", "total_gain_percent"], "rows": rows}}})
 
 
 def make(env, ss=None):
@@ -43,6 +45,15 @@ async def test_months_run_from_inception_with_sold_holdings_and_best_worst(env):
     first = reports(ss)[0]
     assert (first["start_date"], first["end_date"]) == ("2025-12-20", "2025-12-31")  # clipped to inception
     assert all(r["_keep_sales"] is True for r in reports(ss))
+
+
+async def test_best_and_worst_periods_say_which_holdings_drove_them(env):
+    ctx, ss = make(env)
+    _, fn = periods.tool(ctx)
+    out = await fn({"portfolio_id": 7, "end": "2026-03"})
+    assert "Holdings behind 2026-02: up: AAA +750 (+40.0%); down: BBB -250 (-10.0%)" in out
+    assert "Holdings behind 2025-12: up: BBB +100 (-10.0%); down: AAA -300 (+40.0%)" in out  # worst month
+    assert "Holdings behind 2026-01" not in out and "CCC" not in out  # only the extremes, only movers
 
 
 async def test_quarters_and_years_are_asked_for_whole_windows(env):

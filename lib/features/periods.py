@@ -9,6 +9,7 @@ import logging
 from datetime import date, datetime, timedelta
 
 from ..context import Ctx
+from ..mcp.results import table_records
 from ..mcp.schema import ToolDef
 
 log = logging.getLogger("bot")
@@ -76,6 +77,21 @@ def period_windows(period: str, first: date, last: date) -> list[tuple[str, date
             out.append((label, max(cur, first), min(nxt - timedelta(days=1), last)))
             cur = nxt
     return out
+
+
+def _movers(report: dict) -> list[tuple[str, float, object]]:
+    """(code, total gain, gain %) per holding of a report, sold ones included."""
+    return [(h["code"], float(h["total_gain"]), h.get("total_gain_percent")) for h in table_records(report.get("holdings"))
+            if h.get("code") and isinstance(h.get("total_gain"), (int, float))]
+
+
+def _drivers(movers: list[tuple[str, float, object]], n: int = 3) -> str:
+    """The holdings that added most and lost most in a period: "up: CRWD +9,975 (+64.5%); down: ..."."""
+    def show(m):
+        return f"{m[0]} {m[1]:+,.0f}" + (f" ({m[2]:+.1f}%)" if isinstance(m[2], (int, float)) else "")
+    ups = sorted((m for m in movers if m[1] > 0), key=lambda m: -m[1])[:n]
+    downs = sorted((m for m in movers if m[1] < 0), key=lambda m: m[1])[:n]
+    return "; ".join(f"{name}: {', '.join(map(show, group))}" for name, group in (("up", ups), ("down", downs)) if group)
 
 
 def _report(text: str) -> dict | None:
@@ -155,14 +171,19 @@ def tool(ctx: Ctx):
                 missing += 1
                 continue
             rows.append((label, float(report["total_gain_percent"]), float(report.get("total_gain") or 0),
-                         report.get("currency") or ""))
+                         report.get("currency") or "", _movers(report)))
         if not rows:
             return "Error: no reports came back."
         best, worst = max(rows, key=lambda r: r[1]), min(rows, key=lambda r: r[1])
         lines = [f"Total return per {period} ({rows[0][3]}), {rows[0][0]} to {rows[-1][0]}, sold holdings included:"]
-        lines += [f"{label} {pct:+.2f}% {gain:+,.0f}" for label, pct, gain, _ in rows]
+        lines += [f"{label} {pct:+.2f}% {gain:+,.0f}" for label, pct, gain, *_ in rows]
         lines.append(f"Best: {best[0]} {best[1]:+.2f}%. Worst: {worst[0]} {worst[1]:+.2f}%."
                      + (f" {missing} {period}s had no data." if missing else ""))
+        # What moved the extremes (best/worst by percent and by money), so the answer can say why.
+        extremes = dict.fromkeys(r[0] for r in (best, worst, max(rows, key=lambda r: r[2]), min(rows, key=lambda r: r[2])))
+        for r in rows:
+            if r[0] in extremes and (drivers := _drivers(r[4])):
+                lines.append(f"Holdings behind {r[0]}: {drivers}")
         log.info("period_returns: %d %ss for portfolio %s", len(rows), period, pid)
         return "\n".join(lines)
 
