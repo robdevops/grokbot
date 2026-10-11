@@ -73,7 +73,7 @@ def test_main_accepts_and_ignores_a_label_and_unknown_args(monkeypatch, tmp_path
     assert started
 
 
-def test_startup_logs_the_git_hash_and_survives_without_git(monkeypatch, tmp_path, caplog):
+def test_startup_logs_the_git_hash_and_whether_the_backfill_is_on(monkeypatch, tmp_path, caplog):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "1:x")
     monkeypatch.setenv("OPENROUTER_API_KEY", "b")
     monkeypatch.delenv("XAI_API_KEY", raising=False)
@@ -81,18 +81,47 @@ def test_startup_logs_the_git_hash_and_survives_without_git(monkeypatch, tmp_pat
     monkeypatch.setenv("MCP_CONFIG", str(tmp_path / "none.json"))
     monkeypatch.setattr(app.Application, "run_polling", lambda self, **kw: None)
     caplog.set_level("INFO", logger="bot")
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "abc1234\n"})())
+    monkeypatch.setattr(app, "git_hash", lambda: "abc1234")
     app.main(["grokbot"])
-    assert "Starting instance grokbot (abc1234): " in caplog.text
+    assert "Starting instance grokbot (abc1234): " in caplog.text and "Period backfill" not in caplog.text
     caplog.clear()
-
-    def no_git(*a, **kw):
-        raise FileNotFoundError("git")
-
-    monkeypatch.setattr(app.subprocess, "run", no_git)
-    assert app.git_hash() == ""
+    monkeypatch.setattr(app, "git_hash", lambda: "")
+    monkeypatch.setenv("PERIOD_BACKFILL", "RobSMSF, other")
     app.main(["grokbot"])
     assert "Starting instance grokbot: " in caplog.text
+    assert "Period backfill: on for other, robsmsf" in caplog.text
+
+
+def test_git_hash_is_read_from_the_git_directory_without_running_git(tmp_path):
+    sha = "0123456789abcdef0123456789abcdef01234567"
+    assert app.git_hash(tmp_path) == ""  # no checkout
+    git = tmp_path / ".git"
+    (git / "refs" / "heads").mkdir(parents=True)
+    (git / "HEAD").write_text("ref: refs/heads/main\n")
+    assert app.git_hash(tmp_path) == ""  # the branch has no commit yet
+    (git / "refs" / "heads" / "main").write_text(sha + "\n")
+    assert app.git_hash(tmp_path) == "0123456"
+    (git / "refs" / "heads" / "main").unlink()  # packed by gc
+    (git / "packed-refs").write_text(f"# pack-refs\n{sha} refs/heads/main\n")
+    assert app.git_hash(tmp_path) == "0123456"
+    (git / "HEAD").write_text(sha + "\n")  # detached
+    assert app.git_hash(tmp_path) == "0123456"
+    (git / "HEAD").write_text("garbage")
+    assert app.git_hash(tmp_path) == ""
+
+
+def test_git_hash_follows_a_linked_worktree(tmp_path):
+    sha = "fedcba9876543210fedcba9876543210fedcba98"
+    main, tree = tmp_path / "main" / ".git", tmp_path / "wt"
+    (main / "refs" / "heads").mkdir(parents=True)
+    (main / "refs" / "heads" / "feat").write_text(sha + "\n")
+    admin = main / "worktrees" / "wt"
+    admin.mkdir(parents=True)
+    (admin / "HEAD").write_text("ref: refs/heads/feat\n")
+    (admin / "commondir").write_text("../..\n")
+    tree.mkdir()
+    (tree / ".git").write_text(f"gitdir: {admin}\n")
+    assert app.git_hash(tree) == "fedcba9"
 
 
 async def test_alert_down_notifies_admin_chats_only(env, store):

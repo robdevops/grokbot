@@ -8,7 +8,7 @@ import html
 import json
 import logging
 import os
-import subprocess
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -145,14 +145,26 @@ def allowed_updates(st: config.Settings) -> list[str]:
             + (["my_chat_member"] if st.post_to_groups or st.admin_only else []))
 
 
-def git_hash() -> str:
-    """Short hash of the commit this checkout is on, or "" if it can't be read (no git, no checkout)."""
+def git_hash(root: Path | None = None) -> str:
+    """Short hash of the commit this checkout is on, or "" if it can't be read. Read from .git directly: the
+    git command refuses a checkout owned by another user (a systemd DynamicUser runs as one)."""
+    root = root or Path(__file__).resolve().parent.parent
     try:
-        done = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).resolve().parent.parent,
-                              capture_output=True, text=True, timeout=2)
-    except (OSError, subprocess.SubprocessError):
+        git = root / ".git"
+        if git.is_file():  # a linked worktree: ".git" holds "gitdir: <path>"
+            git = (root / git.read_text().split(":", 1)[1].strip()).resolve()
+        common = git / (git / "commondir").read_text().strip() if (git / "commondir").exists() else git
+        head = (git / "HEAD").read_text().strip()
+        if head.startswith("ref:"):
+            ref = head.split(None, 1)[1]
+            try:
+                head = (common / ref).read_text().strip()
+            except FileNotFoundError:  # packed by `git gc`
+                packed = (common / "packed-refs").read_text().splitlines()
+                head = next((line.split()[0] for line in packed if line.endswith(" " + ref)), "")
+        return head[:7] if re.fullmatch(r"[0-9a-f]{40,64}", head) else ""
+    except (OSError, IndexError):
         return ""
-    return done.stdout.strip() if done.returncode == 0 else ""
 
 
 def flush_cache(which: str) -> str:
@@ -186,4 +198,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     log.info("Starting%s%s: %s on %s, reasoning %s, MCP servers: %s",
              f" instance {args.label}" if args.label else "", f" ({commit})" if commit else "", st.model, st.provider,
              st.reasoning or "default", ", ".join(ctx.registry.servers) or "none")
+    if st.period_backfill:
+        log.info("Period backfill: on for %s", ", ".join(sorted(st.period_backfill)))
     app.run_polling(allowed_updates=allowed_updates(st))
