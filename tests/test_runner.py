@@ -254,6 +254,7 @@ PORTFOLIO_PHRASES = [
     "my position in CBA", "am I up or down today", "show performance this year", "bob smsf vs bob personal",
     "are my dividends coming", "why did I outperform Alice over the past month?", "how did I do last month",
     "did I beat Alice this year", "why did Alice underperform me", "who's ahead of who this quarter, me or Alice",
+    "what was the best month for robsmsf since inception?", "how is BobSMSF doing",
 ]
 
 
