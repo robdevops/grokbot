@@ -174,3 +174,21 @@ async def test_backfill_task_starts_only_when_period_backfill_is_set(env, store,
         await built.post_init(SimpleNamespace(bot=SimpleNamespace(id=1)))
         await asyncio.sleep(0)
         assert len(started) == expected
+
+
+def test_the_mcp_librarys_unlabelled_protocol_line_is_dropped(monkeypatch):
+    import logging
+
+    monkeypatch.delenv("JOURNAL_STREAM", raising=False)
+    root = logging.getLogger()
+    saved = list(root.handlers), root.level
+    root.handlers.clear()
+    try:
+        app.setup_logging()
+        keep = [h for h in root.handlers]
+        mk = lambda msg: logging.LogRecord("mcp.client", logging.INFO, "f", 1, msg, None, None)  # noqa: E731
+        assert all(not h.filter(mk("Negotiated protocol version: 2025-11-25")) for h in keep)
+        assert all(h.filter(mk("MCP yahoo: connected, protocol 2025-11-25")) for h in keep)
+    finally:
+        root.handlers[:] = saved[0]
+        root.setLevel(saved[1])

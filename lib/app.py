@@ -53,6 +53,14 @@ def setup_logging() -> None:
         format="%(levelname)s %(message)s" if os.getenv("JOURNAL_STREAM")
         else "%(asctime)s %(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(_drop_protocol_line)
+
+
+def _drop_protocol_line(record: logging.LogRecord) -> bool:
+    """The MCP library's own "Negotiated protocol version" line doesn't say which server it is about; the
+    bot logs "MCP <name>: connected, protocol ..." instead."""
+    return not record.getMessage().startswith("Negotiated protocol version")
 
 
 async def alert_down(ctx: Ctx, server: MCPServer) -> None:

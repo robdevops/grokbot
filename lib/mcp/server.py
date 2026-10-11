@@ -108,7 +108,8 @@ class MCPServer:
                         env=expand_env(self.cfg.get("env"), self.label))
                     read, write = await stack.enter_async_context(stdio_client(params, errlog=errlog))
                 session = await stack.enter_async_context(ClientSession(read, write))
-                await session.initialize()
+                init = await session.initialize()
+                log.info("MCP %s: connected, protocol %s", self.label, getattr(init, "protocolVersion", "?"))
                 await self._load_tools(session)
                 self.session, self.error = session, None
                 self._ready.set()
