@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import date, datetime, timedelta
 
 from ... import config
@@ -22,7 +23,9 @@ RECHECK = 6 * 3600  # seconds between passes (a pass fetches only what newly fin
 RETRY_AFTER_FAILURE = 600  # seconds before trying again after a pass stopped by MAX_FAILS failures in a row
 WORKERS = 2  # fetches at a time (needs max_concurrent >= 2 on the Sharesight server in mcp_servers.json)
 MAX_FAILS = 5  # consecutive failed fetches that end a pass (Sharesight down or throttling)
-PROGRESS_EVERY = 100
+PROGRESS_EVERY = 50
+WAIT_LOG = 30.0  # seconds held back by a user's request before the journal says so
+SLOW_FETCH = 20.0  # seconds one Sharesight fetch may take before the journal says so
 
 _wake: asyncio.Event | None = None  # set to start a pass now (after a flush)
 BAD: set[tuple[int, str, str]] = set()  # windows Sharesight had no data for; not retried until restart or reset()
@@ -86,15 +89,22 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
     async def worker() -> None:
         nonlocal stored, done, nodata, transient, mine, stopped
         for w in pending:
+            waited, said = time.monotonic(), False
             while server.in_flight > mine and not stopped:  # a user's request comes first
                 await asyncio.sleep(BUSY_POLL)
+                if not said and time.monotonic() - waited >= WAIT_LOG:
+                    said = True
+                    log.info("Period backfill: %s held back by a user's request for %.0f s", name, WAIT_LOG)
             if stopped:
                 return
             mine += 1
+            began = time.monotonic()
             try:
                 got = await fetch(server, pid, w[1], w[2])
             finally:
                 mine -= 1
+            if time.monotonic() - began >= SLOW_FETCH:
+                log.warning("Period backfill: %s %s..%s was slow: %.0f s", name, w[1], w[2], time.monotonic() - began)
             if got.row is not None:
                 streak[0] = 0
                 await asyncio.to_thread(ctx.store.period_put, [got.row])

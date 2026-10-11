@@ -192,6 +192,27 @@ async def test_throttling_text_counts_as_a_transient_failure_and_is_logged(env, 
     assert "fetches in a row failed" in caplog.text and "429 Too Many Requests" in caplog.text
 
 
+async def test_the_journal_says_when_it_is_held_back_or_a_fetch_is_slow(env, store, monkeypatch, caplog):
+    caplog.set_level("INFO", logger="bot")
+    monkeypatch.setattr(backfill, "WAIT_LOG", 0)
+    monkeypatch.setattr(backfill, "SLOW_FETCH", 0.005)
+    ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
+    ss.busy_for = 3
+    ss.delay = 0.01
+    ctx, _ = make(env, store, ss)
+    await backfill.fill_once(ctx, ss, [(7, "RobSMSF", date(2026, 3, 1))], date(2026, 3, 3))
+    assert "held back by a user's request" in caplog.text and "was slow" in caplog.text
+
+
+async def test_progress_is_logged_every_n_fetches(env, store, monkeypatch, caplog):
+    caplog.set_level("INFO", logger="bot")
+    monkeypatch.setattr(backfill, "PROGRESS_EVERY", 5)
+    ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
+    ctx, _ = make(env, store, ss)
+    await backfill.fill_once(ctx, ss, [(7, "RobSMSF", date(2026, 1, 15))], date(2026, 3, 3))
+    assert "RobSMSF days 5/" in caplog.text and "RobSMSF days 10/" in caplog.text
+
+
 async def test_the_loop_runs_a_pass_then_sleeps_until_woken(env, store, monkeypatch):
     recent = (date.today() - timedelta(days=4)).isoformat()
     ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"), inception=recent)
