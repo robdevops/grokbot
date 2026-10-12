@@ -155,11 +155,13 @@ async def fill_once(ctx: Ctx, server, portfolios: list[tuple[int, str, date]], t
 
 async def loop(ctx: Ctx) -> None:
     await ctx.registry.wait_started(config.MCP_STARTUP_WAIT)
+    warned = False
     while True:
         wait = RECHECK
         server = sharesight(ctx)
-        if server is None:
-            log.warning("Period backfill: Sharesight isn't connected; trying again in 10 minutes")
+        if server is None:  # on by default, so a bot without Sharesight must not nag every 10 minutes
+            (log.debug if warned else log.warning)("Period backfill: Sharesight isn't connected; trying again in 10 minutes")
+            warned = True
             wait = 600
         else:
             try:

@@ -288,7 +288,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 | `MCP_CONFIG` | MCP server config file (default mcp_servers.json next to bot.py, whatever `DATA_DIR` is; missing = no MCP tools). |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
 | `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
-| `PERIOD_BACKFILL` | Comma list of Sharesight portfolio names (or `all`) whose returns per day, week, month, quarter and year are fetched into the local cache in the background (about 1,650 Sharesight calls per portfolio the first time, a few hours), so "best day since inception" answers instantly. Empty (default) = off. See [Caching Sharesight history](#caching-sharesight-history). |
+| `PERIOD_BACKFILL` | Comma list of Sharesight portfolio names (or `all`) whose returns per day, week, month, quarter and year are fetched into the local cache in the background (about 1,650 Sharesight calls per portfolio the first time, a few hours), so "best day since inception" answers instantly. Default `all`; list names to limit it, or `off` to disable. See [Caching Sharesight history](#caching-sharesight-history). |
 | `POST_TO_GROUPS_FROM_DM` | on|off. A group admin can have the bot post in that group from a DM (default off). |
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |

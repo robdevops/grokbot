@@ -25,9 +25,11 @@ def test_data_dir_defaults_to_systemd_state_directory():
     assert config.load({**base, "STATE_DIRECTORY": "/a", "DB_PATH": "/x/y.db"}).db_path == "/x/y.db"
 
 
-def test_period_backfill_is_off_by_default_and_lists_names():
+def test_period_backfill_is_all_by_default_and_can_be_listed_or_off():
     base = {"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"}
-    assert config.load(base).period_backfill == frozenset()
+    assert config.load(base).period_backfill == {"all"}
+    assert config.load({**base, "PERIOD_BACKFILL": "off"}).period_backfill == frozenset()
+    assert config.load({**base, "PERIOD_BACKFILL": ""}).period_backfill == frozenset()
     assert config.load({**base, "PERIOD_BACKFILL": "RobSMSF, bobsmsf"}).period_backfill == {"robsmsf", "bobsmsf"}
     assert "all" in config.load({**base, "PERIOD_BACKFILL": "all"}).period_backfill
 

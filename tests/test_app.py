@@ -82,6 +82,7 @@ def test_startup_logs_the_git_hash_and_whether_the_backfill_is_on(monkeypatch, t
     monkeypatch.setattr(app.Application, "run_polling", lambda self, **kw: None)
     caplog.set_level("INFO", logger="bot")
     monkeypatch.setattr(app, "git_hash", lambda: "abc1234")
+    monkeypatch.setenv("PERIOD_BACKFILL", "off")
     app.main(["grokbot"])
     assert "Starting instance grokbot (abc1234): " in caplog.text and "Period backfill" not in caplog.text
     caplog.clear()
@@ -164,14 +165,14 @@ def test_flush_cache_cli_needs_no_keys_and_flushes_by_portfolio_and_period(monke
     assert run("70007", "70008")[0] == 1  # one portfolio at a time
 
 
-async def test_backfill_task_starts_only_when_period_backfill_is_set(env, store, monkeypatch):
+async def test_backfill_task_starts_unless_period_backfill_is_off(env, store, monkeypatch):
     started = []
 
     async def fake_loop(ctx):
         started.append(ctx)
 
     monkeypatch.setattr(app.backfill, "loop", fake_loop)
-    for extra, expected in (({}, 0), ({"PERIOD_BACKFILL": "x"}, 1)):
+    for extra, expected in (({"PERIOD_BACKFILL": "off"}, 0), ({}, 1), ({"PERIOD_BACKFILL": "x"}, 2)):
         st = config.load({**env, **extra})
         ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
         built = app.build_app(ctx)

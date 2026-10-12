@@ -33,7 +33,7 @@ ENV_VARS: dict[str, str] = {
     "MCP_CONFIG": "MCP server config file (default mcp_servers.json next to bot.py; missing = no MCP tools).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
-    "PERIOD_BACKFILL": "Comma list of Sharesight portfolio names (or all) whose daily/weekly/monthly/quarterly/yearly returns are fetched into the local cache in the background, so period questions answer instantly. Empty (default) = off.",
+    "PERIOD_BACKFILL": "Comma list of Sharesight portfolio names (or all) whose daily/weekly/monthly/quarterly/yearly returns are fetched into the local cache in the background, so period questions answer instantly. Default all; list names to limit it, or off to disable.",
     "POST_TO_GROUPS_FROM_DM": "on|off. Lets an admin of a group the bot is in make it post there from a DM (default off).",
     "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
@@ -150,6 +150,11 @@ def _names(text: str) -> frozenset[str]:
     return frozenset(n.strip().lower() for n in re.split(r"[,\n]", text) if n.strip())
 
 
+def _backfill(text: str) -> frozenset[str]:
+    names = _names(text)
+    return frozenset() if names & {"off", "none", "false", "0"} else names
+
+
 def load(env: Mapping[str, str] | None = None) -> Settings:
     """Build Settings from `env` (default: os.environ). Raises ConfigError if unusable."""
     env = os.environ if env is None else env
@@ -198,5 +203,5 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         holding_news_recipients=recipients,
         portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),
         token_saver=saver,
-        period_backfill=_names(env.get("PERIOD_BACKFILL", "")),
+        period_backfill=_backfill(env.get("PERIOD_BACKFILL", "all")),
     )

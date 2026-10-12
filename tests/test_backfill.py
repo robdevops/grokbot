@@ -77,7 +77,8 @@ def test_portfolios_are_selected_by_name_or_all(env):
     pick = lambda **e: [p[1] for p in backfill.selected(config.load({**env, "TELEGRAM_BOT_TOKEN": "1:x", **e}), listing)]  # noqa: E731
     assert pick(PERIOD_BACKFILL="robsmsf") == ["RobSMSF"]
     assert pick(PERIOD_BACKFILL="all") == ["RobSMSF", "Other"]  # a portfolio without an inception date is skipped
-    assert pick() == []
+    assert pick() == ["RobSMSF", "Other"]  # on by default
+    assert pick(PERIOD_BACKFILL="off") == []
 
 
 async def test_a_pass_fetches_what_is_missing_then_only_what_is_new(env, store):
