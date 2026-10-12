@@ -255,6 +255,8 @@ class Handlers:
             chart = bool(CHART_WORDS.search(trig.text)) and charts.available()
             if chart:
                 extra.append(charts.tool(ctx, msg))
+                if admin and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers):
+                    extra.append(charts.portfolio_tool(ctx, msg))
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
             if extra:

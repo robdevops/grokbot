@@ -1,4 +1,5 @@
 import io
+import json
 
 import pytest
 from telegram.error import TelegramError
@@ -9,7 +10,7 @@ from lib.features import charts
 from lib.features.charts import render
 
 from .conftest import FakeBot, user_msg
-from .fakes import ScriptedBackend, registry
+from .fakes import FakeMcp, ScriptedBackend, registry
 
 PNG = b"\x89PNG\r\n\x1a\n"
 SECTORS = [{"label": "Semis", "value": 520.0}, {"label": "ETFs", "value": 250.0}, {"label": "Software", "value": 150.0},
@@ -93,3 +94,67 @@ async def test_the_tool_returns_errors_as_text_so_the_model_can_fall_back(env, s
 
     monkeypatch.setattr(render, "draw", explode)
     assert "answer in text instead" in await send({"kind": "pie", "title": "t", "items": SECTORS})
+
+
+HOLDINGS = {"columns": ["code", "market", "name", "sector", "industry", "value", "quantity"], "rows": [
+    ["CRWD", "NASDAQ", "Crowdstrike", "Technology Services", "Packaged Software", 90.0, 1],
+    ["S", "NYSE", "SentinelOne", "Technology Services", "Packaged Software", 10.0, 1],
+    ["NVDA", "NASDAQ", "Nvidia", "Electronic Technology", "Semiconductors", 170.0, 1],
+    ["TSM", "NYSE", "TSMC", "Electronic Technology", "Semiconductors", 50.0, 1],
+    ["SMH", "NASDAQ", "VanEck Semi", None, "Investment Trusts/Mutual Funds", 80.0, 1],
+    ["OLD", "ASX", "Sold", "Health", "Biotech", 0.0, 0]]}
+
+
+class Sharesight(FakeMcp):
+    async def call(self, tool, args):
+        self.calls.append((tool, args))
+        if tool == "list_portfolios":
+            return json.dumps({"portfolios": [{"id": 7, "name": "Main"}]})
+        return json.dumps({"report": {"currency": "AUD", "holdings": HOLDINGS,
+                                      "cash_accounts": [{"name": "Cash", "value": 25.0, "currency": "AUD"}]}})
+
+
+def portfolio_ctx(env, store):
+    bot = FakeBot()
+    ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
+    return Ctx(config.load(env), store, ScriptedBackend([]), registry(ss), bot), bot, ss
+
+
+def test_holdings_are_grouped_by_exactly_the_field_asked_for():
+    rows = [dict(zip(HOLDINGS["columns"], r, strict=True)) for r in HOLDINGS["rows"]]
+    assert charts.group_holdings(rows, "sector") == [("Electronic Technology", 220.0), ("Technology Services", 100.0),
+                                                     ("Unclassified", 80.0)]  # the sold holding (value 0) is skipped
+    assert charts.group_holdings(rows, "industry")[0] == ("Semiconductors", 220.0)
+    assert charts.group_holdings(rows, "industry")[1] == ("Packaged Software", 100.0)
+    assert charts.group_holdings(rows, "holding")[0] == ("NVDA", 170.0)
+
+
+async def test_portfolio_chart_groups_by_sector_not_industry_and_names_the_portfolio(env, store, monkeypatch):
+    ctx, bot, ss = portfolio_ctx(env, store)
+    drawn = {}
+    real = render.draw
+
+    def spy(kind, title, items, subtitle=""):
+        drawn.update(kind=kind, title=title, items=items, subtitle=subtitle)
+        return real(kind, title, items, subtitle)
+
+    monkeypatch.setattr(render, "draw", spy)
+    msg = user_msg(bot, "@stockbot my portfolios by sector", mid=5)
+    defn, send = charts.portfolio_tool(ctx, msg)
+    out = await send({"portfolio_id": 7, "by": "sector"})
+    assert defn.name == "portfolio_chart" and out.startswith("Chart sent to the chat (sector: Electronic Technology 55.0%")
+    assert drawn["title"] == "Main by sector" and drawn["kind"] == "pie"
+    assert [i["label"] for i in drawn["items"]] == ["Electronic Technology", "Technology Services", "Unclassified"]
+    assert "AUD 400 in holdings, 25 cash" in drawn["subtitle"]
+    assert len(bot.photos) == 1 and bot.photos[0]["reply_to_message_id"] == 5
+    assert ss.calls[0][1]["start_date"] == ss.calls[0][1]["end_date"] and "_keep_sales" not in ss.calls[0][1]  # current holdings
+
+
+async def test_portfolio_chart_refuses_bad_input_as_text(env, store):
+    ctx, bot, _ = portfolio_ctx(env, store)
+    _, send = charts.portfolio_tool(ctx, user_msg(bot, "chart", mid=1))
+    assert "by must be one of" in await send({"portfolio_id": 7, "by": "colour"})
+    assert "portfolio_id" in await send({"by": "sector"})
+    none_ctx = Ctx(config.load(env), store, ScriptedBackend([]), registry(), bot)
+    assert "isn't connected" in await charts.portfolio_tool(none_ctx, user_msg(bot, "chart", mid=2))[1]({"portfolio_id": 7, "by": "sector"})
+    assert bot.photos == []

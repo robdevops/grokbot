@@ -125,10 +125,19 @@ async def test_the_chart_tool_is_offered_only_when_asked_for_a_chart(env, store,
     assert "send_chart" not in backend.seen[0]["tools"] and "send_chart" in backend.seen[1]["tools"]
     assert "send_chart" in backend.seen[2]["tools"]  # also on the route that would otherwise have no tools
     assert "Local tools offered: send_chart" in caplog.text
-    assert "draw it with send_chart" not in backend.seen[0]["prompt"] and "draw it with send_chart" in backend.seen[1]["prompt"]
+    assert "They want a picture" not in backend.seen[0]["prompt"] and "They want a picture" in backend.seen[1]["prompt"]
     monkeypatch.setattr(charts, "available", lambda: False)  # Pillow not installed: the bot just doesn't offer it
     await run(h, user_msg(ctx.bot, "@stockbot pie chart please", mid=4000))
     assert "send_chart" not in backend.seen[3]["tools"]
+
+
+async def test_portfolio_chart_is_offered_for_a_portfolio_chart_request_to_admins_only(env, store):
+    sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios", "get_performance_report"))
+    ctx, backend, h = make_ctx(env, store, [step("a"), step("b")], servers=[sharesight], ADMIN_ONLY="on", ADMIN_CHAT_IDS="5")
+    await run(h, user_msg(ctx.bot, "@stockbot my portfolios by sector", mid=1, user_id=5))
+    assert {"send_chart", "portfolio_chart", "period_returns"} <= set(backend.seen[0]["tools"])
+    await run(h, user_msg(ctx.bot, "@stockbot my portfolios by sector", mid=2000, user_id=9))
+    assert len(backend.seen) == 1  # a non-admin gets the "admins only" message, not a chart
 
 
 async def test_portfolio_question_reminds_the_model_to_fetch_fresh_figures(env, store):

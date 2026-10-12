@@ -94,9 +94,11 @@ def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str
     return head + tail + down
 
 
-CHART_TAIL = (" They want a picture, not a list: once you have the numbers, draw it with send_chart (a pie for "
-              "shares of a whole such as sectors, industries or holdings, a bar chart for values per category or "
-              "period; add up the holdings' value by the field asked for) and reply with one or two sentences.")
+CHART_TAIL = (" They want a picture, not a list: once you have the numbers, draw it. For a portfolio's sectors, "
+              "industries, holdings or markets call portfolio_chart (it fetches and adds up the holdings itself; "
+              "sector and industry are different fields, so pass exactly the one asked for), once per portfolio "
+              "asked about. For anything else use send_chart (a pie for shares of a whole, a bar chart for values "
+              "per category or period). Then reply with one or two sentences.")
 
 PRESET_PROMPT = ("This is a private chat with {sender}. They tapped the \"{label}\" button, which "
                  "asks for: {ask}. It's now {now}. Search {what} for current information, and do "
