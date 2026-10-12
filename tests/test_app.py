@@ -89,7 +89,11 @@ def test_startup_logs_the_git_hash_and_whether_the_backfill_is_on(monkeypatch, t
     monkeypatch.setenv("PERIOD_BACKFILL", "RobSMSF, other")
     app.main(["grokbot"])
     assert "Starting instance grokbot: " in caplog.text
-    assert "Period backfill: on for other, robsmsf" in caplog.text
+    assert "Period backfill: on for other, robsmsf" in caplog.text and "Pillow isn't installed" not in caplog.text
+    caplog.clear()
+    monkeypatch.setattr(app.charts, "available", lambda: False)
+    app.main(["grokbot"])
+    assert "Pillow isn't installed, so pie and bar charts are off" in caplog.text
 
 
 def test_git_hash_is_read_from_the_git_directory_without_running_git(tmp_path):

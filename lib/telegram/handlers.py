@@ -15,9 +15,9 @@ from telegram.ext import ContextTypes
 from .. import config
 from ..ask import ask
 from ..context import Ctx
-from ..features import dm_buttons, holding_news, movers, periods, post
+from ..features import charts, dm_buttons, holding_news, movers, periods, post
 from ..history import compact, format_rows
-from ..llm.gate import Route, is_portfolio_question, route
+from ..llm.gate import CHART_WORDS, Route, is_portfolio_question, route
 from ..msgtext import describe, sender_name
 from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, chat_prompt, down_note
 from ..store import is_dm
@@ -249,6 +249,10 @@ class Handlers:
                 extra.append(periods.tool(ctx))
             if st.post_to_groups and trig.private and post.wants_post(trig.text):
                 extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
+                if chosen.simple:  # the model must not be told it has no tools
+                    chosen = Route([], False)
+            if CHART_WORDS.search(trig.text) and charts.available():
+                extra.append(charts.tool(ctx, msg))
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)

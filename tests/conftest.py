@@ -53,6 +53,7 @@ class FakeBot:
     def __init__(self, bot_id=111, username="stockbot", first_name="Stock"):
         self.id, self.username, self.first_name = bot_id, username, first_name
         self.sent: list[dict] = []
+        self.photos: list[dict] = []
         self.drafts: list[str] = []
         self.actions: list[str] = []
         self.fail_send: dict[int, Exception] = {}
@@ -71,6 +72,10 @@ class FakeBot:
             raise self.fail_send[chat_id]
         self.sent.append({"chat_id": chat_id, "text": text, **kw})
         return self._msg(chat_id, text)
+
+    async def send_photo(self, chat_id, photo=None, caption=None, **kw):
+        self.photos.append({"chat_id": chat_id, "bytes": photo, "caption": caption, **kw})
+        return self._msg(chat_id, caption or "[photo]")
 
     async def get_chat_administrators(self, chat_id):
         if chat_id not in self.admins:
