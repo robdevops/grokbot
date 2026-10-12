@@ -78,7 +78,6 @@ def slim_holding(h):
         "currency": inst.get("currency_code"),
         "type": inst.get("friendly_instrument_description"),
         "sector": inst.get("sector_classification_name"),
-        "industry": inst.get("industry_classification_name"),
     }
     out.update({k: h.get(k) for k in HOLDING_KEEP})
     if out.get("type") == "Ordinary Shares":    # the default; only say when it's something else

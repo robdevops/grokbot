@@ -188,17 +188,6 @@ gets "Portfolio data is for admins only." Holding-news DMs, buttons and down-ser
 unaffected. With nobody in `ADMIN_CHAT_IDS` and no known group, nobody can DM the bot or reach Sharesight: set
 `ADMIN_ONLY=off` to allow everyone.
 
-## Charts
-Ask for a "pie chart", "bar chart", "chart" or "graph", to "visualise" something, or for a breakdown "by sector" or "by industry", and the bot draws a real picture (a PNG) and posts it as a
-reply, with its answer as the picture's caption (one message; several charts go as one album; an answer
-over Telegram's 1,024-character caption limit follows as a second message), using numbers it got from its data tools: a pie for shares of a whole (a portfolio's sectors, industries, holdings or markets), a
-horizontal bar chart for values per category or period (monthly gains, negatives in red). It is drawn with Pillow
-(`pip install -r requirements.txt`); without it the bot says so at start-up and answers in text instead. There is
-nothing to configure: the tools are only offered to the model when the message asks for a chart. For a
-portfolio grouped by sector, industry, holding, market or type (admins only) the bot fetches and adds up the
-holdings itself (`portfolio_chart`), so sector and industry stay distinct and the totals don't depend on the
-model's arithmetic.
-
 ## Caching Sharesight history
 Questions like "best day / week / month / quarter / year since inception" are answered by the `period_returns` tool
 (admins only), which asks Sharesight for one report per period (about 2.4 s each). Every **finished** period is

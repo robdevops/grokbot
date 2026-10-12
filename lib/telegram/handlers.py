@@ -15,9 +15,9 @@ from telegram.ext import ContextTypes
 from .. import config
 from ..ask import ask
 from ..context import Ctx
-from ..features import charts, dm_buttons, holding_news, movers, periods, post
+from ..features import dm_buttons, holding_news, movers, periods, post
 from ..history import compact, format_rows
-from ..llm.gate import CHART_WORDS, Route, is_portfolio_question, route
+from ..llm.gate import Route, is_portfolio_question, route
 from ..msgtext import describe, sender_name
 from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, chat_prompt, down_note
 from ..store import is_dm
@@ -25,7 +25,7 @@ from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
 from .access import is_admin
 from .draft import Draft, start_typing
-from .send import reply_chunks, reply_html, reply_with_photos
+from .send import reply_chunks, reply_html
 
 log = logging.getLogger("bot")
 PORTFOLIO_ADMINS_ONLY = "Portfolio data is for admins only."
@@ -178,8 +178,7 @@ class Handlers:
                     text += " " + compact(prev.text)[:FOLLOW_UP_CHARS]
         return text
 
-    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False,
-                         chart: bool = False) -> str:
+    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False) -> str:
         ctx, st = self.ctx, self.ctx.st
         rows = await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
         transcript = format_rows(rows, ctx.self_name, st.tz, line_max=st.history_line_max,
@@ -187,7 +186,7 @@ class Handlers:
         return chat_prompt(
             transcript=transcript, sender=sender_name(msg), private=trig.private,
             reply_quote=self._quote(trig), msg_id=msg.message_id, now=ctx.now(),
-            down=down_note(ctx.registry.down()), saver=st.token_saver, middle=middle, fresh=fresh, chart=chart)
+            down=down_note(ctx.registry.down()), saver=st.token_saver, middle=middle, fresh=fresh)
 
     # -- answering ---------------------------------------------------------------------
     async def _answer(self, msg: Message, trig: Trigger) -> None:
@@ -204,9 +203,8 @@ class Handlers:
             await draft.start()
         else:
             typing = await start_typing(ctx.bot, msg.chat_id)  # a Telegram hiccup is not fatal
-        images: list[bytes] = []  # charts drawn while answering; they go out with the reply
         try:
-            html_text = await self._generate(msg, trig, draft, images)
+            html_text = await self._generate(msg, trig, draft)
         except Exception as e:
             log.exception("Reply failed")
             html_text = ("Sorry, something went wrong:\n"
@@ -217,12 +215,9 @@ class Handlers:
             else:
                 typing.cancel()
         markup = dm_buttons.keyboard() if trig.private and st.dm_buttons else None
-        if images:
-            await reply_with_photos(msg, images, html_text, ctx.store, quote=not trig.private, last_markup=markup)
-        else:
-            await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
+        await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
 
-    async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None, images: list[bytes]) -> str:
+    async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None) -> str:
         ctx, st = self.ctx, self.ctx.st
         await ctx.registry.wait_started(config.MCP_STARTUP_WAIT)
         preset = dm_buttons.preset_for(trig.text) if trig.private and st.dm_buttons else None
@@ -256,17 +251,8 @@ class Handlers:
                 extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
-            chart = bool(CHART_WORDS.search(trig.text)) and charts.available()
-            if chart:
-                extra.append(charts.tool(ctx, images))
-                if admin and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers):
-                    extra.append(charts.portfolio_tool(ctx, images))
-                if chosen.simple:  # the model must not be told it has no tools
-                    chosen = Route([], False)
-            if extra:
-                log.info("Local tools offered: %s", ", ".join(t.name for t, _ in extra))
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)
-            parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh, chart=chart)}]
+            parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]
             parts += await self._images(msg, trig)
             answer = await ask(ctx, parts, chosen,
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,

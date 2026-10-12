@@ -41,7 +41,7 @@ def test_real_performance_report_is_flattened_to_a_fraction_of_its_size(key):
     text = (FIX / "sharesight" / f"performance_report_{key}.json").read_text()
     slim = slim_result(text, "sharesight", drop_closed=True)
     report, original = json.loads(slim)["report"], json.loads(text)["report"]
-    assert len(slim) < len(text) / 7.5  # was 8 before each holding also kept its industry (for "by industry" charts)
+    assert len(slim) < len(text) / 8
     rows = table_records(report["holdings"])
     assert [(r["code"], r["quantity"], r["value"]) for r in rows] == [
         (h["instrument"]["code"], h["quantity"], h["value"]) for h in original["holdings"]]

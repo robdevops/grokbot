@@ -69,7 +69,7 @@ def down_note(down: list[MCPServer]) -> str:
 
 def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str | None,
                 msg_id: int, now: str, down: str = "", saver: bool = True, middle: str = "",
-                fresh: bool = False, chart: bool = False) -> str:
+                fresh: bool = False) -> str:
     """The user turn: transcript, the replied-to message, and the volatile tail (kept last so the
     cached prefix before it is unchanged)."""
     head = (f"Private one-to-one chat with {sender}, not the group. Transcript:\n{transcript}"
@@ -89,17 +89,8 @@ def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str
                  "for anything else asked, such as prices or a comparison with market data); don't reuse "
                  "numbers or refusals from earlier replies. When comparing portfolios, or asked \"why\", "
                  "write 2-3 short paragraphs on the tailwinds and headwinds of each portfolio, not a summary.")
-    if chart:  # send_chart is on offer: the phrasing ("by sector", "visualise") asks for a picture
-        tail += CHART_TAIL
     return head + tail + down
 
-
-CHART_TAIL = (" They want a picture, not a list: once you have the numbers, draw it. For a portfolio's sectors, "
-              "industries, holdings or markets call portfolio_chart (it fetches and adds up the holdings itself; "
-              "sector and industry are different fields, so pass exactly the one asked for), once per portfolio "
-              "asked about. For anything else use send_chart (a pie for shares of a whole, a bar chart for values "
-              "per category or period). Then reply with one or two sentences: the picture is posted with your reply, "
-              "which becomes its caption.")
 
 PRESET_PROMPT = ("This is a private chat with {sender}. They tapped the \"{label}\" button, which "
                  "asks for: {ask}. It's now {now}. Search {what} for current information, and do "

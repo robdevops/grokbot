@@ -44,12 +44,3 @@ def test_latest_own_reply_has_a_generous_cap_and_no_own_reply_is_fine():
 def test_raw_mode_keeps_html():
     rows = [HistoryRow(1, "Bob", "<b>x</b>", 0, None)]
     assert format_rows(rows, "z", UTC, line_max=100, compact_text=False).endswith("<b>x</b>")
-
-
-def test_chat_prompt_asks_for_a_picture_only_when_the_chart_tool_is_offered():
-    from lib.prompts import chat_prompt
-    base = dict(transcript="t", sender="Bob", private=False, reply_quote=None, msg_id=3, now="now")
-    plain, chart = chat_prompt(**base), chat_prompt(**base, chart=True, fresh=True)
-    assert "send_chart" not in plain and "portfolio_chart" not in plain
-    assert "They want a picture" in chart and "portfolio_chart" in chart and "send_chart" in chart
-    assert chart.index("Get current figures") < chart.index("They want a picture")  # after the portfolio tail

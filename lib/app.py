@@ -28,7 +28,7 @@ from telegram.ext import (
 
 from . import config
 from .context import Ctx
-from .features import charts, dm_buttons, holding_news, post
+from .features import dm_buttons, holding_news, post
 from .features.periods import backfill
 from .features.periods.windows import describe_scope, flush_scope
 from .llm.base import Backend
@@ -212,8 +212,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     log.info("Starting%s%s: %s on %s, reasoning %s, MCP servers: %s",
              f" instance {args.label}" if args.label else "", f" ({commit})" if commit else "", st.model, st.provider,
              st.reasoning or "default", ", ".join(ctx.registry.servers) or "none")
-    if not charts.available():
-        log.warning("Pillow isn't installed, so pie and bar charts are off (pip install -r requirements.txt)")
     if st.period_backfill:
         log.info("Period backfill: on for %s", ", ".join(sorted(st.period_backfill)))
     app.run_polling(allowed_updates=allowed_updates(st))
