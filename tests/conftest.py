@@ -100,6 +100,17 @@ def user_msg(bot: FakeBot, text, *, chat_id=-100, mid=1, sender="Bob", user_id=5
         return bot._msg(chat_id, text)
 
     m.reply_text = reply_text
+    m.photo_replies = []
+
+    async def reply_photo(photo, **rkw):
+        m.photo_replies.append({"photo": photo, **rkw})
+        return bot._msg(chat_id, rkw.get("caption") or "[photo]")
+
+    async def reply_media_group(media, **rkw):
+        m.photo_replies.append({"album": media, **rkw})
+        return [bot._msg(chat_id, (media[0].caption or "[photo]") if i == 0 else "[photo]") for i, _ in enumerate(media)]
+
+    m.reply_photo, m.reply_media_group = reply_photo, reply_media_group
     m.parse_entities = lambda types=None: {}
     m.parse_caption_entities = lambda types=None: {}
     return m

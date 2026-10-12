@@ -25,7 +25,7 @@ from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
 from .access import is_admin
 from .draft import Draft, start_typing
-from .send import reply_chunks, reply_html
+from .send import reply_chunks, reply_html, reply_with_photos
 
 log = logging.getLogger("bot")
 PORTFOLIO_ADMINS_ONLY = "Portfolio data is for admins only."
@@ -204,8 +204,9 @@ class Handlers:
             await draft.start()
         else:
             typing = await start_typing(ctx.bot, msg.chat_id)  # a Telegram hiccup is not fatal
+        images: list[bytes] = []  # charts drawn while answering; they go out with the reply
         try:
-            html_text = await self._generate(msg, trig, draft)
+            html_text = await self._generate(msg, trig, draft, images)
         except Exception as e:
             log.exception("Reply failed")
             html_text = ("Sorry, something went wrong:\n"
@@ -216,9 +217,12 @@ class Handlers:
             else:
                 typing.cancel()
         markup = dm_buttons.keyboard() if trig.private and st.dm_buttons else None
-        await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
+        if images:
+            await reply_with_photos(msg, images, html_text, ctx.store, quote=not trig.private, last_markup=markup)
+        else:
+            await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
 
-    async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None) -> str:
+    async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None, images: list[bytes]) -> str:
         ctx, st = self.ctx, self.ctx.st
         await ctx.registry.wait_started(config.MCP_STARTUP_WAIT)
         preset = dm_buttons.preset_for(trig.text) if trig.private and st.dm_buttons else None
@@ -254,9 +258,9 @@ class Handlers:
                     chosen = Route([], False)
             chart = bool(CHART_WORDS.search(trig.text)) and charts.available()
             if chart:
-                extra.append(charts.tool(ctx, msg))
+                extra.append(charts.tool(ctx, images))
                 if admin and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers):
-                    extra.append(charts.portfolio_tool(ctx, msg))
+                    extra.append(charts.portfolio_tool(ctx, images))
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
             if extra:

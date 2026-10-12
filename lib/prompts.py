@@ -98,7 +98,8 @@ CHART_TAIL = (" They want a picture, not a list: once you have the numbers, draw
               "industries, holdings or markets call portfolio_chart (it fetches and adds up the holdings itself; "
               "sector and industry are different fields, so pass exactly the one asked for), once per portfolio "
               "asked about. For anything else use send_chart (a pie for shares of a whole, a bar chart for values "
-              "per category or period). Then reply with one or two sentences.")
+              "per category or period). Then reply with one or two sentences: the picture is posted with your reply, "
+              "which becomes its caption.")
 
 PRESET_PROMPT = ("This is a private chat with {sender}. They tapped the \"{label}\" button, which "
                  "asks for: {ask}. It's now {now}. Search {what} for current information, and do "

@@ -131,6 +131,21 @@ async def test_the_chart_tool_is_offered_only_when_asked_for_a_chart(env, store,
     assert "send_chart" not in backend.seen[3]["tools"]
 
 
+async def test_a_chart_request_is_answered_with_one_photo_whose_caption_is_the_answer(env, store):
+    args = '{"kind":"pie","title":"Sectors","items":[{"label":"Semis","value":3},{"label":"Software","value":1}]}'
+    ctx, backend, h = make_ctx(env, store, [step(calls=[("1", "send_chart", args)], finish="tool_calls"),
+                                            step("Semis are <b>75%</b> of it.")])
+    m = user_msg(ctx.bot, "@stockbot pie chart of my sectors", mid=1)
+    await run(h, m)
+    assert len(m.photo_replies) == 1 and m.replies == []  # one message: the picture, with the answer as its caption
+    assert m.photo_replies[0]["caption"] == "Semis are <b>75%</b> of it." and m.photo_replies[0]["photo"].startswith(b"\x89PNG")
+    assert any("Semis are" in r.text for r in store.history(-100, 20))
+    plain = user_msg(ctx.bot, "@stockbot how is NVDA?", mid=2000)
+    ctx.backend.script.append(step("NVDA is fine"))
+    await run(h, plain)
+    assert plain.photo_replies == [] and "is fine" in plain.replies[0]["text"]
+
+
 async def test_portfolio_chart_is_offered_for_a_portfolio_chart_request_to_admins_only(env, store):
     sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios", "get_performance_report"))
     ctx, backend, h = make_ctx(env, store, [step("a"), step("b")], servers=[sharesight], ADMIN_ONLY="on", ADMIN_CHAT_IDS="5")

@@ -2,14 +2,13 @@ import io
 import json
 
 import pytest
-from telegram.error import TelegramError
 
 from lib import config
 from lib.context import Ctx
 from lib.features import charts
 from lib.features.charts import render
 
-from .conftest import FakeBot, user_msg
+from .conftest import FakeBot
 from .fakes import FakeMcp, ScriptedBackend, registry
 
 PNG = b"\x89PNG\r\n\x1a\n"
@@ -63,37 +62,29 @@ def test_short_values_and_long_labels():
     assert len(label) == render.LABEL_CHARS and label.endswith("…")
 
 
-async def test_the_tool_sends_one_photo_as_a_reply_and_saves_it(env, store):
-    bot = FakeBot()
+async def test_the_tool_queues_the_picture_for_the_reply_and_sends_nothing_itself(env, store):
+    bot, images = FakeBot(), []
     ctx = Ctx(config.load(env), store, ScriptedBackend([]), registry(), bot)
-    msg = user_msg(bot, "@stockbot pie chart of my sectors", mid=7)
-    defn, send = charts.tool(ctx, msg)
-    out = await send({"kind": "pie", "title": "Sectors", "items": SECTORS, "caption": "A <b>test</b> & more"})
-    assert defn.name == "send_chart" and out.startswith("Chart sent")
-    photo = bot.photos[0]
-    assert photo["bytes"].startswith(PNG) and photo["reply_to_message_id"] == 7 and photo["chat_id"] == -100
-    assert photo["caption"] == "A &lt;b&gt;test&lt;/b&gt; &amp; more" and photo["disable_notification"] is True
-    assert any("A &lt;b&gt;" in r.text for r in store.history(-100, 20))  # the sent message is in history
+    defn, send = charts.tool(ctx, images)
+    out = await send({"kind": "pie", "title": "Sectors", "items": SECTORS})
+    assert defn.name == "send_chart" and out == charts.READY and "becomes its caption" in out
+    assert len(images) == 1 and images[0].startswith(PNG)
+    assert bot.photos == [] and bot.sent == []  # the handler sends it, with the answer as the caption
+    assert "caption" not in defn.parameters["properties"]
 
 
 async def test_the_tool_returns_errors_as_text_so_the_model_can_fall_back(env, store, monkeypatch):
-    bot = FakeBot()
+    bot, images = FakeBot(), []
     ctx = Ctx(config.load(env), store, ScriptedBackend([]), registry(), bot)
-    _, send = charts.tool(ctx, user_msg(bot, "chart", mid=1))
+    _, send = charts.tool(ctx, images)
     assert (await send({"kind": "pie", "title": "t", "items": []})).startswith("Error: give a list of items")
-    assert bot.photos == []
-
-    async def broken(*a, **kw):
-        raise TelegramError("Bad Request: not enough rights")
-
-    monkeypatch.setattr(bot, "send_photo", broken)
-    assert "couldn't send the chart" in await send({"kind": "bar", "title": "t", "items": SECTORS})
 
     def explode(*a, **kw):
         raise RuntimeError("font missing")
 
     monkeypatch.setattr(render, "draw", explode)
     assert "answer in text instead" in await send({"kind": "pie", "title": "t", "items": SECTORS})
+    assert images == []
 
 
 HOLDINGS = {"columns": ["code", "market", "name", "sector", "industry", "value", "quantity"], "rows": [
@@ -139,22 +130,22 @@ async def test_portfolio_chart_groups_by_sector_not_industry_and_names_the_portf
         return real(kind, title, items, subtitle)
 
     monkeypatch.setattr(render, "draw", spy)
-    msg = user_msg(bot, "@stockbot my portfolios by sector", mid=5)
-    defn, send = charts.portfolio_tool(ctx, msg)
+    images = []
+    defn, send = charts.portfolio_tool(ctx, images)
     out = await send({"portfolio_id": 7, "by": "sector"})
-    assert defn.name == "portfolio_chart" and out.startswith("Chart sent to the chat (sector: Electronic Technology 55.0%")
+    assert defn.name == "portfolio_chart" and "(sector: Electronic Technology 55.0%" in out and out.startswith(charts.READY)
     assert drawn["title"] == "Main by sector" and drawn["kind"] == "pie"
     assert [i["label"] for i in drawn["items"]] == ["Electronic Technology", "Technology Services", "Unclassified"]
     assert "AUD 400 in holdings, 25 cash" in drawn["subtitle"]
-    assert len(bot.photos) == 1 and bot.photos[0]["reply_to_message_id"] == 5
+    assert len(images) == 1 and bot.photos == []
     assert ss.calls[0][1]["start_date"] == ss.calls[0][1]["end_date"] and "_keep_sales" not in ss.calls[0][1]  # current holdings
 
 
 async def test_portfolio_chart_refuses_bad_input_as_text(env, store):
     ctx, bot, _ = portfolio_ctx(env, store)
-    _, send = charts.portfolio_tool(ctx, user_msg(bot, "chart", mid=1))
+    _, send = charts.portfolio_tool(ctx, [])
     assert "by must be one of" in await send({"portfolio_id": 7, "by": "colour"})
     assert "portfolio_id" in await send({"by": "sector"})
     none_ctx = Ctx(config.load(env), store, ScriptedBackend([]), registry(), bot)
-    assert "isn't connected" in await charts.portfolio_tool(none_ctx, user_msg(bot, "chart", mid=2))[1]({"portfolio_id": 7, "by": "sector"})
+    assert "isn't connected" in await charts.portfolio_tool(none_ctx, [])[1]({"portfolio_id": 7, "by": "sector"})
     assert bot.photos == []

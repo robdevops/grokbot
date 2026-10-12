@@ -1,16 +1,11 @@
-"""send_chart: draw a pie or bar chart from numbers the model got from its tools and post it in the chat."""
+"""send_chart / portfolio_chart: draw a pie or bar chart; the picture goes out with the answer as its caption."""
 
 from __future__ import annotations
 
 import asyncio
-import html
 import json
 import logging
 from datetime import datetime
-
-from telegram import Message
-from telegram.constants import ParseMode
-from telegram.error import TelegramError
 
 from ...context import Ctx
 from ...mcp.results import table_records
@@ -19,29 +14,29 @@ from . import render
 
 log = logging.getLogger("bot")
 
-CAPTION_MAX = 900
+READY = ("Chart ready: it will be attached to your reply, and your reply becomes its caption. Write that reply now "
+         "in a few sentences at most, without repeating the numbers.")
 TOOL = ToolDef(
     "send_chart",
     "Draw a pie chart (shares of a whole, e.g. sectors) or a horizontal bar chart (values per category or per "
-    "period, negatives allowed) and post the picture in this chat. Use it whenever someone asks for a pie chart, "
-    "bar chart, chart or graph. Every value must come from tool results, never invented; group categories "
-    "yourself if you want different slices. Call it once per chart, then write one or two sentences, not the "
-    "numbers again.",
+    "period, negatives allowed). The picture is posted together with your reply, which becomes its caption. Use it "
+    "whenever someone asks for a pie chart, bar chart, chart or graph. Every value must come from tool results, "
+    "never invented; group categories yourself if you want different slices. Call it once per chart, then write "
+    "one or two sentences, not the numbers again.",
     {"type": "object", "required": ["kind", "title", "items"], "properties": {
         "kind": {"type": "string", "enum": ["pie", "bar"]},
         "title": {"type": "string", "description": "Short title shown on the picture"},
         "items": {"type": "array", "maxItems": 200, "items": {"type": "object", "required": ["label", "value"], "properties": {
             "label": {"type": "string"}, "value": {"type": "number"}}}},
-        "subtitle": {"type": "string", "description": "Optional line under the title, e.g. the total"},
-        "caption": {"type": "string", "description": "Optional caption under the picture"}}})
+        "subtitle": {"type": "string", "description": "Optional line under the title, e.g. the total"}}})
 
 
 def available() -> bool:
     return render.available()
 
 
-async def _send(ctx: Ctx, msg: Message, kind: str, title: str, items: object, subtitle: str, caption: str) -> str:
-    """Draw the chart and post it as a reply to `msg`; "Error: ..." text if that fails, else "sent"."""
+async def _draw(images: list[bytes], kind: str, title: str, items: object, subtitle: str) -> str:
+    """Draw the chart and queue it for the reply; "Error: ..." text if that fails, else the READY note."""
     try:
         png = await asyncio.to_thread(render.draw, kind, title, items, subtitle)
     except render.ChartError as e:
@@ -49,24 +44,17 @@ async def _send(ctx: Ctx, msg: Message, kind: str, title: str, items: object, su
     except Exception as e:  # a drawing bug must not sink the answer: the model falls back to text
         log.exception("Chart drawing failed")
         return f"Error: couldn't draw the chart ({type(e).__name__}); answer in text instead."
-    caption = html.escape(caption.strip())[:CAPTION_MAX]
-    try:
-        sent = await ctx.bot.send_photo(msg.chat_id, photo=png, caption=caption or None, parse_mode=ParseMode.HTML,
-                                        reply_to_message_id=msg.message_id, disable_notification=True)
-    except TelegramError as e:
-        return f"Error: couldn't send the chart: {e}."
-    await asyncio.to_thread(ctx.store.save, sent)
-    log.info("Sent a %s chart (%d bytes): %s", kind, len(png), title[:60])
-    return "sent"
+    images.append(png)
+    log.info("Drew a %s chart (%d bytes): %s", kind, len(png), title[:60])
+    return READY
 
 
-def tool(ctx: Ctx, msg: Message):
-    """(definition, function) of send_chart, posting as a reply to `msg`."""
+def tool(ctx: Ctx, images: list[bytes]):
+    """(definition, function) of send_chart; the picture is appended to `images` for the reply to carry."""
 
     async def send(args: dict) -> str:
-        out = await _send(ctx, msg, str(args.get("kind", "")).lower(), str(args.get("title", "")).strip(),
-                          args.get("items"), str(args.get("subtitle") or ""), str(args.get("caption") or ""))
-        return out if out.startswith("Error") else "Chart sent to the chat. Add one or two sentences at most; don't repeat the numbers."
+        return await _draw(images, str(args.get("kind", "")).lower(), str(args.get("title", "")).strip(),
+                           args.get("items"), str(args.get("subtitle") or ""))
 
     return TOOL, send
 
@@ -76,10 +64,11 @@ GROUPS = {"sector": "sector", "industry": "industry", "holding": "code", "market
 PORTFOLIO_TOOL = ToolDef(
     "portfolio_chart",
     "Draw a chart of one Sharesight portfolio's current holdings grouped by sector, industry, holding, market or "
-    "type, and post it in this chat. The bot fetches and adds up the holdings itself, so use this (not "
-    "send_chart) for 'my portfolio by sector' and the like. Sector and industry are different Sharesight "
-    "fields (Technology Services is a sector, Packaged Software an industry): pass exactly the one asked for. "
-    "Call it once per portfolio asked about; portfolio_id comes from list_portfolios.",
+    "type. The picture is posted together with your reply, which becomes its caption. The bot fetches and adds up "
+    "the holdings itself, so use this (not send_chart) for 'my portfolio by sector' and the like. Sector and "
+    "industry are different Sharesight fields (Technology Services is a sector, Packaged Software an industry): "
+    "pass exactly the one asked for. Call it once per portfolio asked about; portfolio_id comes from "
+    "list_portfolios.",
     {"type": "object", "required": ["portfolio_id", "by"], "properties": {
         "portfolio_id": {"type": "number"},
         "by": {"type": "string", "enum": list(GROUPS)},
@@ -98,8 +87,8 @@ def group_holdings(holdings: list[dict], by: str) -> list[tuple[str, float]]:
     return sorted(totals.items(), key=lambda kv: -kv[1])
 
 
-def portfolio_tool(ctx: Ctx, msg: Message):
-    """(definition, function) of portfolio_chart, posting as a reply to `msg`."""
+def portfolio_tool(ctx: Ctx, images: list[bytes]):
+    """(definition, function) of portfolio_chart; the picture is appended to `images` for the reply to carry."""
 
     async def send(args: dict) -> str:
         server = next((s for s in ctx.registry.up() if "get_performance_report" in s.fn_names.values()), None)
@@ -127,10 +116,10 @@ def portfolio_tool(ctx: Ctx, msg: Message):
         cash = sum(c.get("value") or 0 for c in report.get("cash_accounts") or [] if isinstance(c, dict))
         subtitle = f"{currency} {total:,.0f} in holdings" + (f", {cash:,.0f} cash" if cash > 0 else "")
         title = f"{names.get(pid) or f'Portfolio {pid}'} by {by}"
-        sent = await _send(ctx, msg, kind, title, [{"label": k, "value": v} for k, v in groups], subtitle, "")
-        if sent.startswith("Error"):
-            return sent
+        out = await _draw(images, kind, title, [{"label": k, "value": v} for k, v in groups], subtitle)
+        if out != READY:
+            return out
         top = ", ".join(f"{k} {v / total * 100:.1f}% ({render.short(v)})" for k, v in groups[:8])
-        return f"Chart sent to the chat ({by}: {top}). Add one or two sentences at most; don't repeat the numbers."
+        return f"{out} ({by}: {top})"
 
     return PORTFOLIO_TOOL, send
