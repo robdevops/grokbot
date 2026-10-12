@@ -125,6 +125,7 @@ async def test_the_chart_tool_is_offered_only_when_asked_for_a_chart(env, store,
     assert "send_chart" not in backend.seen[0]["tools"] and "send_chart" in backend.seen[1]["tools"]
     assert "send_chart" in backend.seen[2]["tools"]  # also on the route that would otherwise have no tools
     assert "Local tools offered: send_chart" in caplog.text
+    assert "draw it with send_chart" not in backend.seen[0]["prompt"] and "draw it with send_chart" in backend.seen[1]["prompt"]
     monkeypatch.setattr(charts, "available", lambda: False)  # Pillow not installed: the bot just doesn't offer it
     await run(h, user_msg(ctx.bot, "@stockbot pie chart please", mid=4000))
     assert "send_chart" not in backend.seen[3]["tools"]

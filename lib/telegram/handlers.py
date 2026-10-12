@@ -178,7 +178,8 @@ class Handlers:
                     text += " " + compact(prev.text)[:FOLLOW_UP_CHARS]
         return text
 
-    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False) -> str:
+    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False,
+                         chart: bool = False) -> str:
         ctx, st = self.ctx, self.ctx.st
         rows = await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
         transcript = format_rows(rows, ctx.self_name, st.tz, line_max=st.history_line_max,
@@ -186,7 +187,7 @@ class Handlers:
         return chat_prompt(
             transcript=transcript, sender=sender_name(msg), private=trig.private,
             reply_quote=self._quote(trig), msg_id=msg.message_id, now=ctx.now(),
-            down=down_note(ctx.registry.down()), saver=st.token_saver, middle=middle, fresh=fresh)
+            down=down_note(ctx.registry.down()), saver=st.token_saver, middle=middle, fresh=fresh, chart=chart)
 
     # -- answering ---------------------------------------------------------------------
     async def _answer(self, msg: Message, trig: Trigger) -> None:
@@ -251,14 +252,15 @@ class Handlers:
                 extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
-            if CHART_WORDS.search(trig.text) and charts.available():
+            chart = bool(CHART_WORDS.search(trig.text)) and charts.available()
+            if chart:
                 extra.append(charts.tool(ctx, msg))
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
             if extra:
                 log.info("Local tools offered: %s", ", ".join(t.name for t, _ in extra))
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)
-            parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]
+            parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh, chart=chart)}]
             parts += await self._images(msg, trig)
             answer = await ask(ctx, parts, chosen,
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,

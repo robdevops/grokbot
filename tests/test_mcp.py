@@ -374,3 +374,12 @@ def test_compact_schema_hides_listed_params_but_never_required_ones_and_drops_sc
               "required": ["a"]}
     out = compact_schema(schema, hide=frozenset({"a", "b"}))
     assert set(out["properties"]) == {"a", "c"} and "$schema" not in out and "additionalProperties" not in out
+
+
+def test_slimmed_holdings_keep_both_sector_and_industry():
+    from lib.mcp.results import slim_holding
+    h = {"quantity": 5, "value": 10.0, "instrument": {"code": "CRWD", "market_code": "NASDAQ", "name": "Crowdstrike",
+         "sector_classification_name": "Technology Services", "industry_classification_name": "Packaged Software"}}
+    out = slim_holding(h)
+    assert out["sector"] == "Technology Services" and out["industry"] == "Packaged Software"
+    assert "industry" not in slim_holding({"instrument": {"code": "X"}})  # missing fields are dropped as before
