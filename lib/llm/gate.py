@@ -31,7 +31,10 @@ PORTFOLIO_MY = re.compile(
     r"p&l|pnl|investments?|funds?|etfs?|trades?|watchlist)\b", re.I)
 PORTFOLIO_WEAK = re.compile(
     r"\b(performance|gains?|positions?|winners?|losers?|p&l|pnl|(?:out|under)perform\w*|ahead of|behind)\b", re.I)
-CHART_WORDS = re.compile(r"\b(pie|bar chart|chart|graph|plot|diagram)\b", re.I)  # a request for a picture of the data
+CHART_WORDS = re.compile(  # a request for a picture of the data
+    r"\b(pie|bar chart|chart|graph|plot|diagram|visuali[sz]e|visuali[sz]ation|breakdown|allocation)\b"
+    r"|\bby\s+(?:sectors?|industr(?:y|ies)|asset class(?:es)?|markets?|countr(?:y|ies)|currenc(?:y|ies)|regions?|holdings?|stocks?)\b",
+    re.I)
 LIVE_WORDS = re.compile(
     r"\b(news|today|latest|yesterday|tonight|this week|right now|breaking|announce\w*|who won|"
     r"score|weather|happening|headlines?|current\w*|updates?|recent\w*|just (now|in))\b", re.I)

@@ -293,3 +293,14 @@ def test_gate_marks_routes_that_offer_fewer_tools(settings):
 
 def test_wants_tools():
     assert wants_tools("NEEDS_TOOLS") and wants_tools("  needs_tools.") and not wants_tools("Sure thing")
+
+
+@pytest.mark.parametrize("text, wanted", [
+    ("can you do a pie chart of my sectors?", True), ("visualise my portfolio", True), ("Visualize my portfolio", True),
+    ("my portfolio by sector", True), ("robsmsf by industry", True), ("robsmsf by industries", True),
+    ("show holdings by country", True), ("what's my allocation", True), ("sector breakdown please", True),
+    ("graph NVDA this year", True), ("how is NVDA looking?", False), ("what did I make this month", False),
+    ("which sector is strongest", False), ("buy or sell?", False)])
+def test_chart_words_catch_requests_for_a_picture_or_a_grouping(text, wanted):
+    from lib.llm.gate import CHART_WORDS
+    assert bool(CHART_WORDS.search(text)) is wanted

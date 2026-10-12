@@ -189,7 +189,7 @@ unaffected. With nobody in `ADMIN_CHAT_IDS` and no known group, nobody can DM th
 `ADMIN_ONLY=off` to allow everyone.
 
 ## Charts
-Ask for a "pie chart", "bar chart", "chart" or "graph" and the bot draws a real picture (a PNG) and posts it as a
+Ask for a "pie chart", "bar chart", "chart" or "graph", to "visualise" something, or for a breakdown "by sector" or "by industry", and the bot draws a real picture (a PNG) and posts it as a
 reply, using numbers it got from its data tools: a pie for shares of a whole (portfolio sectors, holdings), a
 horizontal bar chart for values per category or period (monthly gains, negatives in red). It is drawn with Pillow
 (`pip install -r requirements.txt`); without it the bot says so at start-up and answers in text instead. There is
