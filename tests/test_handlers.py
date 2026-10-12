@@ -113,8 +113,10 @@ async def test_a_short_follow_up_to_a_portfolio_reply_still_gets_the_portfolio_t
     assert backend.seen[3]["tools"] == []
 
 
-async def test_the_chart_tool_is_offered_only_when_asked_for_a_chart(env, store, monkeypatch):
+async def test_the_chart_tool_is_offered_only_when_asked_for_a_chart(env, store, monkeypatch, caplog):
     from lib.features import charts
+
+    caplog.set_level("INFO", logger="bot")
 
     ctx, backend, h = make_ctx(env, store, [step("a"), step("b"), step("c"), step("d")])
     await run(h, user_msg(ctx.bot, "@stockbot how is NVDA looking?", mid=1))
@@ -122,6 +124,7 @@ async def test_the_chart_tool_is_offered_only_when_asked_for_a_chart(env, store,
     await run(h, user_msg(ctx.bot, "@stockbot draw a graph of chips", mid=3000))
     assert "send_chart" not in backend.seen[0]["tools"] and "send_chart" in backend.seen[1]["tools"]
     assert "send_chart" in backend.seen[2]["tools"]  # also on the route that would otherwise have no tools
+    assert "Local tools offered: send_chart" in caplog.text
     monkeypatch.setattr(charts, "available", lambda: False)  # Pillow not installed: the bot just doesn't offer it
     await run(h, user_msg(ctx.bot, "@stockbot pie chart please", mid=4000))
     assert "send_chart" not in backend.seen[3]["tools"]

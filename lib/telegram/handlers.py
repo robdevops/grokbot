@@ -255,6 +255,8 @@ class Handlers:
                 extra.append(charts.tool(ctx, msg))
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
+            if extra:
+                log.info("Local tools offered: %s", ", ".join(t.name for t, _ in extra))
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)
             parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]
             parts += await self._images(msg, trig)
