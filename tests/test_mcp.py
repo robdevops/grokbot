@@ -224,6 +224,68 @@ async def test_sharesight_holdings_only_flag_sets_include_sales():
     assert s.session.calls[0][1]["include_sales"] is False
 
 
+async def test_bots_own_tools_can_keep_sold_holdings():
+    s = MCPServer("sharesight", {"current_holdings_only": True}, timeout=5, max_output=10_000)
+    s.session = FakeSession()
+    await s.call("get_performance_report", {"portfolio_id": 1, "_keep_sales": True})
+    sent = s.session.calls[0][1]
+    assert sent["include_sales"] is True and "_keep_sales" not in sent
+
+
+async def test_bots_own_tools_are_not_truncated_but_the_models_are():
+    s = MCPServer("sharesight", {}, timeout=5, max_output=20)
+    s.session = FakeSession()
+    assert "truncated" in await s.call("get_performance_report", {"portfolio_id": 1})
+    whole = await s.call("get_performance_report", {"portfolio_id": 1, "_keep_sales": True})
+    assert "truncated" not in whole and len(whole) > 20
+
+
+async def test_user_calls_describe_what_is_running_but_not_background_work():
+    s = MCPServer("sharesight", {"max_concurrent": 2}, timeout=5, max_output=1000)
+    gate = asyncio.Event()
+
+    class Held(FakeSession):
+        async def call_tool(self, name, args):
+            await gate.wait()
+            return await super().call_tool(name, args)
+
+    s.session = Held()
+    chat = asyncio.create_task(s.call("get_performance_report", {"portfolio_id": 7, "start_date": "2024-01-01", "end_date": "2024-01-31"}))
+    own = asyncio.create_task(s.call("get_performance_report", {"portfolio_id": 7, "start_date": "2024-02-01", "end_date": "2024-02-29", "_keep_sales": True}))
+    bg = asyncio.create_task(s.call("get_performance_report", {"portfolio_id": 7, "start_date": "2024-03-01", "end_date": "2024-03-31", "_keep_sales": True, "_bg": True}))
+    await asyncio.sleep(0.01)
+    assert s.in_flight == 3
+    assert s.user_calls() == ["get_performance_report portfolio_id=7 2024-01-01..2024-01-31",
+                              "get_performance_report portfolio_id=7 2024-02-01..2024-02-29 (period_returns)"]
+    gate.set()
+    await asyncio.gather(chat, own, bg)
+    assert s.user_calls() == [] and s.in_flight == 0
+
+
+async def test_in_flight_counts_running_calls_and_returns_to_zero():
+    s = MCPServer("y", {"max_concurrent": 1}, timeout=0.05, max_output=1000)
+    gate = asyncio.Event()
+
+    class Slow(FakeSession):
+        async def call_tool(self, name, args):
+            if name == "hang":
+                await asyncio.sleep(1)  # longer than the timeout
+            await gate.wait()
+            return await super().call_tool(name, args)
+
+    s.session = Slow()
+    first = asyncio.create_task(s.call("get_a", {}))
+    second = asyncio.create_task(s.call("get_b", {}))  # waits for the only slot, still counted
+    await asyncio.sleep(0.01)
+    assert s.in_flight == 2
+    gate.set()
+    await asyncio.gather(first, second)
+    assert s.in_flight == 0
+    with pytest.raises(TimeoutError):
+        await s.call("hang", {})
+    assert s.in_flight == 0  # also after a timeout
+
+
 async def test_output_cap():
     s = MCPServer("y", {}, timeout=5, max_output=20)
     s.session = FakeSession()

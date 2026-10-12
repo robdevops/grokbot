@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -33,7 +34,24 @@ CREATE TABLE IF NOT EXISTS kv (bot_id INTEGER, key TEXT, value TEXT, PRIMARY KEY
 CREATE TABLE IF NOT EXISTS usage (
     ts INTEGER, bot_id INTEGER, chat_id INTEGER, model TEXT, kind TEXT, rounds INTEGER,
     tokens_in INTEGER, tokens_cached INTEGER, tokens_out INTEGER, cost REAL);
+-- Finished-period Sharesight returns (sold holdings included), kept until flushed. pct NULL = no data
+-- for that window. movers = the holdings that moved most, as JSON [[code, gain, gain_pct], ...].
+CREATE TABLE IF NOT EXISTS period_cache (
+    portfolio_id INTEGER, start TEXT, end TEXT, pct REAL, gain REAL, currency TEXT, movers TEXT,
+    v INTEGER, PRIMARY KEY (portfolio_id, start, end));
 """
+PERIOD_CACHE_VERSION = 1  # bump when the stored shape changes: rows of another version are dropped
+
+
+class PeriodRow(NamedTuple):
+    """One cached window of a portfolio's return (start/end are ISO dates)."""
+    portfolio_id: int
+    start: str
+    end: str
+    pct: float | None
+    gain: float | None
+    currency: str
+    movers: list
 
 
 class HistoryRow(NamedTuple):
@@ -65,6 +83,7 @@ class Store:
             self._conn.execute(
                 "DELETE FROM holding_news WHERE length(text) < 40 AND upper(text) LIKE '%NOTHING%'"
             )
+            self._conn.execute("DELETE FROM period_cache WHERE v != ?", (PERIOD_CACHE_VERSION,))
 
     def _run(self, sql: str, params=()) -> list[tuple]:
         with self._lock:
@@ -181,3 +200,36 @@ class Store:
             "SELECT model, COUNT(*), SUM(tokens_in), SUM(tokens_cached), SUM(tokens_out), SUM(cost) "
             "FROM usage WHERE bot_id = ? AND ts >= ? GROUP BY model ORDER BY SUM(cost) DESC",
             (self.bot_id or 0, since_ts))
+
+    # -- Sharesight period cache -------------------------------------------------------
+    def period_get(self, portfolio_id: int, first: str, last: str) -> dict[tuple[str, str], PeriodRow]:
+        """Cached windows of a portfolio lying within first..last (ISO dates), by (start, end)."""
+        rows = self._run("SELECT start, end, pct, gain, currency, movers FROM period_cache "
+                         "WHERE portfolio_id = ? AND start >= ? AND end <= ?", (portfolio_id, first, last))
+        return {(r[0], r[1]): PeriodRow(portfolio_id, r[0], r[1], r[2], r[3], r[4] or "", json.loads(r[5] or "[]"))
+                for r in rows}
+
+    def period_put(self, rows: list[PeriodRow]) -> None:
+        with self._lock:
+            self._conn.executemany(
+                "INSERT OR REPLACE INTO period_cache VALUES (?,?,?,?,?,?,?,?)",
+                [(r.portfolio_id, r.start, r.end, r.pct, r.gain, r.currency, json.dumps(r.movers),
+                  PERIOD_CACHE_VERSION) for r in rows])
+
+    def period_count(self, portfolio_id: int, first: str, last: str) -> int:
+        return self._run("SELECT COUNT(*) FROM period_cache WHERE portfolio_id = ? AND start >= ? AND end <= ?",
+                         (portfolio_id, first, last))[0][0]
+
+    def period_flush(self, portfolio_id: int | None = None, first: str | None = None, last: str | None = None) -> int:
+        """Delete cached windows, of one portfolio or all, and (if first/last ISO dates are given) only those
+        overlapping that date range. Returns how many went."""
+        where, args = [], []
+        if portfolio_id is not None:
+            where.append("portfolio_id = ?")
+            args.append(portfolio_id)
+        if first and last:
+            where.append("start <= ? AND end >= ?")
+            args += [last, first]
+        with self._lock:
+            sql = "DELETE FROM period_cache" + (" WHERE " + " AND ".join(where) if where else "")
+            return self._conn.execute(sql, args).rowcount

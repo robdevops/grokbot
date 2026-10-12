@@ -97,6 +97,22 @@ async def test_market_question_offers_tools_up_front(env, store):
     assert backend.seen[0]["tools"] == ["yahoo__get_quote"] and backend.seen[0]["search"] is True
 
 
+async def test_a_short_follow_up_to_a_portfolio_reply_still_gets_the_portfolio_tools(env, store):
+    sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
+    ctx, backend, h = make_ctx(env, store, [step("Your portfolio best month was May"), step("In dollars: ..."), step("c"), step("d")],
+                               servers=[sharesight])
+    await run(h, user_msg(ctx.bot, "@stockbot how is my portfolio doing?", mid=1))
+    await run(h, user_msg(ctx.bot, "@stockbot what about in dollar terms?", mid=2000))
+    assert "sharesight__list_portfolios" in backend.seen[1]["tools"] and "period_returns" in backend.seen[1]["tools"]
+    # too long after the reply: a plain message again
+    await run(h, user_msg(ctx.bot, "@stockbot and what about the other one?", mid=3000, ts=100_000))
+    assert backend.seen[2]["tools"] == []
+    # a long unrelated message right after a reply is not read as a follow-up
+    long = "@stockbot " + " ".join(["tell me a long story about the history of the word mortgage"] * 3)
+    await run(h, user_msg(ctx.bot, long, mid=4000))
+    assert backend.seen[3]["tools"] == []
+
+
 async def test_portfolio_question_reminds_the_model_to_fetch_fresh_figures(env, store):
     sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
     ctx, backend, h = make_ctx(env, store, [step("a"), step("b")], servers=[sharesight])
@@ -104,6 +120,7 @@ async def test_portfolio_question_reminds_the_model_to_fetch_fresh_figures(env, 
     await run(h, user_msg(ctx.bot, "@stockbot how is NVDA looking?", mid=2))
     assert "portfolio tools before answering" in backend.seen[0]["prompt"]
     assert "tailwinds and headwinds" in backend.seen[0]["prompt"]
+    assert "your market tools" in backend.seen[0]["prompt"]  # not portfolio tools only (Yahoo comparisons)
     assert "portfolio tools before answering" not in backend.seen[1]["prompt"]
 
 
@@ -252,7 +269,7 @@ async def test_non_admin_gets_no_portfolio_data_in_a_group(env, store):
     assert asked.replies[0]["text"] == "Portfolio data is for admins only." and backend.seen == []
     admin = user_msg(ctx.bot, "@stockbot how is my portfolio doing?", user_id=5, mid=2)
     await run(h, admin)
-    assert backend.seen[0]["tools"] == ["sharesight__list_portfolios"]
+    assert backend.seen[0]["tools"] == ["sharesight__list_portfolios", "period_returns"]  # admins also get the period tool
 
 
 async def test_non_admin_never_gets_portfolio_tools_even_on_the_rerun(env, store):

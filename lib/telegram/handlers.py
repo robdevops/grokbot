@@ -15,7 +15,7 @@ from telegram.ext import ContextTypes
 from .. import config
 from ..ask import ask
 from ..context import Ctx
-from ..features import dm_buttons, holding_news, movers, post
+from ..features import dm_buttons, holding_news, movers, periods, post
 from ..history import compact, format_rows
 from ..llm.gate import Route, is_portfolio_question, route
 from ..msgtext import describe, sender_name
@@ -29,6 +29,9 @@ from .send import reply_chunks, reply_html
 
 log = logging.getLogger("bot")
 PORTFOLIO_ADMINS_ONLY = "Portfolio data is for admins only."
+FOLLOW_UP_WORDS = 12  # a message this short right after the bot's reply may be a follow-up to it
+FOLLOW_UP_SECONDS = 30 * 60
+FOLLOW_UP_CHARS = 400  # of the bot's reply that the tool gate also reads
 READ_IMAGE_WORDS = re.compile(r"\b(read|text|says?|chart|table|number|screenshot|ocr|zoom|detail|label)\b", re.I)
 
 
@@ -162,6 +165,19 @@ class Handlers:
         body = describe(t)
         return f"[#{t.message_id}] {who}: {compact(body) if self.ctx.st.token_saver else body}"
 
+    async def _gate_text(self, msg: Message, trig: Trigger) -> str:
+        """What the tool gate reads: the message and what it replies to. A short follow-up ("what about in dollar
+        terms?") sent right after the bot's own reply also gets the start of that reply, so it counts as part of
+        the same (portfolio, market...) conversation instead of reaching the model with no tools."""
+        text = trig.text + " " + (describe(trig.reply_target) if trig.reply_target else "")
+        if trig.reply_target is None and len(trig.text.split()) <= FOLLOW_UP_WORDS:
+            rows = await asyncio.to_thread(self.ctx.store.history, msg.chat_id, 2)
+            if len(rows) >= 2 and rows[-1].message_id == msg.message_id:
+                prev = rows[-2]
+                if prev.sender == self.ctx.self_name and int(msg.date.timestamp()) - prev.ts <= FOLLOW_UP_SECONDS:
+                    text += " " + compact(prev.text)[:FOLLOW_UP_CHARS]
+        return text
+
     async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False) -> str:
         ctx, st = self.ctx, self.ctx.st
         rows = await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
@@ -222,13 +238,15 @@ class Handlers:
                                must_search=True, cache_key=f"chat-{chat_id}", on_text=on_text,
                                kind="movers", chat_id=chat_id)
         else:
-            context = trig.text + " " + (describe(trig.reply_target) if trig.reply_target else "")
+            context = await self._gate_text(msg, trig)
             chosen = route(context, st, ctx.registry)
             admin = not st.admin_only or await self._is_admin(msg)
             if not admin and is_portfolio_question(context, st) and any(
                     s.cfg.get("gate") == "portfolio" for s in ctx.registry.up()):
                 return PORTFOLIO_ADMINS_ONLY
             extra = []
+            if admin and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers):
+                extra.append(periods.tool(ctx))
             if st.post_to_groups and trig.private and post.wants_post(trig.text):
                 extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
                 if chosen.simple:  # the model must not be told it has no tools

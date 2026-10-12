@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+import itertools
 import json
 import logging
 import re
@@ -54,6 +55,8 @@ class MCPServer:
         self.fn_names: dict[str, str] = {}  # function name sent to the model -> MCP tool name
         # Cap simultaneous calls: a 20-stock request fired all at once gets rate-limited.
         self._sem = asyncio.Semaphore(int(cfg.get("max_concurrent", 4)))
+        self._active: dict[int, tuple[str, bool]] = {}  # calls running or waiting for a slot: text, background?
+        self._call_ids = itertools.count()
         self._ready = asyncio.Event()
         self._stop = asyncio.Event()
         self._task: asyncio.Task | None = None
@@ -107,7 +110,8 @@ class MCPServer:
                         env=expand_env(self.cfg.get("env"), self.label))
                     read, write = await stack.enter_async_context(stdio_client(params, errlog=errlog))
                 session = await stack.enter_async_context(ClientSession(read, write))
-                await session.initialize()
+                init = await session.initialize()
+                log.info("MCP %s: connected, protocol %s", self.label, getattr(init, "protocolVersion", "?"))
                 await self._load_tools(session)
                 self.session, self.error = session, None
                 self._ready.set()
@@ -230,12 +234,32 @@ class MCPServer:
             else:
                 fresh.used = False
 
+    @property
+    def in_flight(self) -> int:
+        """Calls running or waiting for a slot."""
+        return len(self._active)
+
+    def user_calls(self) -> list[str]:
+        """What the calls that are not background work (a chat request, a period_returns question) are doing.
+        Background work (the period backfill) waits while there are any."""
+        return [text for text, background in self._active.values() if not background]
+
     async def _call(self, tool: str, args: dict) -> str:
         holdings_only = bool(self.cfg.get("current_holdings_only"))
+        keep_sales = args.get("_keep_sales")  # set by the bot's own tools (history), never by the model
+        background = bool(args.get("_bg"))  # the period backfill, which must not hold up a user's request
+        args = {k: v for k, v in args.items() if k not in ("_keep_sales", "_bg")}
         if holdings_only and tool == "get_performance_report":
-            args = {**args, "include_sales": False}  # Sharesight's own switch for sold holdings
-        async with self._sem:
-            result = await asyncio.wait_for(self.session.call_tool(tool, args), self.timeout)
+            args = {**args, "include_sales": bool(keep_sales)}  # Sharesight's own switch for sold holdings
+        if keep_sales:
+            holdings_only = False  # closed holdings stay in the report too
+        token = next(self._call_ids)
+        self._active[token] = (describe_call(tool, args, bool(keep_sales)), background)
+        try:
+            async with self._sem:
+                result = await asyncio.wait_for(self.session.call_tool(tool, args), self.timeout)
+        finally:
+            del self._active[token]
         parts = [c.text if c.type == "text" else f"[{c.type} content omitted]" for c in result.content]
         if not parts and getattr(result, "structuredContent", None):
             parts.append(json.dumps(result.structuredContent))
@@ -244,10 +268,18 @@ class MCPServer:
             out = "Tool error: " + out
         else:
             out = slim_result(out, self.cfg.get("slim", self.label), drop_closed=holdings_only)
-        if len(out) > self.max_output:
+        if len(out) > self.max_output and not keep_sales:  # the cap protects the model's context; the bot's own tools aren't sent to it
             log.warning("MCP %s.%s result truncated (%d chars)", self.label, tool, len(out))
             out = out[:self.max_output] + f"\n...[truncated; {len(out)} chars total]"
         return out
+
+
+def describe_call(tool: str, args: dict, bot_own: bool = False) -> str:
+    """A call in a few words, for the log: "get_performance_report portfolio_id=7 2024-01-01..2024-01-31"."""
+    shown = [f"{k}={v}" for k, v in args.items() if k in ("portfolio_id", "symbol", "ticker", "query")]
+    if args.get("start_date") or args.get("end_date"):
+        shown.append(f"{args.get('start_date', '')}..{args.get('end_date', '')}")
+    return " ".join([tool, *shown]) + (" (period_returns)" if bot_own else "")
 
 
 class Registry:

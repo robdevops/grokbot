@@ -20,7 +20,7 @@ MARKET_WORDS = re.compile(
 # A portfolio question: strong phrases always count; "my <money word>" phrases count; weak words
 # count only when no ticker is named ("performance of NVDA" is a market question).
 PORTFOLIO_STRONG = re.compile(
-    r"\b(portfolios?|holdings?|sharesight|smsf|superannuation|super fund|net worth|"
+    r"\b(portfolios?|holdings?|sharesight|\w*smsf|superannuation|super fund|net worth|"
     r"what do i (?:own|hold)|how am i doing|am i (?:up|down)|"
     r"what (?:did|have) i (?:make|made|lose|lost)|how did i do|"
     r"(?:i|we) (?:out|under)perform\w*|(?:out|under)perform\w* (?:me|my|us|our)|"

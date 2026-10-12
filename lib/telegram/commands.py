@@ -10,6 +10,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ..context import Ctx
+from ..features.periods import backfill
+from ..features.periods.windows import describe_scope, flush_scope
 from .access import is_admin
 
 log = logging.getLogger("bot")
@@ -58,3 +60,22 @@ async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) 
         rows = await asyncio.to_thread(ctx.store.usage_summary, now - secs)
         parts.append(usage_text(rows, label))
     await _reply(ctx, update, "\n\n".join(parts))
+
+
+async def flush_cache(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/flushcache [portfolio_id] [year | month | day] - admins only: forget the cached Sharesight period
+    returns (all, or of one portfolio, or the ones overlapping a year/month/day), e.g. after a backdated
+    change. The background fill, if on, re-fetches them."""
+    if not await _gate(ctx, update):
+        return
+    scope = flush_scope(context.args or [])
+    if scope is None:
+        await _reply(ctx, update, "Usage: /flushcache [portfolio_id] [2024 | 2024-05 | 2024-05-17]")
+        return
+    pid, first, last = scope
+    n = await asyncio.to_thread(ctx.store.period_flush, pid, first and first.isoformat(), last and last.isoformat())
+    backfill.reset()
+    what = describe_scope(pid, first, last)
+    log.info("Flushed %d cached period returns (%s)", n, what)
+    await _reply(ctx, update, f"Flushed {n} cached periods ({what})."
+                 + (" Refilling in the background." if ctx.st.period_backfill else ""))

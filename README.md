@@ -29,6 +29,23 @@ The optional `label` is ignored; it only appears in `ps`/`top` so you can tell i
 A systemd unit just needs `ExecStart=/usr/bin/python3 /path/to/bot.py mimo` and an `Environment=`
 or `EnvironmentFile=` for the variables below.
 
+### Running under systemd
+With `StateDirectory=`, systemd sets `STATE_DIRECTORY` and the bot keeps its database there (`DATA_DIR`
+defaults to it), so the code directory can stay read-only. `mcp_servers.json` is read from the checkout
+unless `MCP_CONFIG` says otherwise. Copy an existing `chat_log.db` (and `-wal`/`-shm`) into the state
+directory before the first start.
+
+```ini
+[Service]
+DynamicUser=yes
+WorkingDirectory=/opt/grokbot
+EnvironmentFile=/opt/grokbot.env
+StateDirectory=grokbot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/grokbot/.venv/bin/python bot.py
+Restart=on-failure
+```
+
 ## Providers
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
 - `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
@@ -161,6 +178,7 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
 | `/credits` | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI and z.ai have none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days |
+| `/flushcache [portfolio_id] [year or month or day]` | an admin | Forget cached Sharesight period returns: all, or of one portfolio, or those overlapping a year (`2024`), month (`2024-05`) or day (`2024-05-17`), e.g. `/flushcache 684141 2024`; see [Caching Sharesight history](#caching-sharesight-history) |
 
 **Admins** are the user IDs in `ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with
 Telegram, cached for five minutes). The bot only knows a group once someone has written in it, or it was added, since
@@ -169,6 +187,23 @@ default), only admins can DM the bot, and Sharesight data is for admins only: an
 gets "Portfolio data is for admins only." Holding-news DMs, buttons and down-server messages the bot sends itself are
 unaffected. With nobody in `ADMIN_CHAT_IDS` and no known group, nobody can DM the bot or reach Sharesight: set
 `ADMIN_ONLY=off` to allow everyone.
+
+## Caching Sharesight history
+Questions like "best day / week / month / quarter / year since inception" are answered by the `period_returns` tool
+(admins only), which asks Sharesight for one report per period (about 2.4 s each). Every **finished** period is
+stored in the SQLite database (next to the chat history, so it survives upgrades with `DATA_DIR`) and **never
+expires**: the current, unfinished period is always fetched fresh. Past history rarely changes; after a backdated
+trade or correction in Sharesight, flush the cache with `/flushcache [portfolio_id] [year|month|day]` (an admin, in
+Telegram) or `python bot.py --flush-cache [portfolio_id] [year|month|day]` (needs only `DB_PATH`/`DATA_DIR`, not the
+bot's keys). With a year, month or day, only the periods overlapping it go (every day, week, month, quarter and year
+that contains it), and the background fill re-fetches just those.
+
+Without the cache, a request may fetch at most 64 days, 26 weeks or 120 months/quarters/years that aren't cached; a
+longer range is refused with the earliest start that fits. Set `PERIOD_BACKFILL=<portfolio name>[,...]` (or `all`) to
+fill the cache in the background: months first, then quarters, years, weeks and days (each type for every portfolio before the next), up to two Sharesight calls at a time,
+never while a user's request is using the server (about 1,650 calls per portfolio, an hour or two the first time; progress is logged and it resumes after a restart). Once filled, any range is instant and the
+limits above no longer matter. Every six hours it fetches whatever newly finished. If five fetches in a row fail (Sharesight down or throttling),
+the pass stops and tries again after ten minutes; windows Sharesight simply has no data for are skipped until a restart.
 
 ## Caching and token saving
 **Provider prompt caching** (xAI and OpenRouter keep a conversation on the server holding its cached
@@ -246,12 +281,14 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 |---|---|
 | `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/credits`; a group's chat ID gets the down-server messages only. Admins of the groups the bot is in count as admins too. |
 | `ADMIN_ONLY` | on|off. Only admins may DM the bot or get Sharesight data (default on). |
+| `DATA_DIR` | Directory for the bot's data (the database); a relative `DB_PATH` resolves inside it, an absolute one is used as given. Default: systemd's `STATE_DIRECTORY` (see [Running under systemd](#running-under-systemd)), else the working directory. In Docker, set `DATA_DIR=/data` and bind-mount a host directory there so history survives upgrades. |
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
-| `MCP_CONFIG` | MCP server config file (default mcp_servers.json; missing = no MCP tools). |
+| `MCP_CONFIG` | MCP server config file (default mcp_servers.json next to bot.py, whatever `DATA_DIR` is; missing = no MCP tools). |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
 | `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
+| `PERIOD_BACKFILL` | Comma list of Sharesight portfolio names (or `all`) whose returns per day, week, month, quarter and year are fetched into the local cache in the background (about 1,650 Sharesight calls per portfolio the first time, a few hours), so "best day since inception" answers instantly. Default `all`; list names to limit it, or `off` to disable. See [Caching Sharesight history](#caching-sharesight-history). |
 | `POST_TO_GROUPS_FROM_DM` | on|off. A group admin can have the bot post in that group from a DM (default off). |
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |

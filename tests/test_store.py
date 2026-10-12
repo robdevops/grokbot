@@ -80,3 +80,32 @@ def test_writes_are_committed_immediately(tmp_path):
     second = Store(path)  # another process sharing the file sees the writes without any explicit commit
     second.bot_id = 7
     assert second.kv_get("k") == "v" and second.chats() == [(-1, "Group")]
+
+
+def test_period_cache_round_trip_flush_and_version(tmp_path):
+    from lib.store import PeriodRow
+
+    path = str(tmp_path / "p.db")
+    s = Store(path)
+    s.period_put([PeriodRow(7, "2026-01-01", "2026-01-31", 1.5, 150.0, "AUD", [["AAA", 90.0, 12.0]]),
+                  PeriodRow(7, "2026-02-01", "2026-02-28", -2.0, -200.0, "AUD", []),
+                  PeriodRow(8, "2026-01-01", "2026-01-31", 3.0, 30.0, "USD", [])])
+    got = s.period_get(7, "2026-01-01", "2026-02-15")  # only windows lying within the range
+    assert list(got) == [("2026-01-01", "2026-01-31")] and got[("2026-01-01", "2026-01-31")].movers == [["AAA", 90.0, 12.0]]
+    assert s.period_count(7, "2000-01-01", "2100-01-01") == 2
+    s.period_put([PeriodRow(7, "2026-01-01", "2026-01-31", 9.0, 1.0, "AUD", [])])  # replaces
+    assert s.period_get(7, "2026-01-01", "2026-01-31")[("2026-01-01", "2026-01-31")].pct == 9.0
+    s._conn.execute("UPDATE period_cache SET v = 0 WHERE portfolio_id = 8")  # an older format
+    assert Store(path).period_count(8, "2000-01-01", "2100-01-01") == 0  # dropped on open
+    assert s.period_flush(7) == 2 and s.period_flush() == 0
+
+
+def test_period_flush_by_date_range_removes_every_window_that_overlaps_it(tmp_path):
+    from lib.store import PeriodRow
+
+    s = Store(str(tmp_path / "p.db"))
+    row = lambda a, b: PeriodRow(7, a, b, 1.0, 1.0, "AUD", [])  # noqa: E731
+    s.period_put([row("2023-12-26", "2024-01-01"), row("2024-12-31", "2025-01-06"), row("2024-06-01", "2024-06-30"),
+                  row("2023-01-01", "2023-12-31"), row("2025-01-07", "2025-01-13")])
+    assert s.period_flush(7, "2024-01-01", "2024-12-31") == 3  # the week spanning New Year both ways, and June
+    assert sorted(s.period_get(7, "2000-01-01", "2100-01-01")) == [("2023-01-01", "2023-12-31"), ("2025-01-07", "2025-01-13")]
