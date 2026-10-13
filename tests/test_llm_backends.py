@@ -225,6 +225,28 @@ async def test_xai_cache_headers_and_flat_tools(env):
     assert kw["input"][0] == {"role": "system", "content": "SYS"} and kw["reasoning"] == {"effort": "low"}
 
 
+def xai_message(text):
+    from types import SimpleNamespace as N
+    return N(type="message", content=[N(type="output_text", text=text)])
+
+
+async def test_xai_keeps_only_the_last_message_when_it_drafts_before_searching():
+    from types import SimpleNamespace as N
+    st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
+    items = [xai_message("draft"), N(type="web_search_call"), xai_message("answer")]
+    events = [N(type="response.output_item.added", item=items[0]),
+              N(type="response.output_text.delta", delta="draft"),
+              N(type="response.output_item.added", item=items[2]),
+              N(type="response.output_text.delta", delta="answer"),
+              xai_final(items, text="draftanswer")]
+    seen = []
+    b = XaiBackend(st, FakeXaiClient(events))
+    r = req(on_text=seen.append)
+    step = await b.step(b.start(r), r, tool_choice=None)
+    assert step.text == "answer" and step.searches == 1
+    assert seen == ["draft", "answer"]
+
+
 async def test_xai_cost_comes_from_usd_ticks(env):
     from types import SimpleNamespace as N
     st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
