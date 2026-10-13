@@ -261,3 +261,11 @@ async def test_flushcache_command_is_admin_only_and_flushes_by_portfolio_and_per
     every = user_msg(ctx.bot, "/flushcache", user_id=5, mid=5)
     await commands.flush_cache(ctx, update_for(every), N(args=[]))
     assert "Flushed 4 cached periods (all portfolios)" in every.replies[0]["text"]
+
+
+async def test_holdingnews_command_says_when_the_provider_is_busy(env, store):
+    ctx = holding_ctx(env, store, [Overloaded("at capacity")])
+    m = user_msg(ctx.bot, "/holdingnews", chat_id=5, user_id=5)
+    m.from_user.username = "bob_llama"
+    await holding_news.on_command(ctx, m)
+    assert "at capacity" in m.replies[-1]["text"] and "No major news" not in m.replies[-1]["text"]

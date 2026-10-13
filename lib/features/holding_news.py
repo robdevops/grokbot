@@ -18,7 +18,7 @@ from telegram.ext import ContextTypes
 from .. import config
 from ..ask import ask
 from ..context import Ctx
-from ..llm.base import is_busy
+from ..llm.base import BUSY_REPLY, is_busy
 from ..llm.gate import Route
 from ..mcp.results import table_records
 from ..prompts import HOLDING_NEWS_PROMPT
@@ -233,11 +233,14 @@ async def on_command(ctx: Ctx, msg: Message) -> None:
         return
     draft = Draft(ctx.bot, msg.chat_id)
     await draft.start()
+    busy: list[str] = []
     try:
-        result = (await run_holding_news(ctx, only_username=username)).get(username)
+        result = (await run_holding_news(ctx, only_username=username, busy=busy)).get(username)
     finally:
         draft.stop()
-    if result:
+    if busy:
+        await asyncio.to_thread(save, await msg.reply_text(BUSY_REPLY))
+    elif result:
         await send_holding_news(ctx, msg.chat_id, *result)
     else:
         await asyncio.to_thread(

@@ -9,6 +9,7 @@ from typing import Any
 from ..mcp.schema import ToolDef
 
 BUSY_STATUSES = (429, 503, 529)
+BUSY_REPLY = "The AI provider is at capacity right now. Please try again in a few minutes."
 
 
 class Overloaded(RuntimeError):
