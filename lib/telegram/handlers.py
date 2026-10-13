@@ -17,6 +17,7 @@ from ..ask import ask
 from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers, periods, post
 from ..history import compact, format_rows
+from ..llm.base import is_busy
 from ..llm.gate import Route, is_portfolio_question, route
 from ..msgtext import describe, sender_name
 from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, chat_prompt, down_note
@@ -29,7 +30,8 @@ from .send import reply_chunks, reply_html
 
 log = logging.getLogger("bot")
 PORTFOLIO_ADMINS_ONLY = "Portfolio data is for admins only."
-FOLLOW_UP_WORDS = 12  # a message this short right after the bot's reply may be a follow-up to it
+BUSY_REPLY = "The AI provider is at capacity right now. Please try again in a few minutes."
+FOLLOW_UP_WORDS = 12 # a message this short right after the bot's reply may be a follow-up to it
 FOLLOW_UP_SECONDS = 30 * 60
 FOLLOW_UP_CHARS = 400  # of the bot's reply that the tool gate also reads
 READ_IMAGE_WORDS = re.compile(r"\b(read|text|says?|chart|table|number|screenshot|ocr|zoom|detail|label)\b", re.I)
@@ -206,9 +208,13 @@ class Handlers:
         try:
             html_text = await self._generate(msg, trig, draft)
         except Exception as e:
-            log.exception("Reply failed")
-            html_text = ("Sorry, something went wrong:\n"
-                         f"<pre>{html.escape(f'{type(e).__name__}: {e}'[:1500])}</pre>")
+            if is_busy(e):
+                log.warning("Reply failed, the provider is busy: %s", " ".join(str(e).split()))
+                html_text = BUSY_REPLY
+            else:
+                log.exception("Reply failed")
+                html_text = ("Sorry, something went wrong:\n"
+                             f"<pre>{html.escape(f'{type(e).__name__}: {e}'[:1500])}</pre>")
         finally:
             if draft:
                 draft.stop()

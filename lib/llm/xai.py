@@ -7,7 +7,7 @@ import logging
 from openai import AsyncOpenAI, BadRequestError
 
 from ..config import Settings
-from .base import Backend, Call, Request, Step, Usage
+from .base import Backend, Call, Overloaded, Request, Step, Usage
 
 log = logging.getLogger("bot")
 
@@ -97,7 +97,8 @@ class XaiBackend(Backend):
         if final is None:
             raise RuntimeError("The stream ended without a final response")
         if final.status == "failed":
-            raise RuntimeError(f"xAI response failed: {final.error}")
+            msg = f"xAI response failed: {final.error}"
+            raise (Overloaded if getattr(final.error, "code", None) == "server_error" else RuntimeError)(msg)
         return final
 
     async def step(self, conv: dict, req: Request, *, tool_choice: str | None) -> Step:

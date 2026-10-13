@@ -17,6 +17,7 @@ from telegram.ext import ContextTypes
 
 from ..ask import ask
 from ..context import Ctx
+from ..llm.base import is_busy
 from ..llm.gate import Route
 from ..mcp.results import table_records
 from ..prompts import HOLDING_NEWS_PROMPT
@@ -143,8 +144,12 @@ async def _check_person(ctx: Ctx, server, username: str, portfolio_names: list[s
         if not holdings:
             return {}
         news = await holding_news_text(ctx, username, holdings)
-    except Exception:
-        log.exception("Holding news check failed for @%s", username)
+    except Exception as e:
+        if is_busy(e):  # automated, so no chat message; one log line is enough
+            log.warning("Holding news check failed for @%s, the provider is busy: %s",
+                        username, " ".join(str(e).split()))
+        else:
+            log.exception("Holding news check failed for @%s", username)
         return {}
     result = (news, news_codes(news, holdings)) if news else None
     log.info("Holding news for @%s: %s", username, "found" if news else "nothing major")
