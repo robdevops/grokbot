@@ -5,7 +5,7 @@ import pytest
 from lib import config
 from lib.context import Ctx
 from lib.features import dm_buttons
-from lib.llm.base import Usage
+from lib.llm.base import Overloaded, Usage
 from lib.telegram.handlers import Handlers, format_answer, mentions
 from lib.telegram.handlers import photo_file_id as pick_photo
 
@@ -176,6 +176,16 @@ async def test_error_becomes_a_visible_message(env, store):
     m = user_msg(ctx.bot, "@stockbot hello")
     await run(h, m)
     assert "Sorry, something went wrong" in m.replies[0]["text"] and "provider exploded" in m.replies[0]["text"]
+
+
+async def test_busy_provider_gets_a_plain_reply_and_a_one_line_log(env, store, caplog):
+    err = Overloaded("xAI response failed: ResponseError(code='server_error',\n message='at capacity')")
+    ctx, backend, h = make_ctx(env, store, [err])
+    m = user_msg(ctx.bot, "@stockbot hello")
+    await run(h, m)
+    assert "at capacity right now" in m.replies[0]["text"] and "<pre>" not in m.replies[0]["text"]
+    line = next(r.getMessage() for r in caplog.records if "provider is busy" in r.getMessage())
+    assert "\n" not in line and not any(r.exc_info for r in caplog.records)
 
 
 async def test_movers_list_off_by_default_then_answered_once_without_tagging(env, store):

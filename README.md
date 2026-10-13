@@ -155,6 +155,8 @@ Each is off by default. The holding-news DM and the movers reply are switched on
   the last 3 days are not repeated. Each message has an **Unsubscribe** button: per ticker, or all
   holding news, with an **Undo** button afterwards. People must have messaged the bot (or a group it
   is in) once so it knows their user ID. `/holdingnews` in a DM runs the check now and always replies.
+  If the AI provider is at capacity, the daily check is retried every 30 minutes for up to 12 hours
+  (nothing is sent to anyone meanwhile).
 - **Reply to a movers bot** (switched on by listing the bots in `MOVERS_BOTS`; empty, the default, means off): when such a
   bot posts an end-of-day list ("≥ 5.0% at close (ASX):" followed by stocks with % changes) the bot
   explains each move with a forced search, once, without tagging the other bot, ignoring its image,

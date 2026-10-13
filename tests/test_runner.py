@@ -3,7 +3,7 @@ import pytest
 from openai import APIStatusError, BadRequestError
 
 from lib import config
-from lib.llm.base import Usage
+from lib.llm.base import Overloaded, Usage
 from lib.llm.gate import route, wants_tools
 from lib.llm.policy import ask
 from lib.llm.runner import call_query, run, run_calls
@@ -197,6 +197,10 @@ async def test_no_retry_for_auth_credit_rate_limit_server_errors_or_must_search(
     b = ScriptedBackend([RuntimeError("x"), step("never")])
     with pytest.raises(RuntimeError, match="x"):
         await ask(b, registry(), req(must_search=True, search=True))
+    assert len(b.seen) == 1
+    b = ScriptedBackend([Overloaded("at capacity"), step("never")])  # tools aren't the cause
+    with pytest.raises(Overloaded):
+        await ask(b, registry(mcp), with_tools(mcp))
     assert len(b.seen) == 1
     b = ScriptedBackend([RuntimeError("x"), step("never")])  # nothing to take away: no retry
     with pytest.raises(RuntimeError):

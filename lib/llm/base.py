@@ -8,6 +8,17 @@ from typing import Any
 
 from ..mcp.schema import ToolDef
 
+BUSY_STATUSES = (429, 503, 529)
+
+
+class Overloaded(RuntimeError):
+    """The provider is out of capacity right now (an error inside a failed response)."""
+
+
+def is_busy(e: BaseException) -> bool:
+    """Capacity or rate limiting: the person can simply try again in a few minutes."""
+    return isinstance(e, Overloaded) or getattr(e, "status_code", None) in BUSY_STATUSES
+
 
 @dataclass
 class Usage:

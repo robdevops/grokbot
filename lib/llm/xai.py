@@ -7,7 +7,7 @@ import logging
 from openai import AsyncOpenAI, BadRequestError
 
 from ..config import Settings
-from .base import Backend, Call, Request, Step, Usage
+from .base import Backend, Call, Overloaded, Request, Step, Usage
 
 log = logging.getLogger("bot")
 
@@ -31,6 +31,18 @@ def to_input_parts(parts: list[dict]) -> list[dict]:
 
 def _as_input(item) -> dict:
     return item.model_dump(exclude_none=True) if hasattr(item, "model_dump") else dict(item)
+
+
+def answer_text(resp) -> str:
+    """The response's last message. `output_text` joins every message, and with server-side search
+    the model can write a draft, search, then write the answer, all in one response."""
+    messages = [i for i in resp.output if i.type == "message"]
+    texts = ["".join(getattr(c, "text", "") or "" for c in m.content if c.type == "output_text")
+             for m in messages]
+    if len([t for t in texts if t.strip()]) > 1:
+        log.info("xAI response had %d messages; kept the last (items: %s)", len(texts),
+                 " ".join(i.type for i in resp.output))
+    return next((t for t in reversed(texts) if t.strip()), resp.output_text or "").strip()
 
 
 class XaiBackend(Backend):
@@ -74,7 +86,9 @@ class XaiBackend(Backend):
         stream = await self.client.responses.create(**kw, **inputs)
         text, final = "", None
         async for event in stream:
-            if event.type == "response.output_text.delta":
+            if event.type == "response.output_item.added" and event.item.type == "message":
+                text = ""  # a new message replaces the draft before it
+            elif event.type == "response.output_text.delta":
                 text += event.delta
                 if req.on_text:
                     req.on_text(text)
@@ -83,7 +97,8 @@ class XaiBackend(Backend):
         if final is None:
             raise RuntimeError("The stream ended without a final response")
         if final.status == "failed":
-            raise RuntimeError(f"xAI response failed: {final.error}")
+            msg = f"xAI response failed: {final.error}"
+            raise (Overloaded if getattr(final.error, "code", None) == "server_error" else RuntimeError)(msg)
         return final
 
     async def step(self, conv: dict, req: Request, *, tool_choice: str | None) -> Step:
@@ -112,7 +127,7 @@ class XaiBackend(Backend):
             cost=(getattr(u, "cost_in_usd_ticks", 0) or 0) / TICKS_PER_USD,
         )
         searches = sum(1 for i in resp.output if i.type.endswith("_search_call"))
-        return Step((resp.output_text or "").strip(), calls, usage, resp.status, searches)
+        return Step(answer_text(resp), calls, usage, resp.status, searches)
 
     def add_results(self, conv: dict, step: Step, results: list[str]) -> None:
         items = [{"type": "function_call_output", "call_id": c.id, "output": out}

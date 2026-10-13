@@ -8,7 +8,7 @@ import logging
 from openai import APIStatusError
 
 from ..mcp.server import Registry
-from .base import Answer, Backend, Request
+from .base import Answer, Backend, Request, is_busy
 from .runner import run
 
 log = logging.getLogger("bot")
@@ -22,7 +22,8 @@ async def ask(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
     try:
         return await run(backend, registry, req, dedupe=dedupe)
     except (APIStatusError, RuntimeError) as first:
-        retriable = isinstance(first, RuntimeError) or first.status_code in (400, 422)
+        retriable = (isinstance(first, RuntimeError) and not is_busy(first)) or (
+            isinstance(first, APIStatusError) and first.status_code in (400, 422))
         if req.must_search or not retriable or not (req.search or req.tools):
             raise
         log.warning("Retrying without tools: %s", first)

@@ -9,6 +9,7 @@ from telegram.error import Forbidden
 from lib import config
 from lib.context import Ctx
 from lib.features import dm_buttons, holding_news, movers
+from lib.llm.base import Overloaded
 from lib.telegram import commands
 
 from .conftest import FakeBot, make_msg, update_for, user_msg
@@ -77,6 +78,32 @@ async def test_digest_says_nothing_when_nothing_and_respects_mutes(env, store):
     await holding_news.run_holding_news(ctx)
     prompt = ctx.backend.seen[-1]["prompt"]
     assert "AMD (NASDAQ)" in prompt and "NVDA (NASDAQ)" not in prompt  # muted code left out
+
+
+async def test_busy_provider_is_retried_for_just_that_person_then_delivered(env, store, monkeypatch, caplog):
+    monkeypatch.setattr(config, "HOLDING_NEWS_RETRY_EVERY", 0)
+    ctx = holding_ctx(env, store, [Overloaded("at capacity"), Overloaded("at capacity"), step("• NVDA: big news")])
+    busy: list[str] = []
+    assert await holding_news.run_holding_news(ctx, busy=busy) == {} and busy == ["bob_llama"]
+    assert ctx.bot.sent == []
+    await holding_news.retry_busy(ctx, busy)  # still busy once, then works
+    assert len(ctx.backend.seen) == 3 and "Holding news" in ctx.bot.sent[-1]["text"]
+    assert not any(r.exc_info for r in caplog.records)
+
+
+async def test_busy_provider_is_given_up_on_after_the_retry_window(env, store, monkeypatch, caplog):
+    monkeypatch.setattr(config, "HOLDING_NEWS_RETRY_EVERY", 4 * 3600)
+    monkeypatch.setattr(config, "HOLDING_NEWS_RETRY_FOR", 12 * 3600)
+    slept = []
+
+    async def no_sleep(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr(holding_news.asyncio, "sleep", no_sleep)
+    ctx = holding_ctx(env, store, [Overloaded("at capacity")] * 4)
+    await holding_news.retry_busy(ctx, ["bob_llama"])
+    assert slept == [4 * 3600] * 3 and len(ctx.backend.seen) == 3 and ctx.bot.sent == []  # 12 h / 4 h
+    assert "gave up on @bob_llama after 12 hours" in caplog.text
 
 
 async def test_digest_skips_people_the_bot_cannot_reach(env, store):
