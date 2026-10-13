@@ -15,6 +15,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.error import Forbidden
 from telegram.ext import ContextTypes
 
+from .. import config
 from ..ask import ask
 from ..context import Ctx
 from ..llm.base import is_busy
@@ -114,26 +115,28 @@ async def send_holding_news(ctx: Ctx, chat_id: int, news: str, codes: list[str])
             await asyncio.to_thread(ctx.store.remember_news_message, chat_id, sent.message_id, codes)
 
 
-async def run_holding_news(ctx: Ctx, only_username: str | None = None
-                           ) -> dict[str, tuple[str, list[str]] | None]:
+async def run_holding_news(ctx: Ctx, only_username: str | None = None, *, usernames: set[str] | None = None,
+                           busy: list[str] | None = None) -> dict[str, tuple[str, list[str]] | None]:
     """Check each recipient's holdings; DM anyone with major news.
-    Returns {username: (news text, codes it covers) or None}."""
+    `usernames` limits the scheduled run to those people; `busy` collects the ones the provider was
+    too busy to check. Returns {username: (news text, codes it covers) or None}."""
     server = ctx.registry.servers.get("sharesight")
     if not (server and server.session):
         log.warning("Holding news: Sharesight isn't connected, skipping")
         return {}
     people: dict[str, list[str]] = {}
     for portfolio, username in ctx.st.holding_news_recipients.items():
-        if only_username is None or username == only_username:
+        if ((only_username is None or username == only_username)
+                and (usernames is None or username in usernames)):
             people.setdefault(username, []).append(portfolio)
     results: dict[str, tuple[str, list[str]] | None] = {}
     for username, portfolio_names in people.items():
-        results.update(await _check_person(ctx, server, username, portfolio_names, only_username))
+        results.update(await _check_person(ctx, server, username, portfolio_names, only_username, busy))
     return results
 
 
 async def _check_person(ctx: Ctx, server, username: str, portfolio_names: list[str],
-                        only_username: str | None) -> dict:
+                        only_username: str | None, busy: list[str] | None = None) -> dict:
     muted = await asyncio.to_thread(ctx.store.muted_codes, username)
     if "*" in muted:
         log.info("Holding news: @%s has unsubscribed from all of it", username)
@@ -148,6 +151,8 @@ async def _check_person(ctx: Ctx, server, username: str, portfolio_names: list[s
         if is_busy(e):  # automated, so no chat message; one log line is enough
             log.warning("Holding news check failed for @%s, the provider is busy: %s",
                         username, " ".join(str(e).split()))
+            if busy is not None:
+                busy.append(username)
         else:
             log.exception("Holding news check failed for @%s", username)
         return {}
@@ -184,11 +189,30 @@ async def daily_loop(ctx: Ctx) -> None:
         wait = seconds_until(ctx.st.holding_news_time, datetime.now(ctx.st.tz))
         log.info("Next holding news check in %.1f hours", wait / 3600)
         await asyncio.sleep(wait)
+        busy: list[str] = []
         try:
-            await run_holding_news(ctx)
+            await run_holding_news(ctx, busy=busy)
+            await retry_busy(ctx, busy)
         except Exception:
             log.exception("Holding news check failed")
         await asyncio.sleep(1)
+
+
+async def retry_busy(ctx: Ctx, usernames: list[str]) -> None:
+    """Check again, for just the people the provider was too busy for, every HOLDING_NEWS_RETRY_EVERY
+    seconds until it works or HOLDING_NEWS_RETRY_FOR has passed."""
+    waited = 0
+    while usernames and waited < config.HOLDING_NEWS_RETRY_FOR:
+        log.info("Holding news: trying again for %s in %d min", ", ".join(f"@{u}" for u in usernames),
+                 config.HOLDING_NEWS_RETRY_EVERY // 60)
+        await asyncio.sleep(config.HOLDING_NEWS_RETRY_EVERY)
+        waited += config.HOLDING_NEWS_RETRY_EVERY
+        busy: list[str] = []
+        await run_holding_news(ctx, usernames=set(usernames), busy=busy)
+        usernames = busy
+    if usernames:
+        log.warning("Holding news: gave up on %s after %d hours", ", ".join(f"@{u}" for u in usernames),
+                    config.HOLDING_NEWS_RETRY_FOR // 3600)
 
 
 def username_of(msg_or_user) -> str:

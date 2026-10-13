@@ -55,6 +55,8 @@ SEARCH_RESULTS = 20
 SEARCH_TOKENS = 400  # cap on each search write-up (OpenRouter search runner)
 MAX_SEARCHES = 5  # search calls run per round
 MAX_TG_MESSAGE = 4000  # Telegram's limit is 4096
+HOLDING_NEWS_RETRY_EVERY = 30 * 60  # seconds between retries of a holding-news check the provider was too busy for
+HOLDING_NEWS_RETRY_FOR = 12 * 3600  # seconds after which it gives up
 
 
 class ConfigError(Exception):
