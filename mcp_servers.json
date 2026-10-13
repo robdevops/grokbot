@@ -17,7 +17,7 @@
     "sharesight": {
       "description": "Sharesight portfolios. Never ask the user for portfolio IDs or holdings: call list_portfolios first (it names every portfolio and its owner), then get_performance_report for the ones involved. A report's holdings list is exactly their current positions, with quantity, value and gains. When comparing portfolios or explaining a result, write 2-3 short paragraphs: each portfolio's return, then its tailwinds (biggest contributors, with numbers) and headwinds (biggest detractors), and what explains the gap.",
       "command": "npx",
-      "args": ["-y", "github:sryburn/sharesight-mcp"],
+      "args": ["-y", "github:robdevops/sharesight-mcp"],
       "env": {
         "SHARESIGHT_CLIENT_ID": "${SHARESIGHT_CLIENT_ID}",
         "SHARESIGHT_CLIENT_SECRET": "${SHARESIGHT_CLIENT_SECRET}"
