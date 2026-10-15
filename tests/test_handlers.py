@@ -95,7 +95,7 @@ async def test_session_question_forces_a_search(env, store):
     m = user_msg(ctx.bot, "@stockbot what happened at close?")
     await run(h, m)
     assert backend.seen[0]["choice"] == "required" and backend.seen[0]["search"] is True
-    assert "current news" in backend.seen[0]["prompt"]
+    assert "Search for current news" in backend.seen[0]["prompt"]
 
 
 async def test_market_question_offers_tools_up_front(env, store):

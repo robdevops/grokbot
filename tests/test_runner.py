@@ -254,8 +254,8 @@ def test_session_question_prompt_demands_fresh_prices_and_news():
     from lib.prompts import chat_prompt
     assert is_session_question("what happened at close?") and not is_session_question("hello")
     kw = dict(transcript="t", sender="A", private=False, reply_quote=None, msg_id=1, now="now")
-    assert "current news" in chat_prompt(**kw, session=True)
-    assert "current news" not in chat_prompt(**kw)
+    assert "Search for current news" in chat_prompt(**kw, session=True)
+    assert "Search for current news" not in chat_prompt(**kw)
 
 
 def test_gate_full_when_forced_or_token_saver_off(settings, env):

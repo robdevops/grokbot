@@ -89,9 +89,9 @@ def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str
                  "for anything else asked, such as prices or a comparison with market data); don't reuse "
                  "numbers or refusals from earlier replies. When comparing portfolios, or asked \"why\", "
                  "write 2-3 short paragraphs on the tailwinds and headwinds of each portfolio, not a summary.")
-    if session:  # a trading-session question: earlier replies and movers lists are stale by now
-        tail += (" Fetch current prices and current news with your tools before answering, and say why "
-                 "each stock moved. Don't reuse numbers or reasons from earlier messages in the transcript.")
+    if session:  # a trading-session question: news and reasons in earlier replies are stale by now
+        tail += (" Search for current news before answering, and say why each stock moved. Don't reuse "
+                 "news or reasons from earlier messages in the transcript.")
     return head + tail + down
 
 
