@@ -90,6 +90,14 @@ async def test_partial_route_that_needs_more_is_asked_again_with_everything(env,
     assert "NEEDS_TOOLS" in backend.seen[0]["system"]  # the partial route told the model how to ask
 
 
+async def test_session_question_forces_a_search(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("fresh recap", searches=1)], servers=[FakeMcp("yahoo")])
+    m = user_msg(ctx.bot, "@stockbot what happened at close?")
+    await run(h, m)
+    assert backend.seen[0]["choice"] == "required" and backend.seen[0]["search"] is True
+    assert "current news" in backend.seen[0]["prompt"]
+
+
 async def test_market_question_offers_tools_up_front(env, store):
     mcp = FakeMcp("yahoo")
     ctx, backend, h = make_ctx(env, store, [step("ok")], servers=[mcp])

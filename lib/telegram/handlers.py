@@ -263,6 +263,7 @@ class Handlers:
             parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh, session=session)}]
             parts += await self._images(msg, trig)
             answer = await ask(ctx, parts, chosen,
+                               must_search=session and chosen.search,  # a session recap must not be recalled
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,
                                admin=admin)
         return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers)
