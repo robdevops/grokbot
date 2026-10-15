@@ -69,7 +69,7 @@ def down_note(down: list[MCPServer]) -> str:
 
 def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str | None,
                 msg_id: int, now: str, down: str = "", saver: bool = True, middle: str = "",
-                fresh: bool = False) -> str:
+                fresh: bool = False, session: bool = False) -> str:
     """The user turn: transcript, the replied-to message, and the volatile tail (kept last so the
     cached prefix before it is unchanged)."""
     head = (f"Private one-to-one chat with {sender}, not the group. Transcript:\n{transcript}"
@@ -89,6 +89,9 @@ def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str
                  "for anything else asked, such as prices or a comparison with market data); don't reuse "
                  "numbers or refusals from earlier replies. When comparing portfolios, or asked \"why\", "
                  "write 2-3 short paragraphs on the tailwinds and headwinds of each portfolio, not a summary.")
+    if session:  # a trading-session question: earlier replies and movers lists are stale by now
+        tail += (" Fetch current prices and current news with your tools before answering, and say why "
+                 "each stock moved. Don't reuse numbers or reasons from earlier messages in the transcript.")
     return head + tail + down
 
 
