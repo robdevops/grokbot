@@ -249,7 +249,7 @@ def test_gate_market_session_words_are_live(text, settings):
     assert r.search and not r.simple
 
 
-def test_session_question_prompt_demands_fresh_prices_and_news():
+def test_session_question_prompt_demands_current_news():
     from lib.llm.gate import is_session_question
     from lib.prompts import chat_prompt
     assert is_session_question("what happened at close?") and not is_session_question("hello")
