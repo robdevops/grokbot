@@ -34,6 +34,9 @@ PORTFOLIO_WEAK = re.compile(
 LIVE_WORDS = re.compile(
     r"\b(news|today|latest|yesterday|tonight|this week|right now|breaking|announce\w*|who won|"
     r"score|weather|happening|headlines?|current\w*|updates?|recent\w*|just (now|in))\b", re.I)
+# Asking about a trading session ("what happened at close"): answers must be fetched, not recalled.
+SESSION_WORDS = re.compile(
+    r"\b(?:(?:at|the|into|after) (?:the )?(?:close|open)|pre-?market|after[- ]hours|closing|opening)\b", re.I)
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,10 @@ def is_portfolio_question(text: str, st: Settings) -> bool:
     return bool(PORTFOLIO_WEAK.search(text)) and not _has_ticker(text)
 
 
+def is_session_question(text: str) -> bool:
+    return bool(SESSION_WORDS.search(text))
+
+
 def route(text: str, st: Settings, registry: Registry, *, force_full: bool = False) -> Route:
     """Tools for this message. With TOKEN_SAVER off, or `force_full` (a search/data request such
     as a movers list, a preset button or a retry after NEEDS_TOOLS), everything is offered."""
@@ -73,7 +80,7 @@ def route(text: str, st: Settings, registry: Registry, *, force_full: bool = Fal
         return Route(up, st.search)
     portfolio = is_portfolio_question(text, st)
     market = portfolio or bool(MARKET_WORDS.search(text)) or _has_ticker(text)
-    live = bool(LIVE_WORDS.search(text))
+    live = is_session_question(text) or bool(LIVE_WORDS.search(text))
     servers = [s for s in up if (portfolio if s.cfg.get("gate") == "portfolio" else market)]
     search = st.search and (market or live)
     simple = not (servers or search)
