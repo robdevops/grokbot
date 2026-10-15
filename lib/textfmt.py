@@ -35,6 +35,9 @@ TOOL_SYNTAX_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+# A model told it has no tools sometimes opens with a remark about it: "(no tool calls needed)".
+LEADING_TOOL_REMARK_RE = re.compile(r"^\s*\((?:no|without)\s+(?:tool|search|lookup)[^)\n]*\)\s*", re.I)
+
 
 def strip_disclaimer(text: str) -> str:
     """Models add these despite the prompt, and copy their own earlier ones from the transcript."""

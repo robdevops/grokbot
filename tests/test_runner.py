@@ -242,6 +242,13 @@ def test_gate_live_question_gets_search_only(settings):
     assert r.search and not r.servers
 
 
+@pytest.mark.parametrize("text", ["what happened at close?", "how did it go at the open", "any pre-market moves"])
+def test_gate_market_session_words_are_live(text, settings):
+    y, s = servers()
+    r = route(text, settings, registry(y, s))
+    assert r.search and not r.simple
+
+
 def test_gate_full_when_forced_or_token_saver_off(settings, env):
     y, s = servers()
     assert route("hello", settings, registry(y, s), force_full=True).servers == [y, s]

@@ -13,7 +13,7 @@ from openai import APIStatusError
 
 from .. import config
 from ..mcp.server import Registry
-from ..textfmt import TOOL_SYNTAX_RE
+from ..textfmt import LEADING_TOOL_REMARK_RE, TOOL_SYNTAX_RE
 from .base import Answer, Backend, Call, Request, Step, Usage
 
 log = logging.getLogger("bot")
@@ -26,6 +26,11 @@ NOISY_ARGS = {"consolidated", "report_combined", "grouping", "include_limited",
 SAME_AS_EARLIER = "Same call as one already answered in this conversation; use that result."
 WRITE_NOW = "Write the answer now, from the tool results above. Keep any thinking brief."
 TOO_MANY_SEARCHES = "Skipped: too many searches at once. Use what you already have."
+
+
+def clean_text(text: str) -> str:
+    """The model's answer without printed tool-call syntax or a leading remark about tools."""
+    return LEADING_TOOL_REMARK_RE.sub("", TOOL_SYNTAX_RE.sub("", text).strip()).strip()
 
 
 def call_args(arguments: str) -> dict:
@@ -201,7 +206,7 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
     log.info("%.1fs, %d rounds, %d tools: in %d (%.0f%% cached) out %d, $%.4f",
              time.monotonic() - t0, rounds, tool_calls, total.tokens_in, total.cached_pct,
              total.tokens_out, total.cost)
-    text = TOOL_SYNTAX_RE.sub("", step.text).strip()
+    text = clean_text(step.text)
     if not text and step.finish == "length" and tool_calls:
         # The model spent the whole cap thinking about the tool results. Keep them (answering
         # from memory without them invents things): ask again with more room and less thinking.
@@ -211,7 +216,7 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
         step = await _step(backend, conv, more, "none")
         total.add(step.usage)
         log.info("Recovery round: in %d out %d, %s", step.usage.tokens_in, step.usage.tokens_out, step.finish)
-        text = TOOL_SYNTAX_RE.sub("", step.text).strip()
+        text = clean_text(step.text)
     if not text:
         if step.finish == "length":
             raise RuntimeError("hit the token cap before writing an answer")

@@ -33,7 +33,8 @@ PORTFOLIO_WEAK = re.compile(
     r"\b(performance|gains?|positions?|winners?|losers?|p&l|pnl|(?:out|under)perform\w*|ahead of|behind)\b", re.I)
 LIVE_WORDS = re.compile(
     r"\b(news|today|latest|yesterday|tonight|this week|right now|breaking|announce\w*|who won|"
-    r"score|weather|happening|headlines?|current\w*|updates?|recent\w*|just (now|in))\b", re.I)
+    r"score|weather|happening|headlines?|current\w*|updates?|recent\w*|just (now|in)|"
+    r"(?:at|the|into|after) (?:the )?(?:close|open)|pre-?market|after[- ]hours|closing|opening)\b", re.I)
 
 
 @dataclass(frozen=True)

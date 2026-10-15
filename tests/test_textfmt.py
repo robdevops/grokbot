@@ -19,6 +19,13 @@ def test_tool_syntax_does_not_eat_the_answer():
     assert t.TOOL_SYNTAX_RE.sub("", "<tool_call><function=web_search></function></tool_call>").strip() == ""
 
 
+def test_leading_tool_remark_is_stripped():
+    from lib.llm.runner import clean_text
+    assert clean_text("  (no tool calls needed)Wasion (3393) -6%") == "Wasion (3393) -6%"
+    assert clean_text("(No search needed) Fine.") == "Fine."
+    assert clean_text("Wasion (no tool calls needed) fell") == "Wasion (no tool calls needed) fell"
+
+
 def test_tg_tag_regex_keeps_bare_lt():
     s = lambda x: t.TG_TAG_RE.sub("", x)  # noqa: E731
     assert s("NVDA <5% ok <b>x</b>") == "NVDA <5% ok x"
