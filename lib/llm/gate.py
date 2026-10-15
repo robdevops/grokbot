@@ -79,8 +79,9 @@ def route(text: str, st: Settings, registry: Registry, *, force_full: bool = Fal
     if force_full or not st.token_saver:
         return Route(up, st.search)
     portfolio = is_portfolio_question(text, st)
-    market = portfolio or bool(MARKET_WORDS.search(text)) or _has_ticker(text)
-    live = is_session_question(text) or bool(LIVE_WORDS.search(text))
+    session = is_session_question(text)
+    market = portfolio or session or bool(MARKET_WORDS.search(text)) or _has_ticker(text)
+    live = session or bool(LIVE_WORDS.search(text))
     servers = [s for s in up if (portfolio if s.cfg.get("gate") == "portfolio" else market)]
     search = st.search and (market or live)
     simple = not (servers or search)

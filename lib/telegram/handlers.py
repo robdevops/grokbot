@@ -264,6 +264,7 @@ class Handlers:
             parts += await self._images(msg, trig)
             answer = await ask(ctx, parts, chosen,
                                must_search=session and chosen.search,  # a session recap must not be recalled
+                               keep_tools=True,
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,
                                admin=admin)
         return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers)

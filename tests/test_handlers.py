@@ -95,6 +95,7 @@ async def test_session_question_forces_a_search(env, store):
     m = user_msg(ctx.bot, "@stockbot what happened at close?")
     await run(h, m)
     assert backend.seen[0]["choice"] == "required" and backend.seen[0]["search"] is True
+    assert backend.seen[0]["tools"] == ["yahoo__get_quote"]  # quotes stay available beside the search
     assert "current news" in backend.seen[0]["prompt"]
 
 
