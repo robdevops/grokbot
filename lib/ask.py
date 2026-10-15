@@ -44,17 +44,17 @@ def _public(servers: list) -> list:
 
 async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = False,
               cache_key: str | None = None, on_text=None, kind: str = "chat",
-              chat_id: int = 0, extra_tools=(), admin: bool = True, keep_tools: bool = False) -> Answer:
+              chat_id: int = 0, extra_tools=(), admin: bool = True) -> Answer:
     """Ask the configured provider and record the usage. `route` says which tools to offer;
-    must_search forces a tool call first (and offers only search, unless keep_tools). A message the gate gave fewer tools
+    must_search forces a search (and offers nothing else). A message the gate gave fewer tools
     than exist that gets back NEEDS_TOOLS is asked again with everything on. A non-admin never
     gets the portfolio tools, in either request."""
     st = ctx.st
     if must_search:
         if not st.search:
             raise RuntimeError("search is disabled, but this request needs it")
-        route = dataclasses.replace(route, search=True) if keep_tools else Route([], True)
-    if not admin:
+        route = Route([], True)
+    elif not admin:
         route = dataclasses.replace(route, servers=_public(route.servers))
     saver = st.token_saver
     req = Request(
