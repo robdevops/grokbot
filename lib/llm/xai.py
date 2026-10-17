@@ -37,8 +37,11 @@ def answer_text(resp) -> str:
     """The response's last message. `output_text` joins every message, and with server-side search
     the model can write a draft, search, then write the answer, all in one response."""
     messages = [i for i in resp.output if i.type == "message"]
-    texts = ["".join(getattr(c, "text", "") or "" for c in m.content if c.type == "output_text")
-             for m in messages]
+    parts = [[getattr(c, "text", "") or "" for c in m.content if c.type == "output_text"] for m in messages]
+    texts = ["".join(p) for p in parts]
+    for p in parts:
+        if len([t for t in p if t.strip()]) > 1:  # not handled yet: this line tells us if it happens
+            log.info("xAI message had %d text parts (%s chars)", len(p), "+".join(str(len(t)) for t in p))
     if len([t for t in texts if t.strip()]) > 1:
         log.info("xAI response had %d messages; kept the last (items: %s)", len(texts),
                  " ".join(i.type for i in resp.output))
