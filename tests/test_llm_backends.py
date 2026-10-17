@@ -247,6 +247,17 @@ async def test_xai_keeps_only_the_last_message_when_it_drafts_before_searching()
     assert seen == ["draft", "answer"]
 
 
+async def test_xai_logs_a_message_with_several_text_parts_and_still_joins_them(caplog):
+    from types import SimpleNamespace as N
+
+    from lib.llm.xai import answer_text
+    caplog.set_level("INFO", logger="bot")
+    message = N(type="message", content=[N(type="output_text", text="one"), N(type="output_text", text="two")])
+    assert answer_text(N(output=[message], output_text="onetwo")) == "onetwo"
+    assert [r.getMessage() for r in caplog.records if "text parts" in r.getMessage()] == [
+        "xAI message had 2 text parts (3+3 chars)"]
+
+
 async def test_xai_failed_response_at_capacity_is_overloaded_other_failures_are_not():
     from types import SimpleNamespace as N
     st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
