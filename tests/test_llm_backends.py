@@ -247,6 +247,25 @@ async def test_xai_keeps_only_the_last_message_when_it_drafts_before_searching()
     assert seen == ["draft", "answer"]
 
 
+async def test_xai_keeps_only_the_last_text_part_of_one_message():
+    from types import SimpleNamespace as N
+    st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
+    message = N(type="message", content=[N(type="output_text", text="draft. One blank line after each."),
+                                         N(type="output_text", text="answer")])
+    events = [N(type="response.output_item.added", item=message),
+              N(type="response.content_part.added", part=message.content[0]),
+              N(type="response.output_text.delta", delta="draft. One blank line after each."),
+              N(type="response.content_part.added", part=message.content[1]),
+              N(type="response.output_text.delta", delta="answer"),
+              xai_final([message], text="draft. One blank line after each.answer")]
+    seen = []
+    b = XaiBackend(st, FakeXaiClient(events))
+    r = req(on_text=seen.append)
+    step = await b.step(b.start(r), r, tool_choice=None)
+    assert step.text == "answer"
+    assert seen == ["draft. One blank line after each.", "answer"]
+
+
 async def test_xai_failed_response_at_capacity_is_overloaded_other_failures_are_not():
     from types import SimpleNamespace as N
     st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
