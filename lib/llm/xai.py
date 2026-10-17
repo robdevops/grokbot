@@ -34,19 +34,14 @@ def _as_input(item) -> dict:
 
 
 def answer_text(resp) -> str:
-    """The response's last message, and in it the last text part. `output_text` joins everything,
-    and with server-side search the model can write a draft, search, then write the answer, as
-    separate messages or as separate parts of one."""
+    """The response's last message. `output_text` joins every message, and with server-side search
+    the model can write a draft, search, then write the answer, all in one response."""
     messages = [i for i in resp.output if i.type == "message"]
-    parts = [[getattr(c, "text", "") or "" for c in m.content if c.type == "output_text"] for m in messages]
-    texts = [next((t for t in reversed(p) if t.strip()), "") for p in parts]
+    texts = ["".join(getattr(c, "text", "") or "" for c in m.content if c.type == "output_text")
+             for m in messages]
     if len([t for t in texts if t.strip()]) > 1:
         log.info("xAI response had %d messages; kept the last (items: %s)", len(texts),
                  " ".join(i.type for i in resp.output))
-    for p in parts:
-        if len([t for t in p if t.strip()]) > 1:
-            log.info("xAI message had %d text parts (%s chars); kept the last",
-                     len(p), "+".join(str(len(t)) for t in p))
     return next((t for t in reversed(texts) if t.strip()), resp.output_text or "").strip()
 
 
@@ -93,8 +88,6 @@ class XaiBackend(Backend):
         async for event in stream:
             if event.type == "response.output_item.added" and event.item.type == "message":
                 text = ""  # a new message replaces the draft before it
-            elif event.type == "response.content_part.added" and event.part.type == "output_text":
-                text = ""  # a new text part replaces the draft before it
             elif event.type == "response.output_text.delta":
                 text += event.delta
                 if req.on_text:
