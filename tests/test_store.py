@@ -109,3 +109,9 @@ def test_period_flush_by_date_range_removes_every_window_that_overlaps_it(tmp_pa
                   row("2023-01-01", "2023-12-31"), row("2025-01-07", "2025-01-13")])
     assert s.period_flush(7, "2024-01-01", "2024-12-31") == 3  # the week spanning New Year both ways, and June
     assert sorted(s.period_get(7, "2000-01-01", "2100-01-01")) == [("2023-01-01", "2023-12-31"), ("2025-01-07", "2025-01-13")]
+
+
+def test_store_uses_wal_with_normal_sync_and_a_without_rowid_period_cache(tmp_path):
+    st = Store(str(tmp_path / "x.db"))
+    assert st._run("PRAGMA synchronous") == [(1,)]
+    assert "WITHOUT ROWID" in st._run("SELECT sql FROM sqlite_master WHERE name = 'period_cache'")[0][0]
