@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS usage (
 -- for that window. movers = the holdings that moved most, as JSON [[code, gain, gain_pct], ...].
 CREATE TABLE IF NOT EXISTS period_cache (
     portfolio_id INTEGER, start TEXT, end TEXT, pct REAL, gain REAL, currency TEXT, movers TEXT,
-    v INTEGER, PRIMARY KEY (portfolio_id, start, end));
+    v INTEGER, PRIMARY KEY (portfolio_id, start, end)) WITHOUT ROWID;
 """
 PERIOD_CACHE_VERSION = 1  # bump when the stored shape changes: rows of another version are dropped
 
@@ -77,6 +77,7 @@ class Store:
         self._lock = threading.RLock()
         self.bot_id: int | None = None  # set once the bot has started (DMs are stored per bot)
         self._run("PRAGMA journal_mode=WAL")
+        self._run("PRAGMA synchronous=NORMAL")  # with WAL: no fsync per commit; a power cut may lose the last few
         with self._lock:
             self._conn.executescript(SCHEMA)
             # Drop "NOTHING" digests sent by an earlier version, so they aren't fed to the model.

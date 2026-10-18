@@ -27,7 +27,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
   drafts), `commands.py` (/credits), `access.py` (who is an admin). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`, `periods/` (local `period_returns` tool, cache-first; `windows.py`, `rows.py`, `backfill.py` = PERIOD_BACKFILL loop).
 - `app.py` wiring/startup; `context.py` `Ctx` (settings, store, backend, registry, bot).
 - `lib/` holds only what the bot needs to run. Developer helpers live in `tools/`: `report.py` (`make prompt-report`),
-  `capture.py` (real MCP output for fixtures); the bot never imports them.
+  `capture.py` (real MCP output for fixtures), `period_cache_without_rowid.py` (one-off DB conversion); the bot never imports them.
 
 ## Request flow
 `handlers.on_message` logs the message -> `_trigger` (mention / reply-to-bot / DM / movers list) ->
