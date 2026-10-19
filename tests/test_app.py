@@ -181,7 +181,7 @@ async def test_backfill_task_starts_unless_period_backfill_is_off(env, store, mo
         assert len(started) == expected
 
 
-def test_the_mcp_librarys_unlabelled_protocol_line_is_dropped(monkeypatch):
+def test_the_mcp_librarys_unlabelled_protocol_and_ping_lines_are_dropped(monkeypatch):
     import logging
 
     monkeypatch.delenv("JOURNAL_STREAM", raising=False)
@@ -193,6 +193,8 @@ def test_the_mcp_librarys_unlabelled_protocol_line_is_dropped(monkeypatch):
         keep = [h for h in root.handlers]
         mk = lambda msg: logging.LogRecord("mcp.client", logging.INFO, "f", 1, msg, None, None)  # noqa: E731
         assert all(not h.filter(mk("Negotiated protocol version: 2025-11-25")) for h in keep)
+        assert all(not h.filter(mk("Unknown SSE event: ping")) for h in keep)
+        assert all(h.filter(mk("Unknown SSE event: other")) for h in keep)  # other unknown events still show
         assert all(h.filter(mk("MCP yahoo: connected, protocol 2025-11-25")) for h in keep)
     finally:
         root.handlers[:] = saved[0]
