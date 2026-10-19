@@ -105,6 +105,24 @@ def test_log_names_keeps_exact_names(caplog):
     assert "get_analyst_estimates" in caplog.text and "get_stock_quote" in caplog.text
 
 
+def test_log_names_is_one_line_cut_at_a_whole_name(caplog):
+    import logging
+
+    from lib.mcp.server import log_names
+    names = ["compare_companies", "get_company", "get_company_metrics", "get_data_notes", "get_events"]
+    head = "MCP t: 5 tools:"
+    with caplog.at_level(logging.INFO, logger="bot"):
+        log_names(head, names, 95)
+        log_names(head, names, 60)
+        log_names(head, names, 0)
+        log_names(head, names, 5)
+    short, cut, unlimited, tiny = (r.getMessage() for r in caplog.records)
+    assert short == f"{head} {', '.join(names)}" and len(short) <= 95
+    assert cut == f"{head} compare_companies, get_company, ..." and len(cut) <= 60
+    assert unlimited == short
+    assert tiny == f"{head} compare_companies, ..."  # the first name is always shown
+
+
 async def test_call_slims_and_caches_identical_concurrent_calls():
     s = make_server(cache_ttl=30)
     a, b = await asyncio.gather(s.call("get_a", {"t": "X"}), s.call("get_a", {"t": "X"}))

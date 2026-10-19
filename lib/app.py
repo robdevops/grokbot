@@ -96,7 +96,8 @@ def build_ctx(st: config.Settings) -> Ctx:
         await alert_down(ctx, server)
 
     ctx.registry = Registry.load(st.mcp_config, timeout=config.MCP_TIMEOUT,
-                                 max_output=st.max_tool_output, on_down=on_down)
+                                 max_output=st.max_tool_output, on_down=on_down,
+                                 log_width=st.log_width)
     return ctx
 
 

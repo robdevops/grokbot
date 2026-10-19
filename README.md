@@ -286,6 +286,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 | `DATA_DIR` | Directory for the bot's data (the database); a relative `DB_PATH` resolves inside it, an absolute one is used as given. Default: systemd's `STATE_DIRECTORY` (see [Running under systemd](#running-under-systemd)), else the working directory. In Docker, set `DATA_DIR=/data` and bind-mount a host directory there so history survives upgrades. |
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
+| `LOG_WIDTH` | Longest line (characters) for the MCP tool lists in the log; a longer list is cut at a whole name and ends in `...` (default 95, 0 = no limit). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
 | `MCP_CONFIG` | MCP server config file (default mcp_servers.json next to bot.py, whatever `DATA_DIR` is; missing = no MCP tools). |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
