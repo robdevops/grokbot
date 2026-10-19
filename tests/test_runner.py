@@ -133,6 +133,12 @@ async def test_forced_search_first_round_and_retry_without_required_on_400():
         await run(b2, registry(), req(must_search=True))
 
 
+async def test_summary_line_counts_the_providers_own_searches(caplog):
+    caplog.set_level("INFO", logger="bot")
+    await run(ScriptedBackend([step("done", searches=3)]), registry(), req(must_search=True))
+    assert any("0 tools, 3 searches" in r.getMessage() for r in caplog.records)
+
+
 async def test_fake_search_call_text_is_recovered_once_and_failures_reported():
     async def search(q):
         raise RuntimeError("rate limited")
