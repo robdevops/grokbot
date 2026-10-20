@@ -72,8 +72,11 @@ def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str
                 fresh: bool = False) -> str:
     """The user turn: transcript, the replied-to message, and the volatile tail (kept last so the
     cached prefix before it is unchanged)."""
-    head = (f"Private one-to-one chat with {sender}, not the group. Transcript:\n{transcript}"
-            if private else f"Group chat transcript:\n{transcript}")
+    if transcript:
+        head = (f"Private one-to-one chat with {sender}, not the group. Transcript:\n{transcript}"
+                if private else f"Group chat transcript:\n{transcript}")
+    else:  # a standalone request (a movers list): what follows is all there is
+        head = f"Private one-to-one chat with {sender}, not the group." if private else "Group chat."
     if reply_quote:
         head += f"\n\nThe last message (#{msg_id}) is a reply to this message:\n{reply_quote}"
     head += middle

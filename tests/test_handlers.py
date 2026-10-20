@@ -196,7 +196,8 @@ async def test_movers_prompt_leaves_out_the_earlier_chat(env, store):
     m.parse_entities = lambda types=None: {"b": "≥ 5.0% at close (ASX):"}
     await run(h, m)
     prompt = backend.seen[0]["prompt"]
-    assert "football" not in prompt and "NVDA +6.1%" in prompt and "explain" in prompt
+    assert "football" not in prompt and "explain" in prompt
+    assert prompt.count("NVDA +6.1%") == 1  # the list once, not also as the last transcript line
 
 
 async def test_movers_list_off_by_default_then_answered_once_without_tagging(env, store):
