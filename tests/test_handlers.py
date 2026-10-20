@@ -188,6 +188,17 @@ async def test_busy_provider_gets_a_plain_reply_and_a_one_line_log(env, store, c
     assert "\n" not in line and not any(r.exc_info for r in caplog.records)
 
 
+async def test_movers_prompt_leaves_out_the_earlier_chat(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("NVDA up on news.")], MOVERS_BOTS="finbotibot")
+    await run(h, user_msg(ctx.bot, "did anyone watch the football last night"))
+    m = user_msg(ctx.bot, "≥ 5.0% at close (ASX):\nNVDA +6.1%\nAMD +5.5%", is_bot=True)
+    m.from_user.is_bot, m.from_user.username = True, "finbotibot"
+    m.parse_entities = lambda types=None: {"b": "≥ 5.0% at close (ASX):"}
+    await run(h, m)
+    prompt = backend.seen[0]["prompt"]
+    assert "football" not in prompt and "NVDA +6.1%" in prompt and "explain" in prompt
+
+
 async def test_movers_list_off_by_default_then_answered_once_without_tagging(env, store):
     text = "≥ 5.0% at close (ASX):\nNVDA +6.1%\nAMD +5.5%"
     for flag, expect in (({}, 0), ({"MOVERS_BOTS": "finbotibot"}, 1)):

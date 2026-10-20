@@ -179,9 +179,12 @@ class Handlers:
                     text += " " + compact(prev.text)[:FOLLOW_UP_CHARS]
         return text
 
-    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False) -> str:
+    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False,
+                         only_this: bool = False) -> str:
         ctx, st = self.ctx, self.ctx.st
         rows = await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
+        if only_this:  # the earlier chat has nothing to do with the request
+            rows = [r for r in rows if r.message_id == msg.message_id]
         transcript = format_rows(rows, ctx.self_name, st.tz, line_max=st.history_line_max,
                                  compact_text=st.token_saver, own_line_max=st.history_own_line_max)
         return chat_prompt(
@@ -237,7 +240,7 @@ class Handlers:
                                kind="preset", chat_id=chat_id)
         elif trig.movers:
             listing = msg.text_html if msg.text else (msg.caption_html or "")
-            text = await self._chat_text(msg, trig, MOVERS_EXPLAIN.format(listing=listing))
+            text = await self._chat_text(msg, trig, MOVERS_EXPLAIN.format(listing=listing), only_this=True)
             parts = [{"type": "text", "text": text}]
             answer = await ask(ctx, parts, route("", st, ctx.registry, force_full=True),
                                must_search=True, cache_key=f"chat-{chat_id}", on_text=on_text,
