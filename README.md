@@ -179,12 +179,12 @@ Each is off by default. The holding-news DM and the movers reply are switched on
   matches none of your groups the reply is the same whether or not the group exists.
 
 ## Signal
-Off by default. Set `SIGNALCLI_PATH` to a [signal-cli](https://github.com/AsamK/signal-cli) executable that already has an
+Off by default. Set `SIGNALCLI_BIN` to a [signal-cli](https://github.com/AsamK/signal-cli) executable that already has an
 account (registered, or linked as a secondary device) and the bot answers on Signal as well as Telegram, with the same
 model, tools, search and history.
 
 ```
-SIGNALCLI_PATH=/opt/signal-cli/bin/signal-cli
+SIGNALCLI_BIN=/opt/signal-cli/bin/signal-cli
 SIGNAL_ALLOWED_SENDERS=aaaaaaaa-0000-4000-8000-000000000000,+61400000000
 ```
 - **How it runs:** at startup the bot runs `signal-cli -o json listAccounts` to learn its own ID (the first account is
@@ -327,7 +327,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |
 | `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
-| `SIGNALCLI_PATH` | Path to the `signal-cli` executable. Setting it turns [Signal](#signal) on: the bot starts `signal-cli daemon` itself. Empty (default) = Signal off. |
+| `SIGNALCLI_BIN` | Path to the `signal-cli` executable. Setting it turns [Signal](#signal) on: the bot starts `signal-cli daemon` itself. Empty (default) = Signal off. |
 | `SIGNAL_ALLOWED_SENDERS` | Signal UUIDs or phone numbers (comma/space separated) that may DM the bot and get Sharesight data on Signal. Empty (default) = nobody. |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
 | `TOKEN_SAVER` | on|off. Master switch for the token-saving heuristics (default on). |

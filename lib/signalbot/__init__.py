@@ -1,4 +1,4 @@
-"""SIGNALCLI_PATH: answer Signal DMs and group mentions through a signal-cli daemon the bot runs itself."""
+"""SIGNALCLI_BIN: answer Signal DMs and group mentions through a signal-cli daemon the bot runs itself."""
 
 from __future__ import annotations
 
