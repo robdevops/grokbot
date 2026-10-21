@@ -26,7 +26,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import config
+from . import config, signalbot
 from .context import Ctx
 from .features import dm_buttons, holding_news, post
 from .features.periods import backfill
@@ -116,6 +116,8 @@ def build_app(ctx: Ctx) -> Application:
             background.append(asyncio.create_task(dm_buttons.push_on_startup(ctx)))
         if st.period_backfill:
             background.append(asyncio.create_task(backfill.loop(ctx)))
+        if st.signal_cli:
+            background.append(asyncio.create_task(signalbot.run(ctx)))
 
     async def post_shutdown(app: Application) -> None:
         for task in background:

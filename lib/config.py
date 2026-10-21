@@ -39,6 +39,8 @@ ENV_VARS: dict[str, str] = {
     "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
+    "SIGNALCLI_PATH": "Path to the signal-cli executable. Setting it turns Signal on: the bot starts `signal-cli daemon` itself, answers DMs from SIGNAL_ALLOWED_SENDERS and group @mentions or replies. Empty (default) = Signal off.",
+    "SIGNAL_ALLOWED_SENDERS": "Signal UUIDs or phone numbers (comma/space separated) that may DM the bot and get Sharesight data on Signal. Empty (default) = nobody.",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
     "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
 }
@@ -77,6 +79,8 @@ class Settings:
     max_tokens: int
     history_limit: int
     log_width: int
+    signal_cli: str  # path to signal-cli; empty = Signal off
+    signal_allowed: frozenset[str]  # lowercase UUIDs/numbers that may DM the bot (and get Sharesight data)
     db_path: str
     tz: ZoneInfo
     mcp_config: str
@@ -194,6 +198,8 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         max_tokens=int(env.get("MAX_TOKENS") or 3000),
         history_limit=int(env.get("HISTORY_LIMIT") or 20),
         log_width=int(env.get("LOG_WIDTH") or 95),
+        signal_cli=env.get("SIGNALCLI_PATH", "").strip(),
+        signal_allowed=frozenset(x.lower() for x in re.split(r"[,\s]+", env.get("SIGNAL_ALLOWED_SENDERS", "")) if x),
         db_path=data_path(env, "DB_PATH", "chat_log.db"),
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
         mcp_config=mcp_config_path(env),
