@@ -188,6 +188,23 @@ async def test_busy_provider_gets_a_plain_reply_and_a_one_line_log(env, store, c
     assert "\n" not in line and not any(r.exc_info for r in caplog.records)
 
 
+async def test_nocontext_sends_only_the_tagging_message_without_the_tag(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("fine"), step("fine too")])
+    await run(h, user_msg(ctx.bot, "did anyone watch the football last night", mid=1))
+    target = user_msg(ctx.bot, "BHP looks cheap", mid=2)
+    await run(h, target)
+    m = user_msg(ctx.bot, "@stockbot  #NoContext what do you make of NVDA?", mid=3)
+    m.reply_to_message = target
+    await run(h, m)
+    prompt = backend.seen[0]["prompt"]
+    assert "NVDA" in prompt and "nocontext" not in prompt.lower()
+    assert "football" not in prompt and "BHP" not in prompt  # no history, no replied-to message
+    assert "is a reply to" not in prompt
+    assert len(m.replies) == 1
+    await run(h, user_msg(ctx.bot, "@stockbot what about NVDA?", mid=4))  # without the tag: history is back
+    assert "football" in backend.seen[1]["prompt"]
+
+
 async def test_movers_prompt_leaves_out_the_earlier_chat(env, store):
     ctx, backend, h = make_ctx(env, store, [step("NVDA up on news.")], MOVERS_BOTS="finbotibot")
     await run(h, user_msg(ctx.bot, "did anyone watch the football last night"))

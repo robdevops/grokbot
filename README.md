@@ -69,6 +69,10 @@ Restart=on-failure
   provider's prompt cache keeps working. The bot's own earlier replies appear as "You" (its latest reply in full, so follow-up questions about it
   work; older ones shortened); a replied-to
   message is quoted even if it is older than the window.
+- **`#nocontext`:** put `#nocontext` anywhere in a message that tags the bot (or in a DM) and the model gets that
+  message alone: no chat history, and nothing quoted from the message it replies to (no photo from it either). The tag
+  itself is removed before the model sees it. Useful for a fresh question that earlier chat would only confuse
+  or make more expensive; the bot's own recent reply is not read either, so follow-ups need the full question.
 - **Shared database:** group history lives in `messages`, shared by every bot pointed at the same
   `DB_PATH` (so two bots in one group see each other's replies). Private chats live in
   `dm_messages`, keyed by bot, because each bot's DM with a person has its own message-ID sequence.

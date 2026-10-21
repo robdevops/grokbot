@@ -33,7 +33,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 
 ## Request flow
 `handlers.on_message` logs the message -> `_trigger` (mention / reply-to-bot / DM / movers list) ->
-`_generate` builds the prompt (`history.format_rows` + `prompts.chat_prompt`) -> `gate.route` picks tools ->
+`_generate` builds the prompt (`history.format_rows` + `prompts.chat_prompt`; `#nocontext` in the message keeps only that message) -> `gate.route` picks tools ->
 `ask.ask` builds a `Request` -> `policy.ask` -> `runner.run` loops `backend.step` / `run_calls` ->
 `format_answer` (md_to_html, link_tickers) -> `reply_chunks` (split_html, save each sent message).
 
