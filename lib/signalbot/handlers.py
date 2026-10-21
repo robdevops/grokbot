@@ -36,13 +36,10 @@ def signal_chunks(model_text: str) -> list[str]:
 
 
 class SignalHandlers:
-    def __init__(self, ctx: Ctx, client: SignalClient, account: str = "", own_id: str = ""):
-        """`account`/`own_id` (what requests name, and the bot's own ACI) are known up front when the bot
-        started the daemon; with a daemon it only connects to, `identify` asks for them."""
-        self.ctx, self.client, self.account, self.own_id = ctx, client, account, own_id
+    def __init__(self, ctx: Ctx, client: SignalClient):
+        """`account` (what requests name) and `own_id` (the bot's own ACI) come from `identify`."""
+        self.ctx, self.client, self.account, self.own_id = ctx, client, "", ""
         self.ready = asyncio.Event()
-        if own_id:
-            self.ready.set()
 
     async def identify(self) -> None:
         """Learn the bot's own account from the daemon (the first one, if it runs several)."""

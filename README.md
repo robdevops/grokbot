@@ -181,27 +181,24 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 ## Signal
 Off by default. The bot answers on Signal as well as Telegram, with the same model, tools, search and history, through a
 [signal-cli](https://github.com/AsamK/signal-cli) account that is already registered (or linked as a secondary device).
-There are two ways to run signal-cli; set one of:
-
-- **`SIGNALCLI_BIN=/opt/signal-cli/bin/signal-cli`: the bot runs the daemon.** At startup it runs
-  `signal-cli -o json listAccounts` to learn its own ID (the first account is used), then starts
-  `signal-cli -o json daemon --socket <temporary socket>` and keeps it running, restarting it if it stops.
-- **`SIGNALCLI_SOCKET=/run/signal-cli/socket`: you run the daemon.** The bot only connects (retrying with a growing
-  pause if the daemon is down or restarts) and asks it for the account with a JSON-RPC `listAccounts`. Start the daemon
-  in multi-account mode, without `-a`: `signal-cli -o json daemon --socket /run/signal-cli/socket`. This wins over
-  `SIGNALCLI_BIN`. It suits a bot under systemd with `DynamicUser=`, `ProtectHome=` and tight limits, where it is easier
-  to run signal-cli as your own user in its own unit.
+You run the signal-cli daemon yourself and the bot connects to its socket:
 
 ```
+signal-cli -o json daemon --socket /run/signal-cli/socket     # multi-account mode: no -a
+SIGNALCLI_SOCKET=/run/signal-cli/socket
 SIGNAL_ALLOWED_SENDERS=aaaaaaaa-0000-4000-8000-000000000000,+61400000000
 ```
-Either way messages arrive, and replies go out, over the daemon's JSON-RPC socket, and nothing else may run a daemon
-on the same account.
+The bot never starts or executes signal-cli, so it needs no access to the binary or to your Signal data: only to the
+socket. Messages arrive, and replies go out, over that one JSON-RPC connection. If the daemon is down or restarts the
+bot retries with a growing pause (up to a minute) and picks up again. At each connection it asks the daemon which
+account it is (JSON-RPC `listAccounts`; the first account is used). Nothing else may run a daemon on the same account.
 
 - **Socket access:** anyone who can write to the socket can send as the account, so keep it in a directory only the
   two services share. For example a group `signal-cli`; a directory made by `systemd-tmpfiles`
   (`d /run/signal-cli 0750 <user> signal-cli -`); the daemon started with `UMask=0007` (or `umask 007`) so the socket is
-  group-writable; and `SupplementaryGroups=signal-cli` in the bot's unit.
+  group-writable; and `SupplementaryGroups=signal-cli` and `After=signal-cli.service` in the bot's unit. This suits a
+  bot under systemd with `DynamicUser=`, `ProtectHome=` and tight limits, with signal-cli running as your own user in
+  its own unit.
 - **DMs:** answered only from the people in `SIGNAL_ALLOWED_SENDERS` (UUIDs or phone numbers, as signal-cli reports
   them); anyone else is logged and ignored. Empty = nobody. These people are also the Signal "admins": only they get
   Sharesight portfolio data.
@@ -338,8 +335,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |
 | `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
-| `SIGNALCLI_BIN` | Path to the `signal-cli` executable. Setting it turns [Signal](#signal) on: the bot starts `signal-cli daemon` itself. Empty (default) = Signal off. |
-| `SIGNALCLI_SOCKET` | Path of the JSON-RPC socket of a `signal-cli daemon` you run yourself. Turns [Signal](#signal) on, and wins over `SIGNALCLI_BIN`: the bot connects instead of starting a daemon. |
+| `SIGNALCLI_SOCKET` | Path of the JSON-RPC socket of a `signal-cli daemon` you run yourself. Setting it turns [Signal](#signal) on. Empty (default) = Signal off. |
 | `SIGNAL_ALLOWED_SENDERS` | Signal UUIDs or phone numbers (comma/space separated) that may DM the bot and get Sharesight data on Signal. Empty (default) = nobody. |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
 | `TOKEN_SAVER` | on|off. Master switch for the token-saving heuristics (default on). |

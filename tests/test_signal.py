@@ -7,7 +7,7 @@ import pytest
 
 from lib import config
 from lib.context import Ctx
-from lib.signalbot.client import SignalClient, SignalError, list_accounts
+from lib.signalbot.client import SignalClient, SignalError
 from lib.signalbot.handlers import SignalHandlers, signal_chunks
 from lib.signalbot.parse import parse, unwrap
 
@@ -94,7 +94,10 @@ def make(env, store, script, **extra):
     st = config.load({**env, "SIGNAL_ALLOWED_SENDERS": ROB.upper(), **extra})
     backend, client = ScriptedBackend(script), FakeSignal()
     ctx = Ctx(st, store, backend, registry(), FakeBot())
-    return ctx, backend, client, SignalHandlers(ctx, client, BOT, BOT)
+    h = SignalHandlers(ctx, client)
+    h.account, h.own_id = BOT, BOT
+    h.ready.set()
+    return ctx, backend, client, h
 
 
 async def test_group_is_answered_on_mention_or_reply_to_the_bot_only(env, store):
@@ -153,9 +156,6 @@ async def test_portfolio_questions_are_for_allowed_senders_only(env, store):
 FAKE_DAEMON = """#!{python}
 import asyncio, json, sys
 args = sys.argv[1:]
-if "listAccounts" in args:
-    print(json.dumps([{{"number": None, "aci": "{bot}"}}]))
-    sys.exit(0)
 sock = args[args.index("--socket") + 1]
 
 async def handle(reader, writer):
@@ -183,20 +183,20 @@ asyncio.run(main())
 
 
 @pytest.fixture
-def fake_signal_cli(tmp_path):
+def fake_daemon(tmp_path):
     path = tmp_path / "signal-cli"
     path.write_text(FAKE_DAEMON.format(python=sys.executable, bot=BOT, envelope=json.dumps(envelope({"message": "hi"}))))
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     return str(path)
 
 
-async def test_a_daemon_you_run_yourself_is_connected_to_and_identified(fake_signal_cli, tmp_path, env, store):
+async def test_a_daemon_you_run_yourself_is_connected_to_and_identified(fake_daemon, tmp_path, env, store):
     sock = str(tmp_path / "ext.sock")
-    daemon = await asyncio.create_subprocess_exec(fake_signal_cli, "daemon", "--socket", sock)
+    daemon = await asyncio.create_subprocess_exec(fake_daemon, "daemon", "--socket", sock)
     got = asyncio.Queue()
-    client = SignalClient(socket_path=sock)
+    client = SignalClient(sock)
     ctx = Ctx(config.load({**env, "SIGNALCLI_SOCKET": sock}), store, ScriptedBackend([]), registry(), FakeBot())
-    assert ctx.st.signal_socket == sock and ctx.st.signal_cli == ""
+    assert ctx.st.signal_socket == sock
     handlers = SignalHandlers(ctx, client)  # doesn't know its account yet
     client.on_message = lambda obj: got.put(obj)
     client.on_connect = handlers.identify
@@ -206,12 +206,16 @@ async def test_a_daemon_you_run_yourself_is_connected_to_and_identified(fake_sig
         await asyncio.wait_for(handlers.ready.wait(), 20)
         assert (handlers.account, handlers.own_id) == (BOT, BOT)
         assert await client.request("send", {"message": "x"}) == {"timestamp": 1234}
+        with pytest.raises(SignalError, match="no good"):
+            await client.request("boom", {})
     finally:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
         daemon.terminate()
         await daemon.wait()
+    with pytest.raises(SignalError, match="isn't connected"):
+        await client.request("send", {})
 
 
 async def test_messages_wait_until_the_account_is_known(env, store):
@@ -228,32 +232,6 @@ async def test_messages_wait_until_the_account_is_known(env, store):
 
 
 async def test_a_missing_socket_is_reported_not_waited_on_forever(tmp_path):
-    client = SignalClient(socket_path=str(tmp_path / "nope"))
+    client = SignalClient(str(tmp_path / "nope"))
     with pytest.raises(RuntimeError, match="couldn't connect to signal-cli's socket"):
-        await client._connect(client.socket_path, None, wait=1)
-
-
-async def test_accounts_are_listed(fake_signal_cli):
-    assert await list_accounts(fake_signal_cli) == [{"number": None, "aci": BOT}]
-
-
-async def test_client_receives_notifications_and_sends_requests(fake_signal_cli):
-    got = asyncio.Queue()
-
-    async def on_message(obj):
-        await got.put(obj)
-
-    client = SignalClient(fake_signal_cli, on_message)
-    task = asyncio.create_task(client.run())
-    try:
-        obj = await asyncio.wait_for(got.get(), 20)
-        assert parse(unwrap(obj)[0], BOT).text == "hi"
-        assert await client.request("send", {"message": "x"}) == {"timestamp": 1234}
-        with pytest.raises(SignalError, match="no good"):
-            await client.request("boom", {})
-    finally:
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-    with pytest.raises(SignalError, match="isn't connected"):
-        await client.request("send", {})
+        await client._connect(wait=1)
