@@ -116,7 +116,7 @@ def build_app(ctx: Ctx) -> Application:
             background.append(asyncio.create_task(dm_buttons.push_on_startup(ctx)))
         if st.period_backfill:
             background.append(asyncio.create_task(backfill.loop(ctx)))
-        if st.signal_cli:
+        if st.signal_cli or st.signal_socket:
             background.append(asyncio.create_task(signalbot.run(ctx)))
 
     async def post_shutdown(app: Application) -> None:

@@ -36,12 +36,36 @@ def signal_chunks(model_text: str) -> list[str]:
 
 
 class SignalHandlers:
-    def __init__(self, ctx: Ctx, client: SignalClient, account: str, own_id: str):
+    def __init__(self, ctx: Ctx, client: SignalClient, account: str = "", own_id: str = ""):
+        """`account`/`own_id` (what requests name, and the bot's own ACI) are known up front when the bot
+        started the daemon; with a daemon it only connects to, `identify` asks for them."""
         self.ctx, self.client, self.account, self.own_id = ctx, client, account, own_id
+        self.ready = asyncio.Event()
+        if own_id:
+            self.ready.set()
+
+    async def identify(self) -> None:
+        """Learn the bot's own account from the daemon (the first one, if it runs several)."""
+        accounts = await self.client.request("listAccounts", {})
+        if not isinstance(accounts, list) or not accounts:
+            raise SignalError("the daemon has no registered account")
+        if len(accounts) > 1:
+            log.warning("Signal: %d accounts registered; using the first", len(accounts))
+        number, aci = accounts[0].get("number"), accounts[0].get("aci") or accounts[0].get("uuid")
+        if not aci:
+            raise SignalError(f"the account has no ACI (listAccounts gave {accounts[0]})")
+        self.account, self.own_id = number or aci, aci
+        self.ready.set()
+        log.info("Signal: answering as account %s", aci)
 
     async def on_message(self, obj: dict) -> None:
         unwrapped = unwrap(obj)
         if unwrapped is None:
+            return
+        try:
+            await asyncio.wait_for(self.ready.wait(), 30)
+        except TimeoutError:
+            log.warning("Signal: dropped a message, the account isn't known yet")
             return
         envelope, account = unwrapped
         if account and account not in (self.account, self.own_id):

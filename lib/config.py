@@ -40,6 +40,7 @@ ENV_VARS: dict[str, str] = {
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
     "SIGNALCLI_BIN": "Path to the signal-cli executable. Setting it turns Signal on: the bot starts `signal-cli daemon` itself, answers DMs from SIGNAL_ALLOWED_SENDERS and group @mentions or replies. Empty (default) = Signal off.",
+    "SIGNALCLI_SOCKET": "Path of the JSON-RPC socket of a signal-cli daemon you run yourself (`signal-cli -o json daemon --socket PATH`). Turns Signal on and takes priority over SIGNALCLI_BIN: the bot connects instead of starting a daemon.",
     "SIGNAL_ALLOWED_SENDERS": "Signal UUIDs or phone numbers (comma/space separated) that may DM the bot and get Sharesight data on Signal. Empty (default) = nobody.",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
     "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
@@ -79,7 +80,8 @@ class Settings:
     max_tokens: int
     history_limit: int
     log_width: int
-    signal_cli: str  # path to signal-cli; empty = Signal off
+    signal_cli: str  # path to signal-cli, which the bot runs as a daemon; empty = not that way
+    signal_socket: str  # socket of a daemon the bot only connects to; either one turns Signal on
     signal_allowed: frozenset[str]  # lowercase UUIDs/numbers that may DM the bot (and get Sharesight data)
     db_path: str
     tz: ZoneInfo
@@ -199,6 +201,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         history_limit=int(env.get("HISTORY_LIMIT") or 20),
         log_width=int(env.get("LOG_WIDTH") or 95),
         signal_cli=env.get("SIGNALCLI_BIN", "").strip(),
+        signal_socket=env.get("SIGNALCLI_SOCKET", "").strip(),
         signal_allowed=frozenset(x.lower() for x in re.split(r"[,\s]+", env.get("SIGNAL_ALLOWED_SENDERS", "")) if x),
         db_path=data_path(env, "DB_PATH", "chat_log.db"),
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),

@@ -35,9 +35,14 @@ async def list_accounts(path: str) -> list[dict]:
 
 
 class SignalClient:
-    def __init__(self, path: str, on_message: Callable[[dict], Awaitable[None]] | None = None):
+    """With `socket_path`, connects to a daemon someone else runs; otherwise starts `path daemon` itself."""
+
+    def __init__(self, path: str = "", on_message: Callable[[dict], Awaitable[None]] | None = None, *,
+                 socket_path: str = ""):
         self.path = path
+        self.socket_path = socket_path
         self.on_message = on_message
+        self.on_connect: Callable[[], Awaitable[None]] | None = None  # runs after every (re)connection
         self._writer: asyncio.StreamWriter | None = None
         self._pending: dict[int, asyncio.Future] = {}
         self._ids = itertools.count(1)
@@ -58,12 +63,16 @@ class SignalClient:
                 if not fut.done():
                     fut.set_exception(SignalError("signal-cli stopped"))
             self._pending.clear()
-            log.warning("Signal: signal-cli stopped; starting it again in %d s", delay)
+            log.warning("Signal: lost signal-cli; trying again in %d s", delay)
             await asyncio.sleep(delay)
             delay = min(delay * 2, 60)
 
     async def _session(self) -> bool:
-        """One daemon's lifetime. True if it got as far as connecting."""
+        """One connection's lifetime. True if it got as far as connecting."""
+        if self.socket_path:
+            reader, writer = await self._connect(self.socket_path, None, wait=5)
+            await self._serve(reader, writer)
+            return True
         sock_dir = Path(tempfile.mkdtemp(prefix="signal-"))
         sock = str(sock_dir / "socket")
         proc = await asyncio.create_subprocess_exec(
@@ -73,13 +82,10 @@ class SignalClient:
         connected = False
         try:
             reader, writer = await self._connect(sock, proc)
-            connected, self._writer = True, writer
-            log.info("Signal: connected to signal-cli")
-            async for line in reader:
-                self._dispatch(line)
+            connected = True
+            await self._serve(reader, writer)
             return connected
         finally:
-            self._writer = None
             if proc.returncode is None:
                 proc.terminate()
                 with contextlib.suppress(Exception):
@@ -89,15 +95,39 @@ class SignalClient:
             pump.cancel()
             shutil.rmtree(sock_dir, ignore_errors=True)
 
-    async def _connect(self, sock: str, proc) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        for _ in range(CONNECT_WAIT * 2):
-            if proc.returncode is not None:
+    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Read the daemon's lines until it closes the connection."""
+        self._writer = writer
+        log.info("Signal: connected to signal-cli")
+        hook = asyncio.create_task(self._on_connect()) if self.on_connect else None
+        try:
+            async for line in reader:
+                self._dispatch(line)
+        finally:
+            self._writer = None
+            if hook:
+                hook.cancel()
+            writer.close()
+
+    async def _on_connect(self) -> None:
+        try:
+            await self.on_connect()
+        except Exception as e:
+            log.error("Signal: %s", e)
+
+    async def _connect(self, sock: str, proc, *, wait: int = CONNECT_WAIT
+                       ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        for _ in range(wait * 2):
+            if proc is not None and proc.returncode is not None:
                 raise RuntimeError(f"signal-cli exited with code {proc.returncode} before it was ready")
             try:
                 return await asyncio.open_unix_connection(sock, limit=LINE_LIMIT)
             except (FileNotFoundError, ConnectionRefusedError):
                 await asyncio.sleep(0.5)
-        raise RuntimeError(f"signal-cli didn't open its socket within {CONNECT_WAIT} s")
+            except PermissionError as e:
+                raise RuntimeError(f"can't open {sock}: {e}. The bot's user needs write access to the socket "
+                                   "and to the directory it is in") from e
+        raise RuntimeError(f"couldn't connect to signal-cli's socket {sock} within {wait} s")
 
     async def _pump_stderr(self, proc) -> None:
         async for line in proc.stderr:
