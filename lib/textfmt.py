@@ -27,9 +27,6 @@ HTML_TAG_RE = re.compile(r"<(/?)([a-z][a-z0-9-]*)\b[^>]*>", re.I)
 _TG_TAGS = r"(?:b|strong|i|em|u|s|code|pre|a|blockquote|tg-spoiler)"
 TG_TAG_RE = re.compile(rf"</?{_TG_TAGS}\b[^>]*>|</?{_TG_TAGS}\b[^>]*$", re.I)
 
-# `#nocontext` in a message: the model gets that message alone (no history, nothing it replies to).
-NO_CONTEXT = re.compile(r"[ \t]*(?<!\w)#nocontext\b", re.I)
-
 # Some models print a tool call as text. A closed block is removed whole; an unclosed one only
 # to the end of its paragraph, so a stray tag early in a reply can't delete the answer after it.
 TOOL_SYNTAX_RE = re.compile(

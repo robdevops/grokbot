@@ -22,11 +22,6 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS dm_messages (
     bot_id INTEGER, chat_id INTEGER, message_id INTEGER, sender TEXT, text TEXT, ts INTEGER,
     reply_to INTEGER, PRIMARY KEY (bot_id, chat_id, message_id));
--- Signal chats, keyed by the bot's account. chat = a group's ID, or "dm:<sender>"; message_id = the
--- sender's timestamp in ms (Signal's own message ID).
-CREATE TABLE IF NOT EXISTS signal_messages (
-    bot TEXT, chat TEXT, message_id INTEGER, sender TEXT, text TEXT, ts INTEGER, reply_to INTEGER,
-    PRIMARY KEY (bot, chat, message_id));
 CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, user_id INTEGER);
 CREATE TABLE IF NOT EXISTS holding_news (username TEXT, ts INTEGER, text TEXT);
 CREATE TABLE IF NOT EXISTS holding_news_mutes (
@@ -123,16 +118,16 @@ class Store:
         return [(r[0], r[1]) for r in self._run("SELECT chat_id, title FROM chats")]
 
     def history(self, chat_id: int, limit: int) -> list[HistoryRow]:
-        """Recent messages, oldest first. See `_window` for which ones."""
-        if is_dm(chat_id):
-            return self._window("dm_messages", "bot_id = ? AND chat_id = ?", (self._own_id(), chat_id), limit)
-        return self._window("messages", "chat_id = ?", (chat_id,), limit)
+        """Recent messages, oldest first.
 
-    def _window(self, table: str, where: str, args: tuple, limit: int) -> list[HistoryRow]:
-        """A plain "last N" window drops its oldest line on every message, changing the start of
+        A plain "last N" window drops its oldest line on every message, changing the start of
         the prompt and defeating prompt caching. Instead the window's start only moves every
         limit/2 messages: it holds between `limit` and 1.5 x `limit` messages and in between
         only grows at the end, so everything before the new messages stays cached."""
+        if is_dm(chat_id):
+            table, where, args = "dm_messages", "bot_id = ? AND chat_id = ?", (self._own_id(), chat_id)
+        else:
+            table, where, args = "messages", "chat_id = ?", (chat_id,)
         total = self._run(f"SELECT COUNT(*) FROM {table} WHERE {where}", args)[0][0]
         step = max(1, limit // 2)
         size = total - max(0, (total - limit) // step * step)
@@ -140,12 +135,6 @@ class Store:
             f"SELECT message_id, sender, text, ts, reply_to FROM {table} "
             f"WHERE {where} ORDER BY message_id DESC LIMIT ?", (*args, size))
         return [HistoryRow(*r) for r in reversed(rows)]
-
-    def save_signal(self, bot: str, chat: str, row: HistoryRow) -> None:
-        self._run("INSERT OR REPLACE INTO signal_messages VALUES (?,?,?,?,?,?,?)", (bot, chat, *row))
-
-    def signal_history(self, bot: str, chat: str, limit: int) -> list[HistoryRow]:
-        return self._window("signal_messages", "bot = ? AND chat = ?", (bot, chat), limit)
 
     def dm_chats(self) -> list[int]:
         """Everyone this bot has a private chat with."""
