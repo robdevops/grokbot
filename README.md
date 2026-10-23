@@ -23,5 +23,6 @@ To keep it running, see [Running under systemd](docs/running.md#running-under-sy
 - [How it works](docs/how-it-works.md): how it answers, search, MCP data tools (`mcp_servers.json`), formatting.
 - [Optional features and commands](docs/features.md): holding-news DM, movers replies, DM buttons, `/credits`.
 - [Caching and token saving](docs/caching.md): the Sharesight history cache and the token-saving heuristics.
-- [Running the bot](docs/running.md): systemd, several instances, logs, troubleshooting.
+- [Running the bot](docs/running.md): systemd, several instances, logs.
+- [Troubleshooting](docs/troubleshooting.md): startup errors, silent bots, MCP servers down.
 - [Development](docs/development.md): tests, fixtures and the code layout.
