@@ -37,14 +37,75 @@ directory before the first start.
 
 ```ini
 [Service]
+Type=simple
 DynamicUser=yes
+StateDirectory=grokbot
 WorkingDirectory=/opt/grokbot
 EnvironmentFile=/opt/grokbot.env
-StateDirectory=grokbot
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/grokbot/.venv/bin/python bot.py
 Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grokbot
+
+# Filesystem isolation
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+InaccessiblePaths=/boot /media /mnt
+UMask=0077
+
+# Privilege restrictions
+AmbientCapabilities=
+CapabilityBoundingSet=
+LockPersonality=yes
+NoNewPrivileges=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+LimitCORE=0
+
+# Kernel and system protection
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+
+# Process isolation
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+
+# Network: HTTPS to the LLM, Telegram and the MCP servers. AF_UNIX is for asyncio and name lookups.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# On a cloud VM, keep the bot away from the metadata server (it hands out the VM's credentials),
+# unless your DNS resolver is that address (check /etc/resolv.conf):
+# IPAddressDeny=169.254.169.254
+
+# Resources: the bot and its npx MCP servers share these
+TasksMax=64
+MemoryAccounting=yes
+MemoryHigh=200M
+MemoryMax=300M
 ```
+Notes on the hardening, which you can try with a drop-in (`systemctl edit grokbot`) and compare with
+`systemd-analyze security grokbot`:
+- **Don't add `MemoryDenyWriteExecute=yes`:** the MCP servers started with `npx` are Node, whose JIT needs
+  writable-and-executable memory, so they would crash at startup.
+- **`SystemCallFilter=` with `SystemCallErrorNumber=EPERM`:** a call outside `@system-service` fails with an error
+  instead of killing the process. If a tool misbehaves after a change, suspect this first.
+- **`UMask=0077`:** the database and its WAL files are private to the service's user, so two bots can't share a
+  `DB_PATH` under different users.
+- **Memory and tasks:** the limits are sized for the bot plus two Node MCP servers. After a busy request look at
+  `systemctl status grokbot` (peak memory, task count) and raise them if it is being throttled.
+
 
 ## Providers
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
