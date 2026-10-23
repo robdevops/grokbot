@@ -8,7 +8,7 @@ Type=simple
 DynamicUser=yes
 StateDirectory=grokbot
 WorkingDirectory=/opt/grokbot
-EnvironmentFile=/opt/grokbot.env
+EnvironmentFile=/etc/grokbot.env
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/grokbot/.venv/bin/python bot.py
 Restart=on-failure
