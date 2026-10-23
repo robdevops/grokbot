@@ -20,9 +20,8 @@ def test_history_encoding_trims_link_heavy_bot_lines():
     from zoneinfo import ZoneInfo
     rows = report.sample_rows()
     tz = ZoneInfo("UTC")
-    raw = format_rows(rows, "Stock (@stockbot)", tz, line_max=400, compact_text=False)
-    slim = format_rows(rows, "Stock (@stockbot)", tz, line_max=240, compact_text=True, own_line_max=160)
-    assert report.tokens(slim) < report.tokens(raw) * 0.8  # the latest bot reply is kept whole
+    slim = format_rows(rows, "Stock (@stockbot)", tz, line_max=240, own_line_max=160)
+    assert report.tokens(slim) < 760  # the latest bot reply is kept whole
     assert "finance.yahoo.com" not in slim and "<b>" not in slim and "NVDA" in slim
 
 

@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Telegram bot for a stock-chat group: answers @mentions/replies/DMs with an LLM (xAI, OpenRouter or z.ai),
-MCP data tools and web search. User-facing docs are in `README.md`; this file is the map.
+MCP data tools and web search. User-facing docs are in `README.md` (quick start) and `docs/`; this file is the map.
 
 ## Commands
 - `make check`: ruff + pytest (no network, a few seconds). Run it before every commit, on Python 3.13.5 (production;
@@ -15,7 +15,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 
 ## Map (`lib/`, each module < ~300 lines)
 - `config.py`: `Settings` from env (`load()`), `ENV_VARS` registry, tuning constants. The only place that
-  knows the provider. Every env var must appear in README.md (a test enforces it).
+  knows the provider. Every env var must appear in docs/configuration.md (a test enforces it).
 - `store.py`: SQLite `Store`: history (`messages` shared by groups, `dm_messages` per bot), users, kv,
   holding-news state, `usage` ledger, `period_cache` (finished Sharesight periods, kept until flushed). Thread-safe; call through `asyncio.to_thread`.
 - `msgtext.py` sender_name/describe. `history.py` transcript lines. `textfmt.py` HTML helpers
@@ -28,6 +28,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - `telegram/`: `handlers.py` (trigger -> request -> reply), `send.py`, `draft.py` (typing + streaming
   drafts), `commands.py` (/credits), `access.py` (who is an admin). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`, `periods/` (local `period_returns` tool, cache-first; `windows.py`, `rows.py`, `backfill.py` = PERIOD_BACKFILL loop).
 - `app.py` wiring/startup; `context.py` `Ctx` (settings, store, backend, registry, bot).
+- `deploy/systemd/`: the example unit `grokbot.service` and the optional `grokbot.service.d/hardening.conf` drop-in (docs/running.md).
 - `lib/` holds only what the bot needs to run. Developer helpers live in `tools/`: `report.py` (`make prompt-report`),
   `capture.py` (real MCP output for fixtures), `period_cache_without_rowid.py` (one-off DB conversion); the bot never imports them.
 
@@ -43,7 +44,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - Parts sent to the model are neutral dicts: `{"type": "text", ...}` / `{"type": "image", "url", "detail"}`;
   tools are `ToolDef`; each backend converts. Don't add `if provider ==` anywhere else.
 - No usernames, portfolio names or other personal names in code or docs: they come from env (README uses placeholders).
-- New env var: add it to `config.ENV_VARS`, `Settings`, and the README table. Optional features stay off by default.
+- New env var: add it to `config.ENV_VARS`, `Settings`, and the table in docs/configuration.md. Optional features stay off by default.
 - Don't make a prompt change without checking `make prompt-report`; budgets are pinned in `tests/test_budgets.py`.
 
 ## Gotchas

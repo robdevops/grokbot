@@ -48,9 +48,8 @@ class ZaiBackend(ChatBackend):
     def __init__(self, st: Settings, client: AsyncOpenAI | None = None, http: httpx.AsyncClient | None = None):
         super().__init__(st, client or AsyncOpenAI(api_key=st.api_key, base_url=BASE_URL, timeout=180))
         self.http = http or httpx.AsyncClient(timeout=30)
-        for model in {st.model, st.fast_model} - {""}:
-            if model not in PRICES:
-                log.warning("No z.ai price for model %s; its cost will show $0", model)
+        if st.model not in PRICES:
+            log.warning("No z.ai price for model %s; its cost will show $0", st.model)
 
     def _kwargs(self, req: Request, tool_choice: str | None) -> dict:
         kw: dict = {

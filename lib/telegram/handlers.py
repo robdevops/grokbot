@@ -42,14 +42,11 @@ def mentions(text: str, username: str | None) -> bool:
     return bool(username and re.search(rf"(?<![\w@])@{re.escape(username)}(?!\w)", text, re.I))
 
 
-def photo_file_id(msg: Message, *, small: bool) -> str | None:
-    """A photo's file id: with `small`, the smallest size at least 640 px wide (fewer image
-    tokens), otherwise the largest."""
+def photo_file_id(msg: Message) -> str | None:
+    """A photo's file id: the smallest size at least 640 px wide (fewer image tokens)."""
     if msg.photo:
         sizes = sorted(msg.photo, key=lambda p: p.width)
-        if small:
-            return next((p for p in sizes if p.width >= 640), sizes[-1]).file_id
-        return sizes[-1].file_id
+        return next((p for p in sizes if p.width >= 640), sizes[-1]).file_id
     doc = msg.document
     if doc and (doc.mime_type or "") in ("image/jpeg", "image/png"):
         return doc.file_id
@@ -145,11 +142,9 @@ class Handlers:
 
     # -- building the request --------------------------------------------------------
     async def _images(self, msg: Message, trig: Trigger) -> list[dict]:
-        st = self.ctx.st
-        small = st.token_saver
-        detail = "high" if (not small or READ_IMAGE_WORDS.search(trig.text)) else "low"
+        detail = "high" if READ_IMAGE_WORDS.search(trig.text) else "low"
         sources = () if trig.movers else (trig.reply_target, msg)  # movers: the caption is enough
-        ids = [fid for m in sources if m and (fid := photo_file_id(m, small=small))]
+        ids = [fid for m in sources if m and (fid := photo_file_id(m))]
         found = await asyncio.gather(
             *(image_part(self.ctx.bot, f, detail) for f in ids[:config.MAX_IMAGES]),
             return_exceptions=True)
@@ -169,7 +164,7 @@ class Handlers:
             return None
         who = "You" if trig.replied_to_bot else sender_name(t)
         body = describe(t)
-        return f"[#{t.message_id}] {who}: {compact(body) if self.ctx.st.token_saver else body}"
+        return f"[#{t.message_id}] {who}: {compact(body)}"
 
     async def _gate_text(self, msg: Message, trig: Trigger) -> str:
         """What the tool gate reads: the message and what it replies to. A short follow-up ("what about in dollar
@@ -191,12 +186,12 @@ class Handlers:
         if trig.nocontext:  # only the message that tagged the bot
             rows = [r._replace(text=NO_CONTEXT.sub("", r.text).strip(), reply_to=None)
                     for r in rows if r.message_id == msg.message_id]
-        transcript = format_rows(rows, ctx.self_name, st.tz, line_max=st.history_line_max,
-                                 compact_text=st.token_saver, own_line_max=st.history_own_line_max)
+        transcript = format_rows(rows, ctx.self_name, st.tz, line_max=config.HISTORY_LINE_MAX,
+                                 own_line_max=config.HISTORY_OWN_LINE_MAX)
         return chat_prompt(
             transcript=transcript, sender=sender_name(msg), private=trig.private,
             reply_quote=self._quote(trig), msg_id=msg.message_id, now=ctx.now(),
-            down=down_note(ctx.registry.down()), saver=st.token_saver, middle=middle, fresh=fresh)
+            down=down_note(ctx.registry.down()), middle=middle, fresh=fresh)
 
     # -- answering ---------------------------------------------------------------------
     async def _answer(self, msg: Message, trig: Trigger) -> None:

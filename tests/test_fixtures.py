@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from lib import config
 from lib.features import holding_news
 from lib.mcp.results import slim_result, table_records
 from lib.mcp.schema import compact_description, compact_schema
@@ -106,11 +107,11 @@ def test_real_yahoo_results_are_markdown_tables_squeezed_and_other_text_left_alo
         assert (len(slim) < len(text)) if "\n|" in text else (slim == text)
 
 
-def test_nvda_financial_statements_fit_the_tool_result_cap_with_margin(settings):
+def test_nvda_financial_statements_fit_the_tool_result_cap_with_margin():
     text = (FIX / "yahoo" / "get_financial_statements__NVDA.txt").read_text().rstrip("\n")
     slim = slim_result(text, "yahoo")
-    assert len(text) > settings.max_tool_output  # as captured it would be cut off mid-table
-    assert len(slim) < settings.max_tool_output * 0.6  # squeezed: whole statements fit, with room to spare
+    assert len(text) > config.MAX_TOOL_OUTPUT  # as captured it would be cut off mid-table
+    assert len(slim) < config.MAX_TOOL_OUTPUT * 0.6  # squeezed: whole statements fit, with room to spare
     assert "|Net Income|120.067B|72.88B|29.76B|4.368B|-|" in slim
     assert not any(bad in slim for bad in ("00:00:00", "|nan|", "---", "  "))
     assert [h for h in slim.splitlines() if h.startswith("## ")] == [
