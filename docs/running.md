@@ -16,16 +16,13 @@ sudo cp deploy/systemd/grokbot.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now grokbot
 ```
 
-Optional sandboxing is a separate drop-in, so the basic unit stays short. Add it, check it with
-`systemd-analyze security grokbot`, and remove the file to undo it:
+Optional sandboxing is a separate drop-in. Delete the file to undo it:
 
 ```
 sudo mkdir -p /etc/systemd/system/grokbot.service.d
 sudo cp deploy/systemd/grokbot.service.d/hardening.conf /etc/systemd/system/grokbot.service.d/
 sudo systemctl daemon-reload && sudo systemctl restart grokbot
 ```
-The comments in `hardening.conf` explain the settings that can bite: no `MemoryDenyWriteExecute` (the `npx` MCP
-servers are Node), the system-call filter, `UMask=0077` and the memory and task limits.
 
 ## Running several instances
 Instances can run side by side with different environments (for example one on xAI and one on
