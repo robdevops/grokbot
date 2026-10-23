@@ -26,95 +26,29 @@ from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (G
 5. `python bot.py [label]`
 
 The optional `label` is ignored; it only appears in `ps`/`top` so you can tell instances apart.
-A systemd unit just needs `ExecStart=/usr/bin/python3 /path/to/bot.py mimo` and an `Environment=`
-or `EnvironmentFile=` for the variables below.
+See [Running under systemd](#running-under-systemd) for a service file.
 
 ### Running under systemd
-With `StateDirectory=`, systemd sets `STATE_DIRECTORY` and the bot keeps its database there (`DATA_DIR`
-defaults to it), so the code directory can stay read-only. `mcp_servers.json` is read from the checkout
-unless `MCP_CONFIG` says otherwise. Copy an existing `chat_log.db` (and `-wal`/`-shm`) into the state
-directory before the first start.
+`deploy/systemd/grokbot.service` is a basic unit. With `StateDirectory=`, systemd sets `STATE_DIRECTORY` and the bot
+keeps its database there (`DATA_DIR` defaults to it), so the code directory can stay read-only. `mcp_servers.json` is
+read from the checkout unless `MCP_CONFIG` says otherwise. Copy an existing `chat_log.db` (and `-wal`/`-shm`) into the
+state directory before the first start. Edit the paths (`/opt/grokbot`, `/opt/grokbot.env`) to match yours.
 
-```ini
-[Unit]
-Description=grokbot
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-DynamicUser=yes
-StateDirectory=grokbot
-WorkingDirectory=/opt/grokbot
-EnvironmentFile=/opt/grokbot.env
-Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/grokbot/.venv/bin/python bot.py
-Restart=on-failure
-RestartSec=10s
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=grokbot
-
-# Filesystem isolation
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-PrivateDevices=yes
-InaccessiblePaths=/boot /media /mnt
-UMask=0077
-
-# Privilege restrictions
-AmbientCapabilities=
-CapabilityBoundingSet=
-LockPersonality=yes
-NoNewPrivileges=yes
-RestrictRealtime=yes
-RestrictSUIDSGID=yes
-SystemCallArchitectures=native
-SystemCallErrorNumber=EPERM
-SystemCallFilter=@system-service
-LimitCORE=0
-
-# Kernel and system protection
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectKernelLogs=yes
-ProtectControlGroups=yes
-ProtectClock=yes
-ProtectHostname=yes
-
-# Process isolation
-ProtectProc=invisible
-ProcSubset=pid
-RestrictNamespaces=yes
-
-# Network: HTTPS to the LLM, Telegram and the MCP servers. AF_UNIX is for asyncio and name lookups.
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-# On a cloud VM, keep the bot away from the metadata server (it hands out the VM's credentials),
-# unless your DNS resolver is that address (check /etc/resolv.conf):
-# IPAddressDeny=169.254.169.254
-
-# Resources: the bot and its npx MCP servers share these
-TasksMax=64
-MemoryAccounting=yes
-MemoryHigh=200M
-MemoryMax=300M
-
-[Install]
-WantedBy=multi-user.target
 ```
-Save it as `/etc/systemd/system/grokbot.service`, then `sudo systemctl daemon-reload && sudo systemctl enable --now grokbot`.
-Notes on the hardening, which you can try with a drop-in (`systemctl edit grokbot`) and compare with
-`systemd-analyze security grokbot`:
-- **Don't add `MemoryDenyWriteExecute=yes`:** the MCP servers started with `npx` are Node, whose JIT needs
-  writable-and-executable memory, so they would crash at startup.
-- **`SystemCallFilter=` with `SystemCallErrorNumber=EPERM`:** a call outside `@system-service` fails with an error
-  instead of killing the process. If a tool misbehaves after a change, suspect this first.
-- **`UMask=0077`:** the database and its WAL files are private to the service's user, so two bots can't share a
-  `DB_PATH` under different users.
-- **Memory and tasks:** the limits are sized for the bot plus two Node MCP servers. After a busy request look at
-  `systemctl status grokbot` (peak memory, task count) and raise them if it is being throttled.
+sudo cp deploy/systemd/grokbot.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now grokbot
+```
 
+Optional sandboxing is a separate drop-in, so the basic unit stays short. Add it, check it with
+`systemd-analyze security grokbot`, and remove the file to undo it:
+
+```
+sudo mkdir -p /etc/systemd/system/grokbot.service.d
+sudo cp deploy/systemd/grokbot.service.d/hardening.conf /etc/systemd/system/grokbot.service.d/
+sudo systemctl daemon-reload && sudo systemctl restart grokbot
+```
+The comments in `hardening.conf` explain the settings that can bite: no `MemoryDenyWriteExecute` (the `npx` MCP
+servers are Node), the system-call filter, `UMask=0077` and the memory and task limits.
 
 ## Providers
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
