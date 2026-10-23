@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import sys
 from datetime import date, timedelta
 
@@ -106,7 +105,7 @@ async def capture(server: MCPServer, days: int) -> None:
 
 
 async def run(label: str, days: int) -> int:
-    registry = Registry.load(config.mcp_config_path(os.environ), timeout=config.MCP_TIMEOUT,
+    registry = Registry.load(str(config.MCP_CONFIG), timeout=config.MCP_TIMEOUT,
                              max_output=10**7)
     server = registry.servers.get(label)
     if server is None:

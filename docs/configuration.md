@@ -42,7 +42,6 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
 | `LOG_WIDTH` | Longest line (characters) for the MCP tool lists in the log; a longer list is cut at a whole name and ends in `...` (default 95, 0 = no limit). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
-| `MCP_CONFIG` | MCP server config file (default mcp_servers.json next to bot.py, whatever `DATA_DIR` is; missing = no MCP tools). |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
 | `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
 | `PERIOD_BACKFILL` | Comma list of Sharesight portfolio names (or `all`) whose returns per day, week, month, quarter and year are fetched into the local cache in the background (about 1,650 Sharesight calls per portfolio the first time, a few hours), so "best day since inception" answers instantly. Default `all`; list names to limit it, or `off` to disable. See [Caching Sharesight history](caching.md#caching-sharesight-history). |

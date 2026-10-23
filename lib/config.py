@@ -31,7 +31,6 @@ ENV_VARS: dict[str, str] = {
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
     "LOG_WIDTH": "Longest line (characters) for the MCP tool lists in the log; longer lists end in \"...\" (default 95, 0 = no limit).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
-    "MCP_CONFIG": "MCP server config file (default mcp_servers.json next to bot.py; missing = no MCP tools).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
     "PERIOD_BACKFILL": "Comma list of Sharesight portfolio names (or all) whose daily/weekly/monthly/quarterly/yearly returns are fetched into the local cache in the background, so period questions answer instantly. Default all; list names to limit it, or off to disable.",
@@ -79,7 +78,6 @@ class Settings:
     log_width: int
     db_path: str
     tz: ZoneInfo
-    mcp_config: str
     admin_chats: frozenset[int]  # user IDs (alerts + admin commands) and group chat IDs (alerts only)
     admin_only: bool
     movers_bots: frozenset[str]
@@ -117,6 +115,7 @@ class Settings:
 
 
 ROOT = Path(__file__).resolve().parent.parent  # the checkout, where bot.py is
+MCP_CONFIG = ROOT / "mcp_servers.json"  # the MCP servers, next to bot.py (not under DATA_DIR)
 
 
 def data_path(env: Mapping[str, str], var: str, default: str) -> str:
@@ -126,10 +125,6 @@ def data_path(env: Mapping[str, str], var: str, default: str) -> str:
     data_dir = env.get("DATA_DIR", "").strip() or env.get("STATE_DIRECTORY", "").split(":")[0].strip()
     return os.path.join(data_dir, name) if data_dir else name  # join keeps an absolute `name` as is
 
-
-def mcp_config_path(env: Mapping[str, str]) -> str:
-    """MCP_CONFIG, default mcp_servers.json next to bot.py. Deployment config, so DATA_DIR doesn't apply."""
-    return env.get("MCP_CONFIG", "").strip() or str(ROOT / "mcp_servers.json")
 
 
 def _flag(env: Mapping[str, str], name: str, default: bool = False) -> bool:
@@ -196,7 +191,6 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         log_width=int(env.get("LOG_WIDTH") or 95),
         db_path=data_path(env, "DB_PATH", "chat_log.db"),
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
-        mcp_config=mcp_config_path(env),
         admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
         admin_only=_flag(env, "ADMIN_ONLY", default=True),
         movers_bots=frozenset(

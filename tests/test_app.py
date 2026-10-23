@@ -64,7 +64,7 @@ def test_main_accepts_and_ignores_a_label_and_unknown_args(monkeypatch, tmp_path
     monkeypatch.delenv("XAI_API_KEY", raising=False)
     monkeypatch.setenv("ADMIN_ONLY", "off")
     monkeypatch.setenv("DB_PATH", str(tmp_path / "x.db"))
-    monkeypatch.setenv("MCP_CONFIG", str(tmp_path / "none.json"))
+    monkeypatch.setattr(config, "MCP_CONFIG", tmp_path / "none.json")
     monkeypatch.setattr(app.Application, "run_polling", lambda self, **kw: started.update(kw))
     app.main(["mimo", "--whatever"])
     assert started["allowed_updates"] == ["message", "edited_message"]
@@ -78,7 +78,7 @@ def test_startup_logs_the_git_hash_and_whether_the_backfill_is_on(monkeypatch, t
     monkeypatch.setenv("OPENROUTER_API_KEY", "b")
     monkeypatch.delenv("XAI_API_KEY", raising=False)
     monkeypatch.setenv("DB_PATH", str(tmp_path / "x.db"))
-    monkeypatch.setenv("MCP_CONFIG", str(tmp_path / "none.json"))
+    monkeypatch.setattr(config, "MCP_CONFIG", tmp_path / "none.json")
     monkeypatch.setattr(app.Application, "run_polling", lambda self, **kw: None)
     caplog.set_level("INFO", logger="bot")
     monkeypatch.setattr(app, "git_hash", lambda: "abc1234")

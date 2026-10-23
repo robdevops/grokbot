@@ -4,7 +4,7 @@
 ## Running under systemd
 `deploy/systemd/grokbot.service` is a basic unit. With `StateDirectory=`, systemd sets `STATE_DIRECTORY` and the bot
 keeps its database there (`DATA_DIR` defaults to it), so the code directory can stay read-only. `mcp_servers.json` is
-read from the checkout unless `MCP_CONFIG` says otherwise. A new install needs nothing more: the bot creates its
+read from the checkout. A new install needs nothing more: the bot creates its
 database on the first start. Put the keys and settings in `/etc/grokbot.env` (`KEY=value` lines; owned by root, mode 0600: systemd reads it, so the
 bot's own user never needs access). Edit the paths (`/opt/grokbot`, `/etc/grokbot.env`) to match yours.
 
