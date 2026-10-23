@@ -33,19 +33,26 @@ def _as_input(item) -> dict:
     return item.model_dump(exclude_none=True) if hasattr(item, "model_dump") else dict(item)
 
 
-def answer_text(resp) -> str:
-    """The response's last message. `output_text` joins every message, and with server-side search
-    the model can write a draft, search, then write the answer, all in one response."""
+def answer_text(resp, tail: str | None = None) -> str:
+    """The response's last message, and in it the last text part. `output_text` joins everything, and
+    with server-side search the model can write a draft, search, then write the answer, as separate
+    messages, as parts of one, or as one run of text with the searches in between. `tail` is the text
+    streamed after the last search call; when the chosen text ends with it, the draft before it goes."""
     messages = [i for i in resp.output if i.type == "message"]
     parts = [[getattr(c, "text", "") or "" for c in m.content if c.type == "output_text"] for m in messages]
     texts = ["".join(p) for p in parts]
-    for p in parts:
-        if len([t for t in p if t.strip()]) > 1:  # not handled yet: this line tells us if it happens
-            log.info("xAI message had %d text parts (%s chars)", len(p), "+".join(str(len(t)) for t in p))
     if len([t for t in texts if t.strip()]) > 1:
         log.info("xAI response had %d messages; kept the last (items: %s)", len(texts),
                  " ".join(i.type for i in resp.output))
-    return next((t for t in reversed(texts) if t.strip()), resp.output_text or "").strip()
+    for p in parts:
+        if len([t for t in p if t.strip()]) > 1:  # not handled yet: this line tells us if it happens
+            log.info("xAI message had %d text parts (%s chars)", len(p), "+".join(str(len(t)) for t in p))
+    text = next((t for t in reversed(texts) if t.strip()), resp.output_text or "").strip()
+    if tail and tail.strip() and len(tail.strip()) < len(text) and text.endswith(tail.strip()):
+        log.info("xAI wrote %d chars before a search call; kept the %d after it (items: %s)",
+                 len(text) - len(tail.strip()), len(tail.strip()), " ".join(i.type for i in resp.output))
+        return tail.strip()
+    return text
 
 
 class XaiBackend(Backend):
@@ -87,12 +94,17 @@ class XaiBackend(Backend):
 
     async def _create(self, req: Request, kw: dict, **inputs):
         stream = await self.client.responses.create(**kw, **inputs)
-        text, final = "", None
+        text, final, tail = "", None, None
         async for event in stream:
             if event.type == "response.output_item.added" and event.item.type == "message":
                 text = ""  # a new message replaces the draft before it
+            elif event.type == "response.output_item.added" and event.item.type.endswith("_search_call"):
+                if text.strip():  # text written before a search is a draft; only what follows counts
+                    text, tail = "", ""
             elif event.type == "response.output_text.delta":
                 text += event.delta
+                if tail is not None:
+                    tail = text
                 if req.on_text:
                     req.on_text(text)
             elif event.type in ("response.completed", "response.incomplete", "response.failed"):
@@ -102,23 +114,23 @@ class XaiBackend(Backend):
         if final.status == "failed":
             msg = f"xAI response failed: {final.error}"
             raise (Overloaded if getattr(final.error, "code", None) == "server_error" else RuntimeError)(msg)
-        return final
+        return final, tail
 
     async def step(self, conv: dict, req: Request, *, tool_choice: str | None) -> Step:
         kw = self._kwargs(req, tool_choice)
         prev = conv["resp"]
         try:
             if self.stateless or prev is None:
-                resp = await self._create(req, kw, input=conv["input"])
+                resp, tail = await self._create(req, kw, input=conv["input"])
             else:
-                resp = await self._create(req, kw, previous_response_id=prev.id, input=conv["pending"])
+                resp, tail = await self._create(req, kw, previous_response_id=prev.id, input=conv["pending"])
         except BadRequestError as e:
             if prev is None or not self.stateless:
                 raise
             log.warning("xAI rejected the replayed conversation (%s); using previous_response_id "
                         "from now on", e)
             self.stateless = False
-            resp = await self._create(req, kw, previous_response_id=prev.id, input=conv["last_results"])
+            resp, tail = await self._create(req, kw, previous_response_id=prev.id, input=conv["last_results"])
         conv["resp"] = resp
         calls = [Call(i.call_id, i.name, i.arguments) for i in resp.output if i.type == "function_call"]
         u = resp.usage
@@ -130,7 +142,7 @@ class XaiBackend(Backend):
             cost=(getattr(u, "cost_in_usd_ticks", 0) or 0) / TICKS_PER_USD,
         )
         searches = sum(1 for i in resp.output if i.type.endswith("_search_call"))
-        return Step(answer_text(resp), calls, usage, resp.status, searches)
+        return Step(answer_text(resp, tail), calls, usage, resp.status, searches)
 
     def add_results(self, conv: dict, step: Step, results: list[str]) -> None:
         items = [{"type": "function_call_output", "call_id": c.id, "output": out}

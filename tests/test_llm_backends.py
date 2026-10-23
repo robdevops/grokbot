@@ -258,6 +258,38 @@ async def test_xai_logs_a_message_with_several_text_parts_and_still_joins_them(c
         "xAI message had 2 text parts (3+3 chars)"]
 
 
+async def test_xai_drops_text_written_before_a_search_inside_one_message(caplog):
+    from types import SimpleNamespace as N
+    caplog.set_level("INFO", logger="bot")
+    st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
+    message = xai_message("generic draft.answer from the news")
+    items = [N(type="web_search_call"), message]
+    events = [N(type="response.output_item.added", item=message),
+              N(type="response.output_text.delta", delta="generic draft."),
+              N(type="response.output_item.added", item=items[0]),
+              N(type="response.output_text.delta", delta="answer from the news"),
+              xai_final(items, text="generic draft.answer from the news")]
+    seen = []
+    b = XaiBackend(st, FakeXaiClient(events))
+    r = req(on_text=seen.append)
+    step = await b.step(b.start(r), r, tool_choice=None)
+    assert step.text == "answer from the news" and step.searches == 1
+    assert seen == ["generic draft.", "answer from the news"]
+    assert any("wrote 14 chars before a search call" in m.getMessage() for m in caplog.records)
+
+
+async def test_xai_leaves_text_alone_when_no_search_interrupts_it():
+    from types import SimpleNamespace as N
+    st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
+    message = xai_message("one answer")
+    events = [N(type="response.output_item.added", item=message),
+              N(type="response.output_text.delta", delta="one answer"),
+              xai_final([message], text="one answer")]
+    b = XaiBackend(st, FakeXaiClient(events))
+    r = req()
+    assert (await b.step(b.start(r), r, tool_choice=None)).text == "one answer"
+
+
 async def test_xai_failed_response_at_capacity_is_overloaded_other_failures_are_not():
     from types import SimpleNamespace as N
     st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})

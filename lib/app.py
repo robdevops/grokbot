@@ -59,9 +59,11 @@ def setup_logging() -> None:
 
 
 def _drop_protocol_line(record: logging.LogRecord) -> bool:
-    """The MCP library's own "Negotiated protocol version" line doesn't say which server it is about; the
-    bot logs "MCP <name>: connected, protocol ..." instead."""
-    return not record.getMessage().startswith("Negotiated protocol version")
+    """Library log lines that are noise here: the MCP library's own "Negotiated protocol version" line
+    doesn't say which server it is about (the bot logs "MCP <name>: connected, protocol ..." instead), and
+    a remote server's 30 s keepalive arrives as an "Unknown SSE event: ping" warning."""
+    msg = record.getMessage()
+    return not (msg.startswith("Negotiated protocol version") or msg == "Unknown SSE event: ping")
 
 
 async def alert_down(ctx: Ctx, server: MCPServer) -> None:
@@ -94,7 +96,8 @@ def build_ctx(st: config.Settings) -> Ctx:
         await alert_down(ctx, server)
 
     ctx.registry = Registry.load(st.mcp_config, timeout=config.MCP_TIMEOUT,
-                                 max_output=st.max_tool_output, on_down=on_down)
+                                 max_output=st.max_tool_output, on_down=on_down,
+                                 log_width=st.log_width)
     return ctx
 
 

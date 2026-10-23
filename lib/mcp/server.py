@@ -9,7 +9,6 @@ import json
 import logging
 import re
 import tempfile
-import textwrap
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
@@ -44,11 +43,11 @@ class MCPServer:
     entered and exited in the same task."""
 
     def __init__(self, label: str, cfg: dict, *, timeout: float, max_output: int,
-                 on_down: Callable[[MCPServer], Awaitable[None]] | None = None):
+                 on_down: Callable[[MCPServer], Awaitable[None]] | None = None, log_width: int = 95):
         self.label = re.sub(r"[^A-Za-z0-9_-]", "_", label)
         self.cfg = cfg
         self.description = cfg.get("description", "")
-        self.timeout, self.max_output, self.on_down = timeout, max_output, on_down
+        self.timeout, self.max_output, self.on_down, self.log_width = timeout, max_output, on_down, log_width
         self.session: ClientSession | None = None
         self.error: str | None = None  # why the server is down, if it is
         self.tools: list[ToolDef] = []
@@ -148,9 +147,9 @@ class MCPServer:
         self._warn_unknown_names(listed, allow | blocked | set(self._warm))
         enabled = sorted(self.fn_names.values())
         skipped = sorted(t.name for t in listed if t.name not in enabled)
-        log_names(f"MCP {self.label}: {len(enabled)} tools:", enabled)
+        log_names(f"MCP {self.label}: {len(enabled)} tools:", enabled, self.log_width)
         if skipped:
-            log_names(f"MCP {self.label}: {len(skipped)} skipped:", skipped)
+            log_names(f"MCP {self.label}: {len(skipped)} skipped:", skipped, self.log_width)
 
     def _warn_unknown_names(self, listed, configured: set[str]) -> None:
         """A blocked/allowed name that matches no tool does nothing; say so (and what was meant)."""
@@ -290,7 +289,7 @@ class Registry:
 
     @classmethod
     def load(cls, path: str, *, timeout: float, max_output: int,
-             on_down: Callable[[MCPServer], Awaitable[None]] | None = None) -> Registry:
+             on_down: Callable[[MCPServer], Awaitable[None]] | None = None, log_width: int = 95) -> Registry:
         """Servers from a JSON file ({"mcpServers": {...}} or Claude Desktop style); a missing
         file means no servers."""
         try:
@@ -299,7 +298,8 @@ class Registry:
         except FileNotFoundError:
             return cls([])
         cfg = cfg.get("mcpServers", cfg)
-        return cls([MCPServer(label, c, timeout=timeout, max_output=max_output, on_down=on_down)
+        return cls([MCPServer(label, c, timeout=timeout, max_output=max_output, on_down=on_down,
+                              log_width=log_width)
                     for label, c in cfg.items() if not c.get("disabled")])
 
     def start(self) -> None:
@@ -330,11 +330,18 @@ class Registry:
         return None
 
 
-def log_names(head: str, names: list[str], width: int = 80) -> None:
-    """Log a list of tool names on lines short enough not to wrap in a terminal or journal."""
-    lines = textwrap.wrap(", ".join(names), width - len(head))
-    for i, line in enumerate(lines):
-        log.info("%s %s", head if i == 0 else " " * len(head), line)
+def log_names(head: str, names: list[str], width: int = 95) -> None:
+    """Log a list of tool names on one line of at most `width` characters (0 = no limit). A list that
+    doesn't fit is cut at a whole name and ends in "..."."""
+    line = f"{head} {', '.join(names)}"
+    if width and len(line) > width:
+        kept = f"{head} "
+        for i, name in enumerate(names):
+            if len(kept) + len(name) + len(", ...") > width and i:
+                break
+            kept += f"{name}, "
+        line = kept + "..."
+    log.info("%s", line)
 
 
 def _leaf_errors(e: BaseException) -> list[BaseException]:

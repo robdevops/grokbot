@@ -198,8 +198,8 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
         break
     if req.must_search and not (tool_calls or searched):
         log.warning("This request needed a search, but the answer shows no sign of one")
-    log.info("%.1fs, %d rounds, %d tools: in %d (%.0f%% cached) out %d, $%.4f",
-             time.monotonic() - t0, rounds, tool_calls, total.tokens_in, total.cached_pct,
+    log.info("%.1fs, %d rounds, %d tools, %d searches: in %d (%.0f%% cached) out %d, $%.4f",
+             time.monotonic() - t0, rounds, tool_calls, searched, total.tokens_in, total.cached_pct,
              total.tokens_out, total.cost)
     text = TOOL_SYNTAX_RE.sub("", step.text).strip()
     if not text and step.finish == "length" and tool_calls:

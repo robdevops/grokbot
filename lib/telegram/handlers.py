@@ -33,6 +33,7 @@ PORTFOLIO_ADMINS_ONLY = "Portfolio data is for admins only."
 FOLLOW_UP_WORDS = 12 # a message this short right after the bot's reply may be a follow-up to it
 FOLLOW_UP_SECONDS = 30 * 60
 FOLLOW_UP_CHARS = 400  # of the bot's reply that the tool gate also reads
+NO_CONTEXT = re.compile(r"[ \t]*(?<!\w)#nocontext\b", re.I)  # the message alone, no chat history or reply target
 READ_IMAGE_WORDS = re.compile(r"\b(read|text|says?|chart|table|number|screenshot|ocr|zoom|detail|label)\b", re.I)
 
 
@@ -70,6 +71,7 @@ class Trigger:
     movers: bool
     reply_target: Message | None
     replied_to_bot: bool
+    nocontext: bool = False
 
 
 class Handlers:
@@ -120,7 +122,10 @@ class Handlers:
                               and reply_target.from_user.id == bot.id)
         if not (is_movers or private or mentions(text, bot.username) or replied_to_bot):
             return None
-        return Trigger(text, private, is_movers, reply_target, replied_to_bot)
+        nocontext = bool(NO_CONTEXT.search(text))
+        if nocontext:  # the model never sees the tag, or what the message replies to
+            text, reply_target = NO_CONTEXT.sub("", text).strip(), None
+        return Trigger(text, private, is_movers, reply_target, replied_to_bot, nocontext)
 
     async def _command(self, msg: Message, trig: Trigger) -> bool:
         """Private-chat commands handled here (/credits has its own handler)."""
@@ -171,7 +176,7 @@ class Handlers:
         terms?") sent right after the bot's own reply also gets the start of that reply, so it counts as part of
         the same (portfolio, market...) conversation instead of reaching the model with no tools."""
         text = trig.text + " " + (describe(trig.reply_target) if trig.reply_target else "")
-        if trig.reply_target is None and len(trig.text.split()) <= FOLLOW_UP_WORDS:
+        if trig.reply_target is None and not trig.nocontext and len(trig.text.split()) <= FOLLOW_UP_WORDS:
             rows = await asyncio.to_thread(self.ctx.store.history, msg.chat_id, 2)
             if len(rows) >= 2 and rows[-1].message_id == msg.message_id:
                 prev = rows[-2]
@@ -179,9 +184,13 @@ class Handlers:
                     text += " " + compact(prev.text)[:FOLLOW_UP_CHARS]
         return text
 
-    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False) -> str:
+    async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False,
+                         no_history: bool = False) -> str:
         ctx, st = self.ctx, self.ctx.st
-        rows = await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
+        rows = [] if no_history else await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
+        if trig.nocontext:  # only the message that tagged the bot
+            rows = [r._replace(text=NO_CONTEXT.sub("", r.text).strip(), reply_to=None)
+                    for r in rows if r.message_id == msg.message_id]
         transcript = format_rows(rows, ctx.self_name, st.tz, line_max=st.history_line_max,
                                  compact_text=st.token_saver, own_line_max=st.history_own_line_max)
         return chat_prompt(
@@ -237,7 +246,7 @@ class Handlers:
                                kind="preset", chat_id=chat_id)
         elif trig.movers:
             listing = msg.text_html if msg.text else (msg.caption_html or "")
-            text = await self._chat_text(msg, trig, MOVERS_EXPLAIN.format(listing=listing))
+            text = await self._chat_text(msg, trig, MOVERS_EXPLAIN.format(listing=listing), no_history=True)
             parts = [{"type": "text", "text": text}]
             answer = await ask(ctx, parts, route("", st, ctx.registry, force_full=True),
                                must_search=True, cache_key=f"chat-{chat_id}", on_text=on_text,

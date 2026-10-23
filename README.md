@@ -36,15 +36,85 @@ unless `MCP_CONFIG` says otherwise. Copy an existing `chat_log.db` (and `-wal`/`
 directory before the first start.
 
 ```ini
+[Unit]
+Description=grokbot
+After=network-online.target
+Wants=network-online.target
+
 [Service]
+Type=simple
 DynamicUser=yes
+StateDirectory=grokbot
 WorkingDirectory=/opt/grokbot
 EnvironmentFile=/opt/grokbot.env
-StateDirectory=grokbot
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/grokbot/.venv/bin/python bot.py
 Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grokbot
+
+# Filesystem isolation
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+InaccessiblePaths=/boot /media /mnt
+UMask=0077
+
+# Privilege restrictions
+AmbientCapabilities=
+CapabilityBoundingSet=
+LockPersonality=yes
+NoNewPrivileges=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+LimitCORE=0
+
+# Kernel and system protection
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+
+# Process isolation
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+
+# Network: HTTPS to the LLM, Telegram and the MCP servers. AF_UNIX is for asyncio and name lookups.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# On a cloud VM, keep the bot away from the metadata server (it hands out the VM's credentials),
+# unless your DNS resolver is that address (check /etc/resolv.conf):
+# IPAddressDeny=169.254.169.254
+
+# Resources: the bot and its npx MCP servers share these
+TasksMax=64
+MemoryAccounting=yes
+MemoryHigh=200M
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target
 ```
+Save it as `/etc/systemd/system/grokbot.service`, then `sudo systemctl daemon-reload && sudo systemctl enable --now grokbot`.
+Notes on the hardening, which you can try with a drop-in (`systemctl edit grokbot`) and compare with
+`systemd-analyze security grokbot`:
+- **Don't add `MemoryDenyWriteExecute=yes`:** the MCP servers started with `npx` are Node, whose JIT needs
+  writable-and-executable memory, so they would crash at startup.
+- **`SystemCallFilter=` with `SystemCallErrorNumber=EPERM`:** a call outside `@system-service` fails with an error
+  instead of killing the process. If a tool misbehaves after a change, suspect this first.
+- **`UMask=0077`:** the database and its WAL files are private to the service's user, so two bots can't share a
+  `DB_PATH` under different users.
+- **Memory and tasks:** the limits are sized for the bot plus two Node MCP servers. After a busy request look at
+  `systemctl status grokbot` (peak memory, task count) and raise them if it is being throttled.
+
 
 ## Providers
 - `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
@@ -69,6 +139,10 @@ Restart=on-failure
   provider's prompt cache keeps working. The bot's own earlier replies appear as "You" (its latest reply in full, so follow-up questions about it
   work; older ones shortened); a replied-to
   message is quoted even if it is older than the window.
+- **`#nocontext`:** put `#nocontext` anywhere in a message that tags the bot (or in a DM) and the model gets that
+  message alone: no chat history, and nothing quoted from the message it replies to (no photo from it either). The tag
+  itself is removed before the model sees it. Useful for a fresh question that earlier chat would only confuse
+  or make more expensive; the bot's own recent reply is not read either, so follow-ups need the full question.
 - **Shared database:** group history lives in `messages`, shared by every bot pointed at the same
   `DB_PATH` (so two bots in one group see each other's replies). Private chats live in
   `dm_messages`, keyed by bot, because each bot's DM with a person has its own message-ID sequence.
@@ -286,6 +360,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
 | `DATA_DIR` | Directory for the bot's data (the database); a relative `DB_PATH` resolves inside it, an absolute one is used as given. Default: systemd's `STATE_DIRECTORY` (see [Running under systemd](#running-under-systemd)), else the working directory. In Docker, set `DATA_DIR=/data` and bind-mount a host directory there so history survives upgrades. |
 | `DB_PATH` | SQLite file for chat history (default chat_log.db). Instances may share it. |
 | `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
+| `LOG_WIDTH` | Longest line (characters) for the MCP tool lists in the log; a longer list is cut at a whole name and ends in `...` (default 95, 0 = no limit). |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
 | `MCP_CONFIG` | MCP server config file (default mcp_servers.json next to bot.py, whatever `DATA_DIR` is; missing = no MCP tools). |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |

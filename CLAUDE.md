@@ -7,6 +7,8 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 - `make check`: ruff + pytest (no network, a few seconds). Run it before every commit, on Python 3.13.5 (production;
   `uv venv --python 3.13.5`). GitHub CI runs the latest stable Python and Node.js instead, to catch breakage from the next upgrade early.
 - `make prompt-report`: token breakdown of a sample request. `python bot.py [label]` runs the bot.
+- Pull requests: right after pushing a `claude/*` branch, open its PR if it has none, so Claude Code shows the PR/CI
+  button. Never merge it unless asked.
 - Tests use fakes (`tests/conftest.py`: FakeBot, user_msg; `tests/fakes.py`: ScriptedBackend,
   FakeMcp, fake SDK clients; `tests/fixtures/` real anonymised MCP output). Add a test next to the module you change;
   don't write scratch scripts.
@@ -31,7 +33,7 @@ MCP data tools and web search. User-facing docs are in `README.md`; this file is
 
 ## Request flow
 `handlers.on_message` logs the message -> `_trigger` (mention / reply-to-bot / DM / movers list) ->
-`_generate` builds the prompt (`history.format_rows` + `prompts.chat_prompt`) -> `gate.route` picks tools ->
+`_generate` builds the prompt (`history.format_rows` + `prompts.chat_prompt`; `#nocontext` in the message keeps only that message) -> `gate.route` picks tools ->
 `ask.ask` builds a `Request` -> `policy.ask` -> `runner.run` loops `backend.step` / `run_calls` ->
 `format_answer` (md_to_html, link_tickers) -> `reply_chunks` (split_html, save each sent message).
 

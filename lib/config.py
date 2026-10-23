@@ -29,6 +29,7 @@ ENV_VARS: dict[str, str] = {
     "DATA_DIR": "Directory for the bot's data (the database); a relative DB_PATH resolves inside it. Default: systemd's STATE_DIRECTORY, else the working directory.",
     "DB_PATH": "SQLite file for chat history (default chat_log.db). Instances may share it.",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
+    "LOG_WIDTH": "Longest line (characters) for the MCP tool lists in the log; longer lists end in \"...\" (default 95, 0 = no limit).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "MCP_CONFIG": "MCP server config file (default mcp_servers.json next to bot.py; missing = no MCP tools).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
@@ -75,6 +76,7 @@ class Settings:
     search_model: str
     max_tokens: int
     history_limit: int
+    log_width: int
     db_path: str
     tz: ZoneInfo
     mcp_config: str
@@ -191,6 +193,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         search_model=search_model,
         max_tokens=int(env.get("MAX_TOKENS") or 3000),
         history_limit=int(env.get("HISTORY_LIMIT") or 20),
+        log_width=int(env.get("LOG_WIDTH") or 95),
         db_path=data_path(env, "DB_PATH", "chat_log.db"),
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
         mcp_config=mcp_config_path(env),
