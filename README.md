@@ -1,10 +1,10 @@
 # Stock-chat Telegram bot
 
-A Telegram bot for a group chat about stocks and investing (but it can be easily retasked by editing
-`lib/prompts.py` and `mcp_servers.json`). People @mention it (or reply to it, or
-DM it) and it answers with an LLM, using the group's recent messages as context, live market data
-from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (Grok)**,
-**OpenRouter** or **z.ai**, chosen by which API key you set.
+A Telegram bot for a group chat.
+
+It comes preprogrammed to chat about stocks and investing, but it can be easily retasked by editing `lib/prompts.py` and `mcp_servers.json`. MCPs can be customised by editing `mcp_servers.json`.
+
+People @mention it (or reply to it, or DM it) and it answers with an LLM, using the group's recent messages as context, live market data from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (Grok)**, **OpenRouter** or **z.ai**, chosen by which API key you set.
 
 ## Quick start
 1. Create a bot with @BotFather. Run `/setprivacy` and choose **Disable**, so the bot sees every
