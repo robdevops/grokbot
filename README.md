@@ -36,6 +36,11 @@ unless `MCP_CONFIG` says otherwise. Copy an existing `chat_log.db` (and `-wal`/`
 directory before the first start.
 
 ```ini
+[Unit]
+Description=grokbot
+After=network-online.target
+Wants=network-online.target
+
 [Service]
 Type=simple
 DynamicUser=yes
@@ -94,7 +99,11 @@ TasksMax=64
 MemoryAccounting=yes
 MemoryHigh=200M
 MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target
 ```
+Save it as `/etc/systemd/system/grokbot.service`, then `sudo systemctl daemon-reload && sudo systemctl enable --now grokbot`.
 Notes on the hardening, which you can try with a drop-in (`systemctl edit grokbot`) and compare with
 `systemd-analyze security grokbot`:
 - **Don't add `MemoryDenyWriteExecute=yes`:** the MCP servers started with `npx` are Node, whose JIT needs
