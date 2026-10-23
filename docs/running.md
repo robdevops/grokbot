@@ -4,8 +4,11 @@
 ## Running under systemd
 `deploy/systemd/grokbot.service` is a basic unit. With `StateDirectory=`, systemd sets `STATE_DIRECTORY` and the bot
 keeps its database there (`DATA_DIR` defaults to it), so the code directory can stay read-only. `mcp_servers.json` is
-read from the checkout unless `MCP_CONFIG` says otherwise. Copy an existing `chat_log.db` (and `-wal`/`-shm`) into the
-state directory before the first start. Edit the paths (`/opt/grokbot`, `/opt/grokbot.env`) to match yours.
+read from the checkout unless `MCP_CONFIG` says otherwise. A new install needs nothing more: the bot creates its
+database on the first start. Edit the paths (`/opt/grokbot`, `/opt/grokbot.env`) to match yours.
+
+To keep the history of an older install, stop the old bot first (a clean stop folds its `-wal`/`-shm` files into the
+database), then copy `chat_log.db` to `/var/lib/grokbot/` before the first start.
 
 ```
 sudo cp deploy/systemd/grokbot.service /etc/systemd/system/
