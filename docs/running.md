@@ -2,26 +2,47 @@
 [README](../README.md) · [all docs](../README.md#more)
 
 ## Running under systemd
-`deploy/systemd/grokbot.service` is a basic unit. With `StateDirectory=`, systemd sets `STATE_DIRECTORY` and the bot
-keeps its database there (`DATA_DIR` defaults to it), so the code directory can stay read-only. `mcp_servers.json` is
-read from the checkout. A new install needs nothing more: the bot creates its
-database on the first start. Put the keys and settings in `/etc/grokbot.env` (`KEY=value` lines; owned by root, mode 0600: systemd reads it, so the
-bot's own user never needs access). Edit the paths (`/opt/grokbot`, `/etc/grokbot.env`) to match yours.
+The unit in `deploy/systemd/grokbot.service` assumes the checkout is in `/opt/grokbot` with a virtualenv in
+`/opt/grokbot/.venv`. Edit those paths if yours differ.
 
-To keep the history of an older install, stop the old bot first (a clean stop folds its `-wal`/`-shm` files into the
-database), then copy `chat_log.db` to `/var/lib/grokbot/` before the first start.
+**1. Settings file.** Keys and settings go in `/etc/grokbot.env`, one `KEY=value` per line (no quotes needed):
+
+```
+TELEGRAM_BOT_TOKEN=123456:ABC...
+XAI_API_KEY=xai-...
+```
+
+systemd reads this file as root, so the bot never needs access to it. Keep it private, since it holds your keys:
+
+```
+sudo install -m 0600 -o root -g root /dev/null /etc/grokbot.env
+sudoedit /etc/grokbot.env
+```
+
+**2. Data directory.** Nothing to create. The unit sets `StateDirectory=grokbot`, so systemd makes
+`/var/lib/grokbot`, owned by the service's temporary user, and passes its path to the bot. The bot keeps its database
+there as `chat_log.db` (set `DATA_DIR` in the env file to put it elsewhere). The code directory stays read-only, and
+`mcp_servers.json` is read from the checkout.
+
+**3. Install and start.**
 
 ```
 sudo cp deploy/systemd/grokbot.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now grokbot
+sudo systemctl daemon-reload
+sudo systemctl enable --now grokbot
+journalctl -u grokbot -f
 ```
 
-Optional sandboxing is a separate drop-in. Delete the file to undo it:
+**Keeping an old database.** Stop the old bot first (a clean stop folds its `-wal` and `-shm` files into the
+database), then copy `chat_log.db` to `/var/lib/grokbot/` before the first start.
+
+**Optional sandboxing** is a separate drop-in. Delete the file to undo it:
 
 ```
 sudo mkdir -p /etc/systemd/system/grokbot.service.d
 sudo cp deploy/systemd/grokbot.service.d/hardening.conf /etc/systemd/system/grokbot.service.d/
-sudo systemctl daemon-reload && sudo systemctl restart grokbot
+sudo systemctl daemon-reload
+sudo systemctl restart grokbot
 ```
 
 ## Running several instances

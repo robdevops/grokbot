@@ -1,27 +1,16 @@
 # Configuration
 [README](../README.md) · [all docs](../README.md#more)
 
-## Providers
-- `OPENROUTER_API_KEY` set -> OpenRouter (default model `z-ai/glm-5.3-flash`).
-- `XAI_API_KEY` set -> xAI (default model `grok-4.3`).
-- `ZAI_API_KEY` set -> z.ai directly (default model `glm-5.3-flash`). Prompts and chat history go to z.ai, a China-based provider.
-  z.ai always thinks, so the bot sends `reasoning_effort` low unless `REASONING` says otherwise (medium maps to high).
-  Cost is estimated from a price table in `lib/llm/zai.py`, because z.ai's usage reports none.
-- **More than one key set, or none: the bot refuses to start** with a message saying so.
-- `MODEL` and `REASONING` (low/medium/high) apply to every provider.
-- The providers share all code except one adapter each (`lib/llm/xai.py` on the Responses API;
-  `lib/llm/openrouter.py` and `lib/llm/zai.py` on chat completions, sharing `lib/llm/chat.py`).
-
 ## Environment variables
 ### Essential
-Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys.
+Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than one, or none, the bot refuses to start.
 
 | Variable | Meaning |
 |---|---|
 | `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider (default model `z-ai/glm-5.3-flash`). |
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
 | `XAI_API_KEY` | xAI key; selects the xAI provider (default model `grok-4.3`). |
-| `ZAI_API_KEY` |
+| `ZAI_API_KEY` | z.ai key; selects z.ai directly (default model `glm-5.3-flash`). Prompts and chat history go to z.ai, a China-based provider. Cost is estimated from a price table in `lib/llm/zai.py`. |
 
 ### Common settings
 | Variable | Meaning |
