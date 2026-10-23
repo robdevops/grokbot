@@ -52,6 +52,16 @@ concurrent use) or with different ones to keep them apart; DMs are always per bo
 different label (`python bot.py grok`, `python bot.py mimo`) to tell them apart in `ps`/`top`.
 
 ## Logs
+Under systemd the log is in the journal:
+
+```
+journalctl -u grokbot -f           # follow
+journalctl -u grokbot --since today
+journalctl -u grokbot -p warning   # warnings and errors only
+```
+
+Run by hand (`python bot.py`), it goes to the terminal.
+
 One line per event, without a timestamp when run under systemd (journald adds one):
 `[Jane Doe (@jane) 1234567890] first 60 characters of the message ...` (groups add ` @ <chat id>`),
 `Round 2: in 14158 (7400 cached) out 738, stop`, and a per-request summary with rounds, tool calls,
