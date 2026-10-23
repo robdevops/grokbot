@@ -19,15 +19,13 @@ ENV_VARS: dict[str, str] = {
     "ZAI_API_KEY": "z.ai key; selects the z.ai provider.",
     # Common settings
     "BOT_TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
-    "FAST_MODEL": "Optional cheaper/faster model used for simple requests (TOKEN_SAVER only).",
     "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai).",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
     "SEARCH": "on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on.",
     # Advanced and optional
     "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
-    "DATA_DIR": "Directory for the bot's data (the database); a relative DB_PATH resolves inside it. Default: systemd's STATE_DIRECTORY, else the working directory.",
-    "DB_PATH": "SQLite file for chat history (default chat_log.db). Instances may share it.",
+    "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
     "LOG_WIDTH": "Longest line (characters) for the MCP tool lists in the log; longer lists end in \"...\" (default 95, 0 = no limit).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
@@ -39,7 +37,6 @@ ENV_VARS: dict[str, str] = {
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
-    "TOKEN_SAVER": "on|off. Master switch for the token-saving heuristics (default on).",
 }
 
 DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash", "zai": "glm-5.3-flash"}
@@ -47,6 +44,9 @@ DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash", "zai": 
 # Tuning constants (not configurable).
 MAX_TOOL_ROUNDS = 6  # model <-> tool round trips per answer
 MCP_TIMEOUT = 60  # seconds per MCP tool call
+MAX_TOOL_OUTPUT = 12_000  # characters of one tool result sent to the model
+HISTORY_LINE_MAX = 240  # characters of one history line
+HISTORY_OWN_LINE_MAX = 160  # the bot's own earlier answers are the longest lines; cut them harder
 MCP_STARTUP_WAIT = 30  # seconds a request waits for MCP servers that are still connecting
 MAX_IMAGES = 2 # photos sent to the model per request
 TEMPERATURE = 0.6
@@ -69,7 +69,6 @@ class Settings:
     provider: str  # "xai" | "openrouter" | "zai"
     api_key: str
     model: str
-    fast_model: str
     reasoning: str
     search: bool
     search_model: str
@@ -87,7 +86,6 @@ class Settings:
     holding_news_recipients: dict[str, str]
     portfolio_names: frozenset[str]
     period_backfill: frozenset[str]
-    token_saver: bool
 
     @property
     def holding_news(self) -> bool:
@@ -99,31 +97,16 @@ class Settings:
         """Explaining another bot's movers lists is on when a bot is listed."""
         return bool(self.movers_bots)
 
-    @property
-    def max_tool_output(self) -> int:
-        """Characters of one tool result sent to the model."""
-        return 12_000 if self.token_saver else 50_000
-
-    @property
-    def history_line_max(self) -> int:
-        return 240 if self.token_saver else 400
-
-    @property
-    def history_own_line_max(self) -> int | None:
-        """The bot's own earlier answers are the longest lines; cut them harder."""
-        return 160 if self.token_saver else None
-
 
 ROOT = Path(__file__).resolve().parent.parent  # the checkout, where bot.py is
 MCP_CONFIG = ROOT / "mcp_servers.json"  # the MCP servers, next to bot.py (not under DATA_DIR)
 
 
-def data_path(env: Mapping[str, str], var: str, default: str) -> str:
-    """A data file named by env var `var` (or `default`), inside DATA_DIR, which defaults to systemd's
-    STATE_DIRECTORY (first entry if it lists several). An absolute path is used as given."""
-    name = env.get(var, "").strip() or default
+def database_path(env: Mapping[str, str]) -> str:
+    """The SQLite file, chat_log.db inside DATA_DIR, which defaults to systemd's STATE_DIRECTORY (first entry
+    if it lists several), else the working directory."""
     data_dir = env.get("DATA_DIR", "").strip() or env.get("STATE_DIRECTORY", "").split(":")[0].strip()
-    return os.path.join(data_dir, name) if data_dir else name  # join keeps an absolute `name` as is
+    return os.path.join(data_dir, "chat_log.db") if data_dir else "chat_log.db"
 
 
 
@@ -170,7 +153,6 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     if not given:
         raise ConfigError("Set XAI_API_KEY (xAI), OPENROUTER_API_KEY (OpenRouter) or ZAI_API_KEY (z.ai).")
     provider = given[0]
-    saver = _flag(env, "TOKEN_SAVER", default=True)
     model = env.get("MODEL", "").strip() or DEFAULT_MODELS[provider]
     search_model = env.get("SEARCH_MODEL", "xiaomi/mimo-v2.6-flash:online").strip()
     search = env.get("SEARCH", "on").strip().lower() != "off"
@@ -182,14 +164,13 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         provider=provider,
         api_key=keys[provider],
         model=model,
-        fast_model=env.get("FAST_MODEL", "").strip() if saver else "",
         reasoning=env.get("REASONING", "").strip().lower(),
         search=search,
         search_model=search_model,
         max_tokens=int(env.get("MAX_TOKENS") or 3000),
         history_limit=int(env.get("HISTORY_LIMIT") or 20),
         log_width=int(env.get("LOG_WIDTH") or 95),
-        db_path=data_path(env, "DB_PATH", "chat_log.db"),
+        db_path=database_path(env),
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
         admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
         admin_only=_flag(env, "ADMIN_ONLY", default=True),
@@ -201,6 +182,5 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
         holding_news_recipients=recipients,
         portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),
-        token_saver=saver,
         period_backfill=_backfill(env.get("PERIOD_BACKFILL", "all")),
     )

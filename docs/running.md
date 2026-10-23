@@ -26,8 +26,8 @@ sudo systemctl daemon-reload && sudo systemctl restart grokbot
 
 ## Running several instances
 Instances can run side by side with different environments (for example one on xAI and one on
-OpenRouter). Point them at the same `DB_PATH` to share group history (SQLite in WAL mode, safe for
-concurrent use) or at different files to keep them apart; DMs are always per bot. Start each with a
+OpenRouter). Start them with the same `DATA_DIR` to share group history (SQLite in WAL mode, safe for
+concurrent use) or with different ones to keep them apart; DMs are always per bot. Start each with a
 different label (`python bot.py grok`, `python bot.py mimo`) to tell them apart in `ps`/`top`.
 
 ## Logs

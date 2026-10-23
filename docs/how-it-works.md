@@ -17,11 +17,11 @@
   message alone: no chat history, and nothing quoted from the message it replies to (no photo from it either). The tag
   itself is removed before the model sees it. Useful for a fresh question that earlier chat would only confuse
   or make more expensive; the bot's own recent reply is not read either, so follow-ups need the full question.
-- **Shared database:** group history lives in `messages`, shared by every bot pointed at the same
-  `DB_PATH` (so two bots in one group see each other's replies). Private chats live in
+- **Shared database:** group history lives in `messages`, shared by every bot started with the same
+  `DATA_DIR` (so two bots in one group see each other's replies). Private chats live in
   `dm_messages`, keyed by bot, because each bot's DM with a person has its own message-ID sequence.
 - **Images:** photos in the mention, or in the message being replied to, are sent to the model
-  (up to 2). With `TOKEN_SAVER` on a mid-size copy is sent at low detail, unless the text asks the
+  (up to 2). A mid-size copy is sent at low detail, unless the text asks the
   model to read it (read, text, chart, table, screenshot...).
 - **Time:** the current date and time (in `BOT_TZ`) is included in every prompt.
 - **Replies are final:** the prompt tells the model never to say it will "check later"; it makes its

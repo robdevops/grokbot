@@ -7,7 +7,7 @@ Questions like "best day / week / month / quarter / year since inception" are an
 stored in the SQLite database (next to the chat history, so it survives upgrades with `DATA_DIR`) and **never
 expires**: the current, unfinished period is always fetched fresh. Past history rarely changes; after a backdated
 trade or correction in Sharesight, flush the cache with `/flushcache [portfolio_id] [year|month|day]` (an admin, in
-Telegram) or `python bot.py --flush-cache [portfolio_id] [year|month|day]` (needs only `DB_PATH`/`DATA_DIR`, not the
+Telegram) or `python bot.py --flush-cache [portfolio_id] [year|month|day]` (needs only `DATA_DIR`, not the
 bot's keys). With a year, month or day, only the periods overlapping it go (every day, week, month, quarter and year
 that contains it), and the background fill re-fetches just those.
 
@@ -26,7 +26,7 @@ at most 128 characters). Prompts are ordered so the cacheable part comes first: 
 tools (sorted), history (stepped window), and the volatile part last (time, down-server notice).
 Each answer's log line shows the cached percentage.
 
-**`TOKEN_SAVER`** (on by default; set `off` to switch all of these off at once):
+**Token saving:**
 - **Tool gate:** chit-chat gets no data tools and no search (the model answers on its own). Market
   questions (a ticker, or words like price, earnings, ETF, market) get the market servers plus search;
   news-style questions ("latest", "today", "who won") get search. Servers marked `"gate": "portfolio"`
@@ -39,7 +39,6 @@ Each answer's log line shows the cached percentage.
   matched as a whole word, so listing a first name makes every mention of it a portfolio question.
   If a message got fewer tools than exist and the model needs more, it replies `NEEDS_TOOLS` and the
   bot asks again with everything on (the marker is never shown to anyone).
-- **`FAST_MODEL`:** if set, used instead of `MODEL` for requests the gate judged simple.
 - **Smaller tool definitions:** descriptions cut to 220 characters, parameter descriptions to their
   first sentence, titles/defaults/examples dropped.
 - **Smaller results:** floats rounded to 6 significant digits, long price series thinned to 60

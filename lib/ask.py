@@ -56,17 +56,16 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         route = Route([], True)
     elif not admin:
         route = dataclasses.replace(route, servers=_public(route.servers))
-    saver = st.token_saver
     req = Request(
-        system=system_prompt(ctx.first_name, route, ctx.backend.search_what, saver=saver),
+        system=system_prompt(ctx.first_name, route, ctx.backend.search_what),
         parts=parts,
-        model=(st.fast_model or st.model) if route.simple else st.model,
+        model=st.model,
         tools=[t for s in route.servers for t in s.tools] + [t for t, _ in extra_tools],
         local={t.name: fn for t, fn in extra_tools},
         search=route.search, must_search=must_search, reasoning=st.reasoning,
         cache_id=cache_id(ctx.first_name, cache_key),
         on_text=_hide_needs_tools(on_text) if (route.simple or route.partial) else on_text,
-        no_tools_system=no_tools_system(ctx.first_name, saver=saver),
+        no_tools_system=no_tools_system(ctx.first_name),
         max_tokens=st.max_tokens,
     )
     answer = await policy.ask(ctx.backend, ctx.registry, req)
@@ -75,8 +74,8 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         log.info("Gate offered fewer tools, the model asked for more: asking again with everything on")
         full = Route(ctx.registry.up() if admin else _public(ctx.registry.up()), st.search)
         req = dataclasses.replace(
-            req, system=system_prompt(ctx.first_name, full, ctx.backend.search_what, saver=saver),
-            model=st.model, tools=[t for s in full.servers for t in s.tools] + [t for t, _ in extra_tools],
+            req, system=system_prompt(ctx.first_name, full, ctx.backend.search_what),
+            tools=[t for s in full.servers for t in s.tools] + [t for t, _ in extra_tools],
             search=full.search,
             on_text=on_text)
         answer = await policy.ask(ctx.backend, ctx.registry, req)

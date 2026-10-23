@@ -248,12 +248,9 @@ def test_gate_live_question_gets_search_only(settings):
     assert r.search and not r.servers
 
 
-def test_gate_full_when_forced_or_token_saver_off(settings, env):
+def test_gate_full_when_forced(settings):
     y, s = servers()
     assert route("hello", settings, registry(y, s), force_full=True).servers == [y, s]
-    off = config.load({**env, "TOKEN_SAVER": "off"})
-    r = route("hello", off, registry(y, s))
-    assert r.servers == [y, s] and r.search and not r.simple
 
 
 PORTFOLIO_PHRASES = [

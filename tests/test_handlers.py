@@ -137,13 +137,6 @@ async def test_typing_starts_while_the_bot_waits_for_mcp(env, store):
     assert m.replies[0]["text"] == "ok"
 
 
-async def test_fast_model_used_for_simple_requests_only(env, store):
-    ctx, backend, h = make_ctx(env, store, [step("hi"), step("hi")], FAST_MODEL="fast/one")
-    await run(h, user_msg(ctx.bot, "@stockbot hello there", mid=1))
-    await run(h, user_msg(ctx.bot, "@stockbot how is NVDA?", mid=2))
-    assert [s["model"] for s in backend.seen] == ["fast/one", ctx.st.model]
-
-
 async def test_dm_streams_a_draft_and_skips_quote(env, store):
     ctx, backend, h = make_ctx(env, store, [step("hello there")])
     m = user_msg(ctx.bot, "hi", chat_id=5, user_id=5)
@@ -247,10 +240,10 @@ def test_photo_size_choice():
     from types import SimpleNamespace as N
     photos = [N(width=90, file_id="s"), N(width=320, file_id="m"), N(width=800, file_id="l"), N(width=1280, file_id="xl")]
     msg = N(photo=photos, document=None)
-    assert pick_photo(msg, small=True) == "l" and pick_photo(msg, small=False) == "xl"
-    assert pick_photo(N(photo=photos[:2], document=None), small=True) == "m"
-    assert pick_photo(N(photo=None, document=N(mime_type="image/png", file_id="d")), small=True) == "d"
-    assert pick_photo(N(photo=None, document=None), small=True) is None
+    assert pick_photo(msg) == "l"  # the smallest size at least 640 px wide
+    assert pick_photo(N(photo=photos[:2], document=None)) == "m"
+    assert pick_photo(N(photo=None, document=N(mime_type="image/png", file_id="d"))) == "d"
+    assert pick_photo(N(photo=None, document=None)) is None
 
 
 async def test_dm_follow_up_sees_the_whole_previous_answer(env, store):
