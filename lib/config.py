@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-# Every environment variable the bot reads, with a one-line description. README.md must
+# Every environment variable the bot reads, with a one-line description. docs/configuration.md must
 # mention each name (tests/test_config.py enforces it).
 ENV_VARS: dict[str, str] = {
     # Essential

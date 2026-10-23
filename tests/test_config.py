@@ -120,7 +120,7 @@ def test_movers_bots_normalised(env):
     assert config.load({**env, "MOVERS_BOTS": "@FinBot, other"}).movers_bots == {"finbot", "other"}
 
 
-def test_readme_documents_every_env_var():
-    readme = (Path(__file__).parent.parent / "README.md").read_text()
-    missing = [n for n in config.ENV_VARS if not re.search(rf"\b{n}\b", readme)]
-    assert not missing, f"README.md does not mention: {missing}"
+def test_docs_document_every_env_var():
+    doc = (Path(__file__).parent.parent / "docs" / "configuration.md").read_text()
+    missing = [n for n in config.ENV_VARS if not re.search(rf"\b{n}\b", doc)]
+    assert not missing, f"docs/configuration.md does not mention: {missing}"
