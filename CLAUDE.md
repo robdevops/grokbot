@@ -28,6 +28,7 @@ MCP data tools and web search. User-facing docs are in `README.md` (quick start)
 - `telegram/`: `handlers.py` (trigger -> request -> reply), `send.py`, `draft.py` (typing + streaming
   drafts), `commands.py` (/credits), `access.py` (who is an admin). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`, `periods/` (local `period_returns` tool, cache-first; `windows.py`, `rows.py`, `backfill.py` = PERIOD_BACKFILL loop).
 - `app.py` wiring/startup; `context.py` `Ctx` (settings, store, backend, registry, bot).
+- `docs/plans/go-recode.md`: saved plan for a Go rewrite (not started).
 - `deploy/systemd/`: the example unit `grokbot.service` and the optional `grokbot.service.d/hardening.conf` drop-in (docs/running.md).
 - `lib/` holds only what the bot needs to run. Developer helpers live in `tools/`: `report.py` (`make prompt-report`),
   `capture.py` (real MCP output for fixtures), `period_cache_without_rowid.py` (one-off DB conversion); the bot never imports them.
