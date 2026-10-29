@@ -95,7 +95,7 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
                 await asyncio.sleep(BUSY_POLL)
                 if not said and time.monotonic() - waited >= WAIT_LOG:
                     said = True
-                    log.info("Period backfill: %s held back for %.0f s by: %s", name, WAIT_LOG, "; ".join(users[:3]))
+                    log.debug("Period backfill: %s held back for %.0f s by: %s", name, WAIT_LOG, "; ".join(users[:3]))
             if stopped:
                 return
             began = time.monotonic()
@@ -110,7 +110,7 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
                 BAD.add((pid, *key(w)))
                 nodata += 1
                 if nodata <= SAMPLE_NODATA:  # enough of them to see what Sharesight says, not one line per empty day
-                    log.info("Period backfill: %s %s..%s has no data: %s", name, w[1], w[2], got.text[:150])
+                    log.debug("Period backfill: %s %s..%s has no data: %s", name, w[1], w[2], got.text[:150])
             else:  # a blip says nothing about the window itself, so it is tried again next pass
                 streak[0] += 1
                 transient += 1
@@ -120,7 +120,7 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
                     log.warning("Period backfill: %d fetches in a row failed; stopping this pass", streak[0])
             done += 1
             if done % PROGRESS_EVERY == 0:
-                log.info("Period backfill: %s %d/%d", name, done, len(todo))
+                log.debug("Period backfill: %s %d/%d", name, done, len(todo))
 
     await asyncio.gather(*(worker() for _ in range(WORKERS)))
     log.info("Period backfill: %s: %d stored, %d had no data, %d failed", name, stored, nodata, transient)
@@ -141,7 +141,7 @@ async def fill_pass(ctx: Ctx, server, portfolios: list[tuple[int, str, date]], t
                     if key(w) not in cached[pid] and (pid, *key(w)) not in BAD]
             if not todo:
                 continue
-            log.info("Period backfill: %d %ss to fetch for %s", len(todo), period, name)
+            log.debug("Period backfill: %d %ss to fetch for %s", len(todo), period, name)
             n, stopped = await fill_portfolio(ctx, server, pid, f"{name} {period}s", todo, streak)
             stored += n
             if stopped:

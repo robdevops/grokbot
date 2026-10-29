@@ -260,7 +260,7 @@ async def test_xai_logs_a_message_with_several_text_parts_and_still_joins_them(c
 
 async def test_xai_drops_text_written_before_a_search_inside_one_message(caplog):
     from types import SimpleNamespace as N
-    caplog.set_level("INFO", logger="bot")
+    caplog.set_level("DEBUG", logger="bot")
     st = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
     message = xai_message("generic draft.answer from the news")
     items = [N(type="web_search_call"), message]

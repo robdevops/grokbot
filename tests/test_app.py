@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from types import SimpleNamespace
 
 import pytest
@@ -199,3 +200,89 @@ def test_the_mcp_librarys_unlabelled_protocol_and_ping_lines_are_dropped(monkeyp
     finally:
         root.handlers[:] = saved[0]
         root.setLevel(saved[1])
+
+
+def test_journal_lines_carry_their_priority_on_every_line():
+    import logging
+    import sys
+
+    fmt = app.JournalFormatter("%(levelname)s %(message)s")
+    mk = lambda level, msg, exc=None: logging.LogRecord("bot", level, "f", 1, msg, None, exc)  # noqa: E731
+    assert [fmt.format(mk(level, "m")) for level in (logging.CRITICAL, logging.ERROR, logging.WARNING,
+                                                     logging.INFO, logging.DEBUG)] == [
+        "<2>CRITICAL m", "<3>ERROR m", "<4>WARNING m", "<6>INFO m", "<7>DEBUG m"]
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        lines = fmt.format(mk(logging.ERROR, "Reply failed", sys.exc_info())).split("\n")
+    assert len(lines) > 2 and all(line.startswith("<3>") for line in lines)  # the traceback is red too
+    assert lines[-1] == "<3>ValueError: boom"
+
+
+def test_journal_is_detected_only_when_the_stream_is_the_journal(monkeypatch, tmp_path):
+    import os
+
+    stream = open(tmp_path / "journal", "w")
+    st = os.fstat(stream.fileno())
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino}")
+    assert app.is_journal(stream)
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino + 1}")  # inherited, output redirected
+    assert not app.is_journal(stream)
+    monkeypatch.setenv("JOURNAL_STREAM", "junk")
+    assert not app.is_journal(stream)
+    monkeypatch.delenv("JOURNAL_STREAM")
+    assert not app.is_journal(stream)
+    stream.close()
+
+
+@contextlib.contextmanager
+def fresh_logging():
+    import logging
+
+    root, bot = logging.getLogger(), logging.getLogger("bot")
+    saved = list(root.handlers), root.level, bot.level
+    root.handlers.clear()
+    try:
+        app.setup_logging()
+        yield bot
+    finally:
+        root.handlers[:] = saved[0]
+        root.setLevel(saved[1])
+        bot.setLevel(saved[2])
+
+
+def log_each_level(bot) -> None:
+    import logging
+
+    bot.debug("d")
+    bot.info("i")
+    bot.warning("w")
+    bot.error("e")
+    logging.getLogger("telegram").debug("a library's detail")  # libraries stay at info
+
+
+def test_under_systemd_each_line_reaches_the_journal_once_with_its_priority(monkeypatch, tmp_path):
+    import os
+
+    stream = open(tmp_path / "journal", "w")
+    st = os.fstat(stream.fileno())
+    monkeypatch.setattr(app.sys, "stdout", stream)
+    monkeypatch.setattr(app.sys, "stderr", stream)  # the unit's default: stderr shares stdout's journal stream
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino}")
+    with fresh_logging() as bot:
+        log_each_level(bot)
+    stream.close()
+    assert (tmp_path / "journal").read_text().splitlines() == ["<7>DEBUG d", "<6>INFO i", "<4>WARNING w", "<3>ERROR e"]
+
+
+def test_debug_and_info_go_to_stdout_warnings_and_errors_to_stderr(monkeypatch, tmp_path):
+    out, err = open(tmp_path / "out", "w"), open(tmp_path / "err", "w")
+    monkeypatch.setattr(app.sys, "stdout", out)
+    monkeypatch.setattr(app.sys, "stderr", err)
+    monkeypatch.delenv("JOURNAL_STREAM", raising=False)
+    with fresh_logging() as bot:
+        log_each_level(bot)
+    out.close()
+    err.close()
+    lines = lambda name: [line.split(" ", 2)[2] for line in (tmp_path / name).read_text().splitlines()]  # noqa: E731
+    assert lines("out") == ["DEBUG d", "INFO i"] and lines("err") == ["WARNING w", "ERROR e"]  # after the timestamp

@@ -87,7 +87,7 @@ class OpenRouterBackend(ChatBackend):
         """Run one search through the cheap ':online' search model and return what it found."""
         if not (self.st.search and self.st.search_model):
             return None
-        log.info("Search: %s", query)
+        log.debug("Search: %s", query)
         resp = await self.client.chat.completions.create(
             model=self.st.search_model, max_tokens=config.SEARCH_TOKENS, temperature=0.2,
             messages=[{"role": "system", "content": SEARCH_PROMPT}, {"role": "user", "content": query}],

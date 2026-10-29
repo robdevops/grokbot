@@ -211,7 +211,7 @@ async def retry_busy(ctx: Ctx, usernames: list[str]) -> None:
         await run_holding_news(ctx, usernames=set(usernames), busy=busy)
         usernames = busy
     if usernames:
-        log.warning("Holding news: gave up on %s after %d hours", ", ".join(f"@{u}" for u in usernames),
+        log.error("Holding news: gave up on %s after %d hours", ", ".join(f"@{u}" for u in usernames),
                     config.HOLDING_NEWS_RETRY_FOR // 3600)
 
 

@@ -57,13 +57,25 @@ Under systemd the log is in the journal:
 ```
 journalctl -u grokbot -f           # follow
 journalctl -u grokbot --since today
+journalctl -u grokbot -p info      # without the debug detail
 journalctl -u grokbot -p warning   # warnings and errors only
 ```
 
-Run by hand (`python bot.py`), it goes to the terminal.
+Every line reaches the journal at its own priority, so journalctl colours it: errors red, warnings yellow, debug
+grey. Run by hand (`python bot.py`), the log goes to the terminal with a timestamp on each line. Debug and info
+go to stdout, warnings and errors to stderr. In Docker with `--log-driver=journald`, Docker sets the priority
+from the stream alone: warnings and errors are stored as err, the rest as info, so `-p warning` works and
+`-p info` can't hide the debug lines.
 
-One line per event, without a timestamp when run under systemd (journald adds one):
-`[Jane Doe (@jane) 1234567890] first 60 characters of the message ...` (groups add ` @ <chat id>`),
-`Round 2: in 14158 (7400 cached) out 738, stop`, and a per-request summary with rounds, tool calls,
-tokens, cached % and cost. Tool servers log their tools in short wrapped lines; startup logs the
-token size of the tool definitions. The `Starting ...` line shows the git commit the checkout is on.
+| Level | What |
+|---|---|
+| error | Something failed: a reply, a holding-news check, an MCP server, a background pass. Includes the traceback. |
+| warning | Handled, but worth a look: a retry, a fallback, a busy provider, a setting that matches nothing. |
+| info | Startup and connections, one line per message the bot answers, and one summary per request. |
+| debug | The detail: each MCP call and its result size, search queries, tokens per round, attached images, backfill progress. |
+
+A message line looks like `[Jane Doe (@jane) 1234567890] first 60 characters of the message ...` (groups add
+` @ <chat id>`). The summary has the time, rounds, tool calls, searches, tokens, cached % and cost; the debug line
+`Round 2: in 14158 (7400 cached) out 738, stop` gives each round's share. Each tool server logs its tools on one
+line (cut at `LOG_WIDTH`), and startup logs the token size of the tool definitions. The `Starting ...` line shows the
+git commit the checkout is on.
