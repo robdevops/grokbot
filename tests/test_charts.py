@@ -415,3 +415,21 @@ def test_the_preload_chat_must_be_a_number(env):
     assert config.load(env).preload_chat is None
     with pytest.raises(config.ConfigError, match="TELEGRAM_PRELOAD_CHAT must be a Telegram chat ID"):
         config.load({**env, "TELEGRAM_PRELOAD_CHAT": "mychat"})
+
+
+async def test_an_upload_is_reused_for_an_hour_but_the_1d_chart_for_15_minutes(env, store, monkeypatch):
+    ctx, yahoo, _ = await chart_reply({**env, **PRELOAD}, store, history_json([100, 120]), TICKER_CHART)
+    await settle()
+    sent = ctx.bot._msg(-100, None)
+    sent.message_id = 1001
+    now = buttons.time.time()
+    before = len(yahoo.calls)
+
+    async def tap(period, age):
+        monkeypatch.setattr(buttons.time, "time", lambda: now + age)
+        await buttons.on_button(ctx, N(callback_query=callback(sent, f"ch:{period}")), None)
+        return len(yahoo.calls) - before
+
+    assert await tap("1mo", 59 * 60) == 0 and await tap("1d", 14 * 60) == 0  # both still fresh
+    assert await tap("1mo", 61 * 60) == 1  # an hour on: drawn again
+    assert await tap("1d", 16 * 60) == 2  # the day chart already after 15 minutes
