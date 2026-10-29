@@ -24,6 +24,7 @@ PRELOAD_MAX_AGE = 15 * 60  # seconds: an uploaded picture older than this is dra
 _tasks: set[asyncio.Task] = set()  # preloads running; held so they aren't garbage-collected
 BUTTONS = (("1D", "1d"), ("1M", "1mo"), ("1Y", "1y"), ("5Y", "5y"))
 RELOAD = "reload"
+RELOAD_ICON = "🔄"  # an emoji, which is drawn larger than the ⟳ glyph
 WORDS = {"1d": "1 day", "5d": "5 days", "1mo": "1 month", "3mo": "3 months", "6mo": "6 months", "ytd": "year to date",
          "1y": "1 year", "2y": "2 years", "5y": "5 years", "10y": "10 years", "max": "all time"}
 
@@ -39,9 +40,12 @@ def period_of(args: dict) -> str:
 
 
 def keyboard(period: str) -> InlineKeyboardMarkup:
-    """The period buttons, the one shown marked, then reload."""
-    row = [InlineKeyboardButton(f"• {label}" if p == period else label, callback_data=f"ch:{p}") for label, p in BUTTONS]
-    return InlineKeyboardMarkup([row + [InlineKeyboardButton("⟳", callback_data=f"ch:{RELOAD}")]])
+    """The period buttons, the one shown shaded (Telegram's "primary" button style), then reload. The style goes
+    in api_kwargs, sent as it is, so it works with any python-telegram-bot version; a client that doesn't know the
+    style shows a plain button."""
+    row = [InlineKeyboardButton(label, callback_data=f"ch:{p}", api_kwargs={"style": "primary"} if p == period else None)
+           for label, p in BUTTONS]
+    return InlineKeyboardMarkup([row + [InlineKeyboardButton(RELOAD_ICON, callback_data=f"ch:{RELOAD}")]])
 
 
 def with_period(args: dict, period: str) -> dict:
