@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from telegram import LinkPreviewOptions, Message
+from telegram import InputMediaPhoto, LinkPreviewOptions, Message
 from telegram.constants import ParseMode
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TelegramError
 
 from ..store import Store
 from ..textfmt import is_parse_error, plain_text, split_html
@@ -15,6 +15,7 @@ from ..textfmt import is_parse_error, plain_text, split_html
 log = logging.getLogger("bot")
 # Otherwise a list of Yahoo-linked tickers gets a big preview card under it.
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
+CAPTION_MAX = 1000  # Telegram allows 1024 characters of caption (after the HTML is parsed)
 
 
 async def send_html(bot, chat_id: int, text: str, reply_markup=None):
@@ -55,3 +56,41 @@ async def reply_chunks(msg: Message, html_text: str, store: Store, *, quote: boo
         markup = last_markup if i == len(chunks) - 1 else None
         sent = await reply_html(msg, chunk, quote=quote, reply_markup=markup)
         await asyncio.to_thread(store.save, sent)
+
+
+async def reply_with_photos(msg: Message, photos: list[bytes], html_text: str, store: Store, *, quote: bool = True,
+                            markup=None, photo_markup=None) -> list:
+    """An answer with charts as one reply: the photo (an album for several) with the answer as its caption. Text
+    too long for a caption continues in text messages; if Telegram refuses the photos, the text goes alone.
+    `photo_markup` (buttons for a single photo) takes the photo's place for `markup`. Returns the photo messages."""
+    chunks = split_html(html_text, CAPTION_MAX) if html_text else [""]
+    rest = "\n".join(chunks[1:])  # split_html cuts at newlines where it can
+    try:
+        sent = await _send_photos(msg, photos, chunks[0], quote, photo_markup or (None if rest else markup))
+    except TelegramError as e:
+        log.warning("Couldn't send the chart, replying with text only: %s", e)
+        await reply_chunks(msg, html_text, store, quote=quote, last_markup=markup)
+        return []
+    for m in sent:
+        await asyncio.to_thread(store.save, m)
+    if rest:
+        await reply_chunks(msg, rest, store, quote=quote, last_markup=markup)
+    return sent
+
+
+async def _send_photos(msg: Message, photos: list[bytes], caption: str, quote: bool, markup) -> list:
+    kw = {"do_quote": quote, "disable_notification": True}
+    for html_ok in (True, False):  # Telegram HTML, then plain text if it is rejected
+        text = (caption if html_ok else plain_text(caption)) or None
+        mode = ParseMode.HTML if html_ok and text else None
+        try:
+            if len(photos) == 1:
+                return [await msg.reply_photo(photos[0], caption=text, parse_mode=mode, reply_markup=markup, **kw)]
+            media = [InputMediaPhoto(p, caption=text, parse_mode=mode) if i == 0 else InputMediaPhoto(p)
+                     for i, p in enumerate(photos)]
+            return list(await msg.reply_media_group(media, **kw))  # an album can't carry a keyboard
+        except BadRequest as e:
+            if not html_ok or not is_parse_error(e):
+                raise
+            log.warning("Bad HTML from the model, sending the caption as plain text: %s", e)
+    return []

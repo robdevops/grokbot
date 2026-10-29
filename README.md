@@ -4,7 +4,12 @@ A Telegram bot for a group chat.
 
 It comes preprogrammed to chat about stocks and investing, but it can be easily retasked by editing `lib/prompts.py` (the prompts) and `mcp_servers.json` (the MCP servers and their tools).
 
-People @mention it (or reply to it, or DM it) and it answers with an LLM, using the group's recent messages as context, live market data from MCP servers (Yahoo Finance, Sharesight) and web search. It runs on **xAI (Grok)**, **OpenRouter** or **z.ai**, chosen by which API key you set.
+## Features
+- Answers @mentions, replies and DMs with an LLM, using the group's recent messages as context.
+- Live data from MCP servers (Yahoo Finance, Sharesight) and web search.
+- Draws charts from that data when asked: two y axes, several series on each, either axis inverted.
+- Reads images posted in the chat, if the model supports images.
+- Runs on **xAI (Grok)**, **OpenRouter** or **z.ai**, chosen by which API key you set.
 
 ## Quick start
 1. Create a bot with @BotFather. Run `/setprivacy` and choose **Disable**, so the bot sees every
@@ -21,7 +26,7 @@ To keep it running, see [Running under systemd](docs/running.md#running-under-sy
 ## More
 - [Configuration](docs/configuration.md): providers, every environment variable, choosing a model.
 - [How it works](docs/how-it-works.md): how it answers, search, MCP data tools (`mcp_servers.json`), formatting.
-- [Optional features and commands](docs/features.md): holding-news DM, movers replies, DM buttons, `/credits`.
+- [Features and commands](docs/features.md): charts, holding-news DM, movers replies, DM buttons, `/credits`.
 - [Caching and token saving](docs/caching.md): the Sharesight history cache and the token-saving heuristics.
 - [Running the bot](docs/running.md): systemd, several instances, logs.
 - [Troubleshooting](docs/troubleshooting.md): startup errors, silent bots, MCP servers down.

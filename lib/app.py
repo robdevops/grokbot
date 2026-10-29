@@ -29,6 +29,7 @@ from telegram.ext import (
 from . import config
 from .context import Ctx
 from .features import dm_buttons, holding_news, post
+from .features.charts import buttons as chart_buttons
 from .features.periods import backfill
 from .features.periods.windows import describe_scope, flush_scope
 from .llm.base import Backend
@@ -184,6 +185,7 @@ def build_app(ctx: Ctx) -> Application:
         (filters.ChatType.GROUPS | filters.ChatType.PRIVATE)
         & (filters.UpdateType.MESSAGE | filters.UpdateType.EDITED_MESSAGE)
         & ~filters.StatusUpdate.ALL, handlers.on_message))
+    app.add_handler(CallbackQueryHandler(command(chart_buttons.on_button), pattern=r"^ch:"))  # chart periods
     if st.holding_news:  # the Unsubscribe / Undo buttons on holding-news messages
         app.add_handler(CallbackQueryHandler(command(holding_news.on_button), pattern=r"^hn:"))
     if st.post_to_groups or st.admin_only:  # keeps the list of groups the bot is in
@@ -193,7 +195,7 @@ def build_app(ctx: Ctx) -> Application:
 
 
 def allowed_updates(st: config.Settings) -> list[str]:
-    return (["message", "edited_message"] + (["callback_query"] if st.holding_news else [])
+    return (["message", "edited_message", "callback_query"]
             + (["my_chat_member"] if st.post_to_groups or st.admin_only else []))
 
 
