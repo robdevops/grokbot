@@ -131,8 +131,9 @@ Written 2026-10-23 against commit a221d98. Before starting:
   4. Cancel the loops.
   5. Close MCP, then the DB (which checkpoints the WAL).
 - **Runtime defaults** (overridable from the env file): GOMAXPROCS ≤ 4 and a 64 MiB soft memory limit.
-- **Logging:** the same message texts and levels. When stderr is the journal stream, every line carries its `<N>`
-  priority (as `lib/app.py` `JournalFormatter` does); otherwise each line gets a timestamp.
+- **Logging:** the same message texts and levels; debug/info to stdout, warning/error to stderr. When a stream is the
+  journal stream, every line carries its `<N>` priority (as `lib/app.py` `JournalFormatter` does); otherwise each
+  line gets a timestamp.
 
 ## Parity: Python is the oracle until it is deleted
 - **Generator `tools/oracle/`** (Python, imports `lib`, deleted at cut-over).

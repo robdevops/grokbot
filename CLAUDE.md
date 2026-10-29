@@ -48,8 +48,8 @@ MCP data tools and web search. User-facing docs are in `README.md` (quick start)
 - New env var: add it to `config.ENV_VARS`, `Settings`, and the table in docs/configuration.md. Optional features stay off by default.
 - Don't make a prompt change without checking `make prompt-report`; budgets are pinned in `tests/test_budgets.py`.
 - Log levels: error = something failed, warning = handled but worth a look, info = startup and one line per message and
-  request, debug = per-call detail. The `bot` logger always logs debug; under journald each line carries its priority
-  (`app.JournalFormatter`), so `journalctl -p info` hides the detail.
+  request, debug = per-call detail. The `bot` logger always logs debug; debug/info go to stdout, warning/error to stderr;
+  under journald each line carries its priority (`app.JournalFormatter`), so `journalctl -p info` hides the detail.
 
 ## Gotchas
 - DMs: Telegram chat id == user id (positive); each bot's DM has its own message-id sequence, hence

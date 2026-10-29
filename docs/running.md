@@ -62,7 +62,10 @@ journalctl -u grokbot -p warning   # warnings and errors only
 ```
 
 Every line reaches the journal at its own priority, so journalctl colours it: errors red, warnings yellow, debug
-grey. Run by hand (`python bot.py`), the log goes to the terminal with a timestamp on each line.
+grey. Run by hand (`python bot.py`), the log goes to the terminal with a timestamp on each line. Debug and info
+go to stdout, warnings and errors to stderr. In Docker with `--log-driver=journald`, Docker sets the priority
+from the stream alone: warnings and errors are stored as err, the rest as info, so `-p warning` works and
+`-p info` can't hide the debug lines.
 
 | Level | What |
 |---|---|

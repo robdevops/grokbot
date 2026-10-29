@@ -65,27 +65,35 @@ class JournalFormatter(logging.Formatter):
         return "\n".join(prefix + line for line in super().format(record).split("\n"))
 
 
-def stderr_is_journal() -> bool:
-    """True when stderr is systemd's journal stream: JOURNAL_STREAM names its device and inode, and is
-    checked against stderr because a child started from a service inherits the variable."""
+def is_journal(stream) -> bool:
+    """True when `stream` is systemd's journal stream: JOURNAL_STREAM names its device and inode, and is
+    checked against the stream because a child started from a service inherits the variable."""
     try:
         dev, ino = (int(part) for part in os.environ.get("JOURNAL_STREAM", "").split(":"))
-        st = os.fstat(sys.stderr.fileno())
+        st = os.fstat(stream.fileno())
     except (ValueError, OSError, AttributeError):
         return False
     return (st.st_dev, st.st_ino) == (dev, ino)
 
 
-def setup_logging() -> None:
-    """The bot's own logger logs everything down to debug (per-call detail); `journalctl -p info` hides
-    that. Libraries stay at info. Under systemd, journald stamps the time, so the line doesn't."""
-    handler = logging.StreamHandler()
-    if stderr_is_journal():
+def _log_handler(stream) -> logging.Handler:
+    handler = logging.StreamHandler(stream)
+    if is_journal(stream):  # journald stamps the time, so the line doesn't
         handler.setFormatter(JournalFormatter("%(levelname)s %(message)s"))
     else:
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     handler.addFilter(_drop_protocol_line)
-    logging.basicConfig(level=logging.INFO, handlers=[handler])
+    return handler
+
+
+def setup_logging() -> None:
+    """The bot's own logger logs everything down to debug (per-call detail); `journalctl -p info` hides
+    that. Libraries stay at info. Debug and info go to stdout, warnings and errors to stderr, so a log
+    driver that only sees the stream (Docker's journald driver stores stderr as err) still tells them apart."""
+    out, err = _log_handler(sys.stdout), _log_handler(sys.stderr)
+    out.addFilter(lambda record: record.levelno < logging.WARNING)
+    err.setLevel(logging.WARNING)
+    logging.basicConfig(level=logging.INFO, handlers=[out, err])
     log.setLevel(logging.DEBUG)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
