@@ -81,7 +81,7 @@ class ZaiBackend(ChatBackend):
         if not self.st.search:
             return None
         recency = args.get("recency")
-        log.info("Search: %s (%s)", query, recency)
+        log.debug("Search: %s (%s)", query, recency)
         r = await self.http.post(
             BASE_URL + "web_search", headers={"Authorization": f"Bearer {self.st.api_key}"},
             json={"search_engine": "search-prime", "search_query": query, "count": SEARCH_COUNT,

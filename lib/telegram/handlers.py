@@ -151,11 +151,11 @@ class Handlers:
         out = []
         for img in found:
             if isinstance(img, BaseException):
-                log.error("Couldn't download image", exc_info=img)
+                log.warning("Couldn't download an image, answering without it: %s: %s", type(img).__name__, img)
             else:
                 out.append(img)
         if out:
-            log.info("Attached %d image(s)", len(out))
+            log.debug("Attached %d image(s)", len(out))
         return out
 
     def _quote(self, trig: Trigger) -> str | None:

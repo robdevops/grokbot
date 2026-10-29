@@ -168,7 +168,7 @@ async def test_a_stopped_pass_is_retried_after_ten_minutes_not_six_hours(env, st
 
 
 async def test_windows_with_no_data_do_not_stop_the_pass_and_are_not_retried(env, store, caplog):
-    caplog.set_level("INFO", logger="bot")
+    caplog.set_level("DEBUG", logger="bot")
     ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
     ss.data_from = "2026-02-15"  # everything ending before this has no data: dozens of empty windows in a row
     ctx, _ = make(env, store, ss)
@@ -191,7 +191,7 @@ async def test_throttling_text_counts_as_a_transient_failure_and_is_logged(env, 
 
 
 async def test_the_journal_says_when_it_is_held_back_or_a_fetch_is_slow(env, store, monkeypatch, caplog):
-    caplog.set_level("INFO", logger="bot")
+    caplog.set_level("DEBUG", logger="bot")
     monkeypatch.setattr(backfill, "WAIT_LOG", 0)
     monkeypatch.setattr(backfill, "SLOW_FETCH", 0.005)
     ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
@@ -203,7 +203,7 @@ async def test_the_journal_says_when_it_is_held_back_or_a_fetch_is_slow(env, sto
 
 
 async def test_progress_is_logged_every_n_fetches(env, store, monkeypatch, caplog):
-    caplog.set_level("INFO", logger="bot")
+    caplog.set_level("DEBUG", logger="bot")
     monkeypatch.setattr(backfill, "PROGRESS_EVERY", 5)
     ss = Sharesight("sharesight", tools=("list_portfolios", "get_performance_report"))
     ctx, _ = make(env, store, ss)

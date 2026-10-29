@@ -199,3 +199,59 @@ def test_the_mcp_librarys_unlabelled_protocol_and_ping_lines_are_dropped(monkeyp
     finally:
         root.handlers[:] = saved[0]
         root.setLevel(saved[1])
+
+
+def test_journal_lines_carry_their_priority_on_every_line():
+    import logging
+    import sys
+
+    fmt = app.JournalFormatter("%(levelname)s %(message)s")
+    mk = lambda level, msg, exc=None: logging.LogRecord("bot", level, "f", 1, msg, None, exc)  # noqa: E731
+    assert [fmt.format(mk(level, "m")) for level in (logging.CRITICAL, logging.ERROR, logging.WARNING,
+                                                     logging.INFO, logging.DEBUG)] == [
+        "<2>CRITICAL m", "<3>ERROR m", "<4>WARNING m", "<6>INFO m", "<7>DEBUG m"]
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        lines = fmt.format(mk(logging.ERROR, "Reply failed", sys.exc_info())).split("\n")
+    assert len(lines) > 2 and all(line.startswith("<3>") for line in lines)  # the traceback is red too
+    assert lines[-1] == "<3>ValueError: boom"
+
+
+def test_journal_is_detected_only_when_stderr_is_the_journal_stream(monkeypatch, tmp_path):
+    import os
+
+    stream = open(tmp_path / "journal", "w")
+    st = os.fstat(stream.fileno())
+    monkeypatch.setattr(app.sys, "stderr", stream)
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino}")
+    assert app.stderr_is_journal()
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino + 1}")  # inherited, stderr redirected
+    assert not app.stderr_is_journal()
+    monkeypatch.setenv("JOURNAL_STREAM", "junk")
+    assert not app.stderr_is_journal()
+    monkeypatch.delenv("JOURNAL_STREAM")
+    assert not app.stderr_is_journal()
+    stream.close()
+
+
+def test_the_bot_logs_debug_detail_but_libraries_stay_at_info(monkeypatch, tmp_path):
+    import logging
+    import os
+
+    stream = open(tmp_path / "journal", "w")
+    st = os.fstat(stream.fileno())
+    monkeypatch.setattr(app.sys, "stderr", stream)
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino}")
+    root, bot = logging.getLogger(), logging.getLogger("bot")
+    saved = list(root.handlers), root.level, bot.level
+    root.handlers.clear()
+    try:
+        app.setup_logging()
+        assert bot.isEnabledFor(logging.DEBUG) and not logging.getLogger("telegram").isEnabledFor(logging.DEBUG)
+        assert isinstance(root.handlers[0].formatter, app.JournalFormatter)
+    finally:
+        root.handlers[:] = saved[0]
+        root.setLevel(saved[1])
+        bot.setLevel(saved[2])
+        stream.close()

@@ -47,15 +47,47 @@ def build_backend(st: config.Settings) -> Backend:
     return {"openrouter": OpenRouterBackend, "zai": ZaiBackend, "xai": XaiBackend}[st.provider](st)
 
 
+def journal_priority(levelno: int) -> int:
+    """The syslog priority journald should give a record: err 3, warning 4, info 6, debug 7 (crit 2)."""
+    for level, priority in ((logging.CRITICAL, 2), (logging.ERROR, 3), (logging.WARNING, 4), (logging.INFO, 6)):
+        if levelno >= level:
+            return priority
+    return 7
+
+
+class JournalFormatter(logging.Formatter):
+    """Starts every line with a `<N>` priority prefix (sd-daemon(3)): journald strips it and stores the
+    entry at that priority, so journalctl colours it and `-p` filters it. Every line, because journald
+    stores each line of a traceback as its own entry."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        prefix = f"<{journal_priority(record.levelno)}>"
+        return "\n".join(prefix + line for line in super().format(record).split("\n"))
+
+
+def stderr_is_journal() -> bool:
+    """True when stderr is systemd's journal stream: JOURNAL_STREAM names its device and inode, and is
+    checked against stderr because a child started from a service inherits the variable."""
+    try:
+        dev, ino = (int(part) for part in os.environ.get("JOURNAL_STREAM", "").split(":"))
+        st = os.fstat(sys.stderr.fileno())
+    except (ValueError, OSError, AttributeError):
+        return False
+    return (st.st_dev, st.st_ino) == (dev, ino)
+
+
 def setup_logging() -> None:
-    # Under systemd, journald already stamps every line with the time, so don't repeat it.
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(message)s" if os.getenv("JOURNAL_STREAM")
-        else "%(asctime)s %(levelname)s %(message)s")
+    """The bot's own logger logs everything down to debug (per-call detail); `journalctl -p info` hides
+    that. Libraries stay at info. Under systemd, journald stamps the time, so the line doesn't."""
+    handler = logging.StreamHandler()
+    if stderr_is_journal():
+        handler.setFormatter(JournalFormatter("%(levelname)s %(message)s"))
+    else:
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    handler.addFilter(_drop_protocol_line)
+    logging.basicConfig(level=logging.INFO, handlers=[handler])
+    log.setLevel(logging.DEBUG)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    for handler in logging.getLogger().handlers:
-        handler.addFilter(_drop_protocol_line)
 
 
 def _drop_protocol_line(record: logging.LogRecord) -> bool:

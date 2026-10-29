@@ -73,11 +73,11 @@ async def _run_mcp(call: Call, registry: Registry) -> str:
             return f"Error: arguments for {tool} must be a JSON object."
         args.pop("_keep_sales", None)  # reserved for the bot's own tools
         args.pop("_bg", None)
-        log.info("MCP %s.%s %s", server.label, tool, brief_args(args))
+        log.debug("MCP %s.%s %s", server.label, tool, brief_args(args))
         out = await server.call(tool, args)
         # A tiny result is usually an empty list or an error: show it, so "why did it say
         # nothing came back?" can be answered from the log.
-        log.info("MCP %s.%s -> %d chars%s", server.label, tool, len(out),
+        log.debug("MCP %s.%s -> %d chars%s", server.label, tool, len(out),
                  f": {out}" if len(out) <= 120 else "")
         return out
     except TimeoutError:
@@ -92,7 +92,7 @@ async def _run_local(call: Call, fn) -> str:
         args = json.loads(call.arguments or "{}")
         if not isinstance(args, dict):
             return "Error: arguments must be a JSON object."
-        log.info("Local tool %s %s", call.name, brief_args({k: v for k, v in args.items() if k != "text"}))
+        log.debug("Local tool %s %s", call.name, brief_args({k: v for k, v in args.items() if k != "text"}))
         return await fn(args)
     except Exception as e:
         log.exception("Local tool %s failed", call.name)
@@ -179,7 +179,7 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
         total.add(step.usage)
         searched += step.searches
         u = step.usage
-        log.info("Round %d: in %d (%d cached) out %d, %s", rounds, u.tokens_in, u.cached,
+        log.debug("Round %d: in %d (%d cached) out %d, %s", rounds, u.tokens_in, u.cached,
                  u.tokens_out, step.finish)
         if final:
             log.warning("Hit MAX_TOOL_ROUNDS (%d); made the model answer with what it has",
@@ -210,7 +210,7 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
         more = dataclasses.replace(req, max_tokens=(req.max_tokens or 3000) * 2, reasoning="low")
         step = await _step(backend, conv, more, "none")
         total.add(step.usage)
-        log.info("Recovery round: in %d out %d, %s", step.usage.tokens_in, step.usage.tokens_out, step.finish)
+        log.debug("Recovery round: in %d out %d, %s", step.usage.tokens_in, step.usage.tokens_out, step.finish)
         text = TOOL_SYNTAX_RE.sub("", step.text).strip()
     if not text:
         if step.finish == "length":

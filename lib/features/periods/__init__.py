@@ -119,7 +119,7 @@ def tool(ctx: Ctx):
         for label, r in rows:
             if label in extremes and (text := drivers(r.movers)):
                 lines.append(f"Holdings behind {label}: {text}")
-        log.info("period_returns: %d %ss for portfolio %s (%d fetched)", len(rows), period, pid, len(todo))
+        log.debug("period_returns: %d %ss for portfolio %s (%d fetched)", len(rows), period, pid, len(todo))
         return "\n".join(lines)
 
     return TOOL, periods

@@ -42,14 +42,14 @@ def answer_text(resp, tail: str | None = None) -> str:
     parts = [[getattr(c, "text", "") or "" for c in m.content if c.type == "output_text"] for m in messages]
     texts = ["".join(p) for p in parts]
     if len([t for t in texts if t.strip()]) > 1:
-        log.info("xAI response had %d messages; kept the last (items: %s)", len(texts),
+        log.debug("xAI response had %d messages; kept the last (items: %s)", len(texts),
                  " ".join(i.type for i in resp.output))
     for p in parts:
         if len([t for t in p if t.strip()]) > 1:  # not handled yet: this line tells us if it happens
-            log.info("xAI message had %d text parts (%s chars)", len(p), "+".join(str(len(t)) for t in p))
+            log.warning("xAI message had %d text parts (%s chars)", len(p), "+".join(str(len(t)) for t in p))
     text = next((t for t in reversed(texts) if t.strip()), resp.output_text or "").strip()
     if tail and tail.strip() and len(tail.strip()) < len(text) and text.endswith(tail.strip()):
-        log.info("xAI wrote %d chars before a search call; kept the %d after it (items: %s)",
+        log.debug("xAI wrote %d chars before a search call; kept the %d after it (items: %s)",
                  len(text) - len(tail.strip()), len(tail.strip()), " ".join(i.type for i in resp.output))
         return tail.strip()
     return text

@@ -131,7 +131,8 @@ Written 2026-10-23 against commit a221d98. Before starting:
   4. Cancel the loops.
   5. Close MCP, then the DB (which checkpoints the WAL).
 - **Runtime defaults** (overridable from the env file): GOMAXPROCS ≤ 4 and a 64 MiB soft memory limit.
-- **Logging:** the same message texts, with `LEVEL message` under JOURNAL_STREAM and a timestamp otherwise.
+- **Logging:** the same message texts and levels. When stderr is the journal stream, every line carries its `<N>`
+  priority (as `lib/app.py` `JournalFormatter` does); otherwise each line gets a timestamp.
 
 ## Parity: Python is the oracle until it is deleted
 - **Generator `tools/oracle/`** (Python, imports `lib`, deleted at cut-over).
@@ -222,9 +223,7 @@ Written 2026-10-23 against commit a221d98. Before starting:
   2. xAI `add_user_message` also sets `pending`, so the MAX_TOKENS re-ask works after the `previous_response_id` fallback.
   3. `seconds_until` across DST, so holding news fires on time on change days.
   4. Don't cache `_bg` backfill calls: today keep_warm re-fetches each one once.
-  5. Journald priorities: emit `<N>` level prefixes under JOURNAL_STREAM. Today everything is logged at info, so the
-     `journalctl -u grokbot -p warning` line in docs/running.md shows nothing.
-  6. An MCP child that exits without an SDK error is marked down. Confirm first with a scenario.
+  5. An MCP child that exits without an SDK error is marked down. Confirm first with a scenario.
 - **Accepted divergences:** library and OS error text inside error strings, tracebacks, and lone surrogates becoming U+FFFD.
 
 ## Risks → mitigations

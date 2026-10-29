@@ -104,11 +104,12 @@ async def test_tool_result_size_and_small_results_are_logged(caplog):
                                                             reply='{"portfolios":[]}')
     b = ScriptedBackend([step(calls=[("1", "yahoo__get_quote", "{}"), ("2", "sharesight__list_portfolios", "{}")],
                               finish="tool_calls"), step("ok")])
-    with caplog.at_level(logging.INFO, logger="bot"):
+    with caplog.at_level(logging.DEBUG, logger="bot"):
         await run(b, registry(big, small), req(tools=[ToolDef(n, "d") for m in (big, small) for n in m.fn_names]))
     assert "MCP yahoo.get_quote -> 500 chars" in caplog.text
     assert 'MCP sharesight.list_portfolios -> 17 chars: {"portfolios":[]}' in caplog.text
     assert "x" * 200 not in caplog.text
+    assert {r.levelname for r in caplog.records if r.getMessage().startswith("MCP ")} == {"DEBUG"}  # detail, not info
 
 
 async def test_unoffered_mcp_tool_is_refused():
