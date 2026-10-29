@@ -28,9 +28,10 @@ from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
 from .access import is_admin
 from .draft import Draft, start_typing
-from .send import reply_chunks, reply_html, reply_photos
+from .send import reply_chunks, reply_html, reply_with_photos
 
 log = logging.getLogger("bot")
+NO_RESPONSE = "(no response)"
 PORTFOLIO_ADMINS_ONLY = "Portfolio data is for admins only."
 FOLLOW_UP_WORDS = 12 # a message this short right after the bot's reply may be a follow-up to it
 FOLLOW_UP_SECONDS = 30 * 60
@@ -227,8 +228,11 @@ class Handlers:
             else:
                 typing.cancel()
         markup = dm_buttons.keyboard() if trig.private and st.dm_buttons else None
-        await reply_photos(msg, charts.photos, ctx.store, quote=not trig.private)
-        await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
+        if charts.photos:  # one reply: the chart with the answer as its caption
+            await reply_with_photos(msg, [image for image, _ in charts.photos], "" if html_text == NO_RESPONSE else html_text,
+                                    ctx.store, quote=not trig.private, markup=markup)
+        else:
+            await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
 
     async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None, charts: Charts | None = None) -> str:
         ctx, st = self.ctx, self.ctx.st
@@ -283,7 +287,7 @@ def format_answer(text: str, *, movers_bots: frozenset[str], summary: bool) -> s
     out = link_tickers(movers.untag(md_to_html(strip_disclaimer(text)), movers_bots))
     if summary:
         out = movers.strip_summary(out)
-    return out or "(no response)"
+    return out or NO_RESPONSE
 
 
 async def send_reply_text(msg: Message, text: str) -> None:

@@ -32,9 +32,12 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 
 ## Charts
 Ask for a chart, graph or plot ("chart NVDA against AMD over a year, AMD on the right axis, inverted") and the bot
-draws one and sends it as a photo just before its text reply (up to 3 per reply). The model gets the `make_chart`
-tool only when the message asks for one (chart, graph, plot, visualise), so other requests don't pay for its
-definition.
+replies once: the chart as a photo with its answer as the caption (2 or 3 charts come as one album). An answer too
+long for a caption (about 1,000 characters) continues in a text message. The model gets the `make_chart` tool only
+when the message asks for one (chart, graph, plot, visualise), so other requests don't pay for its definition.
+- **Style:** a bold title on the left, the legend under it, no frame, no vertical rules, light horizontal rules and
+  a darker line at zero when the values cross it. Tick labels share their decimals, shorten big numbers (120M, 1.5B)
+  and show % for % changes.
 - **Axes:** a left and a right y axis, each with as many series as needed (lines, bars or points). Either axis or
   both can be inverted; an inverted axis is labelled "(inverted)".
 - **Data:** a series is either a Yahoo symbol (NVDA, CBA.AX, ^GSPC, AUDUSD=X, GC=F, BTC-USD), whose closing prices

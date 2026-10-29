@@ -24,6 +24,7 @@ PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max
 DEFAULT_INTERVAL = {"1d": "5m", "5d": "30m", "1mo": "1d", "3mo": "1d", "6mo": "1wk", "1y": "1wk",
                     "2y": "1mo", "5y": "1mo", "10y": "3mo", "max": "3mo"}
 MAX_CHARTS, MAX_SERIES, MAX_POINTS = 3, 8, 2000
+CAPTION_HINT = 900  # Telegram captions hold 1024 characters; a longer reply continues in a text message
 HISTORY_TOOL = "get_historical_prices"
 
 TOOL = ToolDef(
@@ -185,10 +186,9 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
             s.y = percent_change(s.y)
     chart = Chart(title, series, str(args.get("left_label") or ""), str(args.get("right_label") or ""),
                   bool(args.get("invert_left")), bool(args.get("invert_right")), labels)
-    for side in ("left", "right"):  # an axis of nothing but % changes says so
+    for side in ("left", "right"):  # an axis of nothing but % changes labels its ticks with %
         on_side = [spec for s, spec in zip(series, specs, strict=True) if s.axis == side]
-        if on_side and all(spec.get("percent_change") for spec in on_side) and not getattr(chart, f"{side}_label"):
-            setattr(chart, f"{side}_label", "% change")
+        setattr(chart, f"{side}_percent", bool(on_side) and all(spec.get("percent_change") for spec in on_side))
     return chart, [summary(s, specs[i].get("percent_change"), notes[i]) for i, s in enumerate(series)]
 
 
@@ -214,7 +214,7 @@ def summary(s: Series, pct: bool, note: str) -> str:
 
 
 class Charts:
-    """The photos made while answering one message; the handler sends them before the text."""
+    """The photos made while answering one message; the handler sends them in one reply, the text as caption."""
 
     def __init__(self):
         self.photos: list[tuple[bytes, str]] = []
@@ -234,7 +234,8 @@ def tool(ctx: Ctx, charts: Charts):
             return f"Error: {e}"
         charts.photos.append((image, chart.title))
         log.debug("Chart %r: %d series in %.1f s", chart.title, len(chart.series), time.monotonic() - began)
-        return (f"Chart {len(charts.photos)} is ready and will be sent with your reply. Don't describe it; say what it "
-                "shows.\n" + "\n".join(lines))
+        return (f"Chart {len(charts.photos)} is ready. Your reply becomes its caption, so keep the reply under "
+                f"{CAPTION_HINT} characters, and don't describe the chart or say you made one: say what it shows.\n"
+                + "\n".join(lines))
 
     return TOOL, make

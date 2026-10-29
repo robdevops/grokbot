@@ -56,6 +56,30 @@ def test_one_axis_bars_and_labels():
     assert render.png(chart).startswith(b"\x89PNG\r\n\x1a\n")
 
 
+def test_tick_labels_share_their_decimals_and_shorten_big_numbers():
+    label = render.tick_label
+    assert [label(v, [0.58, 0.6, 0.62], False) for v in (0.58, 0.6)] == ["0.58", "0.60"]
+    assert [label(v, [2600, 2800, 3000], False) for v in (2600, 3000)] == ["2,600", "3,000"]
+    assert [label(v, [1e8, 1.5e8, 2e8], False) for v in (1e8, 1.5e8)] == ["100M", "150M"]
+    assert label(1.25e9, [1e9, 1.25e9, 1.5e9], False) == "1.25B"
+    assert [label(v, [-10, 0, 10], True) for v in (-10, -1e-15, 10)] == ["-10%", "0%", "10%"]
+
+
+def test_the_legend_reads_left_to_right():
+    assert render.legend_order(list("abcdefg"), 4) == list("aebfcgd")  # rows: a b c d / e f g
+    assert render.legend_order(list("abc"), 3) == list("abc")
+
+
+def test_charts_have_no_frame_and_only_horizontal_rules():
+    days = [datetime(2026, 1, d) for d in (1, 2, 3)]
+    fig = render.figure(Chart("t", [Series("a", days, [1.0, -1.0, 2.0]), Series("b", days, [5.0, 6.0, 7.0], axis="right")]))
+    left, right = fig.axes
+    assert not any(sp.get_visible() for ax in (left, right) for sp in ax.spines.values())
+    assert any(g.get_visible() for g in left.yaxis.get_gridlines())
+    assert not any(g.get_visible() for g in left.xaxis.get_gridlines())
+    assert [line.get_ydata()[0] for line in left.get_lines()][-1] == 0  # a zero line when the data crosses zero
+
+
 def test_x_values_become_dates_numbers_or_labels():
     s = [Series("a", ["2026-01-02", "2026-02"], []), Series("b", ["2026-03-01T10:00:00-04:00"], [])]
     assert charts.unify_x(s) == [] and s[0].x == [datetime(2026, 1, 2), datetime(2026, 2, 1)]
@@ -85,13 +109,13 @@ async def test_a_ticker_series_is_fetched_as_json_and_summarised(env, store):
     assert lines == ["NVDA (left axis, 3 points): 2026-01-01 100 -> 2026-01-03 120 (+20.0%), low 100, high 120"]
 
 
-async def test_percent_change_rebases_and_labels_the_axis(env, store):
+async def test_percent_change_rebases_and_puts_percent_on_the_ticks(env, store):
     yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([50, 75], truncated=True))
     ctx = make(env, store, yahoo)
     chart, lines = await charts.build(ctx, {"title": "t", "series": [
         {"name": "NVDA", "ticker": "NVDA", "percent_change": True},
         {"name": "Mine", "x": ["2026-01-01", "2026-01-02"], "y": [10, None], "axis": "right"}]})
-    assert chart.series[0].y == [0.0, 50.0] and chart.left_label == "% change" and chart.right_label == ""
+    assert chart.series[0].y == [0.0, 50.0] and chart.left_percent and not chart.right_percent
     assert math.isnan(chart.series[1].y[1])
     assert lines[0].endswith("high 50% (newest 2 of 7)") and lines[1].startswith("Mine (right axis, 1 points)")
 
@@ -132,16 +156,59 @@ async def test_at_most_three_charts_per_reply(env, store):
 CHART_CALL = [("1", "make_chart", json.dumps({"title": "NVDA, 1 year", "series": [{"name": "NVDA", "ticker": "NVDA"}]}))]
 
 
-async def test_a_chart_request_sends_the_photo_before_the_text_and_logs_it(env, store):
+async def test_a_chart_request_gets_one_reply_the_photo_with_the_answer_as_caption(env, store):
     yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
-    ctx, backend, h = make_ctx(env, store, [step(calls=CHART_CALL, finish="tool_calls"), step("Up 20%.")],
+    ctx, backend, h = make_ctx(env, store, [step(calls=CHART_CALL, finish="tool_calls"), step("Up <b>20%</b>.")],
                                servers=(yahoo,))
     m = user_msg(ctx.bot, "@stockbot chart NVDA over the last year")
     await run(h, m)
     assert "make_chart" in backend.seen[0]["tools"]
-    assert m.replies[0]["photo"].startswith(b"\x89PNG") and m.replies[0]["caption"] == "NVDA, 1 year"
-    assert m.replies[0]["do_quote"] is True and m.replies[1]["text"] == "Up 20%."
-    assert [r.text for r in store.history(-100, 20)][-2:] == ["[photo] NVDA, 1 year", "Up 20%."]
+    assert "caption" in backend.results_log[0][0]
+    [reply] = m.replies
+    assert reply["photo"].startswith(b"\x89PNG") and reply["caption"] == "Up <b>20%</b>."
+    assert reply["parse_mode"] == "HTML" and reply["do_quote"] is True
+    assert store.history(-100, 20)[-1].text == "[photo] Up <b>20%</b>."
+
+
+async def test_several_charts_go_as_one_album_captioned_once(env, store):
+    call = [("1", "make_chart", json.dumps({"title": "a", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]})),
+            ("2", "make_chart", json.dumps({"title": "b", "series": [{"name": "b", "x": [1, 2], "y": [2, 1]}]}))]
+    ctx, _, h = make_ctx(env, store, [step(calls=call, finish="tool_calls"), step("Both.")])
+    m = user_msg(ctx.bot, "@stockbot plot a and b")
+    await run(h, m)
+    [reply] = m.replies
+    assert [caption for _, caption in reply["album"]] == ["Both.", None] and reply["do_quote"] is True
+    assert [r.text for r in store.history(-100, 20)][-2:] == ["[photo] Both.", "[photo]"]
+
+
+async def test_an_answer_too_long_for_a_caption_continues_in_a_text_message(env, store):
+    long = "\n".join(f"Line {i}: " + "x" * 80 for i in range(20))  # about 1,800 characters
+    ctx, _, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(
+        {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}))], finish="tool_calls"), step(long)])
+    m = user_msg(ctx.bot, "@stockbot plot it")
+    await run(h, m)
+    photo, text = m.replies
+    assert len(photo["caption"]) <= 1000 and photo["caption"].startswith("Line 0:")
+    assert text["text"].startswith("Line ") and (photo["caption"] + "\n" + text["text"]).count("Line ") == 20
+
+
+async def test_a_caption_with_bad_html_is_resent_as_plain_text(env, store):
+    from telegram.error import BadRequest
+    ctx, _, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(
+        {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}))], finish="tool_calls"),
+        step("Up <b>a lot</b>.")])
+    m = user_msg(ctx.bot, "@stockbot plot it")
+    sent = []
+
+    async def picky(photo, **kw):
+        if kw.get("parse_mode"):
+            raise BadRequest("Can't parse entities: unclosed tag")
+        sent.append(kw)
+        return ctx.bot._msg(-100, kw["caption"])
+
+    m.reply_photo = picky
+    await run(h, m)
+    assert [kw["caption"] for kw in sent] == ["Up a lot."] and m.replies == []
 
 
 async def test_the_chart_tool_is_only_offered_when_a_chart_is_asked_for(env, store):
