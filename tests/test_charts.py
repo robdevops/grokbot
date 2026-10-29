@@ -323,12 +323,12 @@ async def test_a_period_tap_redraws_without_the_model_and_its_own_period_restore
     assert yahoo.calls[-1] == ("get_historical_prices",
                                {"ticker": "NVDA", "period": "1mo", "interval": "1d", "response_format": "json"})
     [edit] = q.edits
-    assert edit["media"].caption == "1 month: NVDA +50.0%" and edit["media"].media.input_file_content.startswith(b"\x89PNG")
+    assert edit["media"].caption == "NVDA, 1 month" and edit["media"].media.input_file_content.startswith(b"\x89PNG")
     assert shaded(edit["reply_markup"]) == ["ch:1mo"] and store.chart_get(-100, 1001)[2] == "1mo"
     assert len(ctx.backend.seen) == 2  # the model's two steps for the first reply, none since
     q = callback(sent, "ch:reload")
     await buttons.on_button(ctx, N(callback_query=q), None)
-    assert yahoo.calls[-1][1]["period"] == "1mo" and q.edits[0]["media"].caption == "1 month: NVDA +50.0%"
+    assert yahoo.calls[-1][1]["period"] == "1mo" and q.edits[0]["media"].caption == "NVDA, 1 month"
     q = callback(sent, "ch:1y")
     await buttons.on_button(ctx, N(callback_query=q), None)
     assert q.edits[0]["media"].caption == "Up 20%." and q.answers == [None]
@@ -362,7 +362,7 @@ async def test_other_periods_are_uploaded_to_the_preload_chat_and_reused_by_the_
     await settle()
     assert [p["chat_id"] for p in ctx.bot.photos] == [-900] * 3 and len(yahoo.calls) == 4  # the 3 other periods
     assert [p["caption"] for p in ctx.bot.photos] == [
-        "1 day: NVDA +20.0%", "1 month: NVDA +20.0%", "5 years: NVDA +20.0%"]
+        "NVDA, 1 day", "NVDA, 1 month", "NVDA, 5 years"]
     sent = ctx.bot._msg(-100, None)
     sent.message_id = 1001
     calls_before = len(yahoo.calls)
@@ -370,7 +370,7 @@ async def test_other_periods_are_uploaded_to_the_preload_chat_and_reused_by_the_
     await buttons.on_button(ctx, N(callback_query=q), None)
     assert len(yahoo.calls) == calls_before  # nothing fetched or drawn
     [edit] = q.edits
-    assert edit["media"].media == "file-2" and edit["media"].caption == "1 month: NVDA +20.0%"
+    assert edit["media"].media == "file-2" and edit["media"].caption == "NVDA, 1 month"
     assert shaded(edit["reply_markup"]) == ["ch:1mo"] and store.chart_get(-100, 1001)[2] == "1mo"
     q = callback(sent, "ch:1y")  # back to the chart as first sent
     await buttons.on_button(ctx, N(callback_query=q), None)

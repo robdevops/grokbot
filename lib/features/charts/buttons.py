@@ -64,10 +64,9 @@ def retitle(chart, period: str) -> None:
     chart.title = f"{head}{pct}, {WORDS.get(period, period)}"
 
 
-def caption_for(chart, period: str) -> str:
-    """A short caption for a period the model didn't comment on: each series' total."""
-    totals = ", ".join(f"{s.name} {s.total}".strip() for s in chart.series)
-    return html.escape(f"{WORDS.get(period, period)}: {totals}")
+def caption_for(chart) -> str:
+    """The caption for a period the model didn't comment on: just the chart's heading."""
+    return html.escape(chart.title)
 
 
 async def remember(ctx: Ctx, sent, args: dict) -> None:
@@ -94,7 +93,7 @@ async def preload(ctx: Ctx, chat_id: int, message_id: int, args: dict) -> None:
             chart, _ = await build(ctx, with_period(args, period))
             retitle(chart, period)
             image = await asyncio.to_thread(render.png, chart)
-            caption = caption_for(chart, period)
+            caption = caption_for(chart)
             sent = await ctx.bot.send_photo(ctx.st.preload_chat, image, caption=caption, parse_mode=ParseMode.HTML,
                                             disable_notification=True)
             await asyncio.to_thread(ctx.store.chart_file_put, chat_id, message_id, period, sent.photo[-1].file_id, caption)
@@ -153,7 +152,7 @@ async def on_button(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE
     if not original:
         retitle(chart, period)
     image = await asyncio.to_thread(render.png, chart)
-    caption = model_caption if original else caption_for(chart, period)
+    caption = model_caption if original else caption_for(chart)
     for html_ok in (True, False):
         text = (caption if html_ok else plain_text(caption)) or None
         try:

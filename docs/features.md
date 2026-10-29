@@ -40,7 +40,7 @@ when the message asks for one (chart, graph, plot, visualise), so other requests
   and show % for % changes.
 - **Period buttons:** a single chart whose series are all tickers comes with buttons: 1D, 1M, 1Y, 5Y and 🔄 (reload); the period shown is shaded.
   A tap fetches the prices again and redraws the chart in place, without asking the model. Another period gets a
-  plain title and a caption with each series' total; the chart's own period brings back the model's caption.
+  plain title, repeated as the caption; the chart's own period brings back the model's caption.
   Set `TELEGRAM_PRELOAD_CHAT` to a private chat the bot can post in (a private group, or a DM with you) and the
   other periods are drawn and uploaded there in the background right after the reply; a tap then swaps in the
   uploaded picture without fetching or drawing, and so does going back to the chart's own period. A picture older
