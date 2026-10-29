@@ -38,6 +38,8 @@ when the message asks for one (chart, graph, plot, visualise), so other requests
 - **Style:** a bold title on the left, the legend under it, no frame, no vertical rules, light horizontal rules and
   a darker line at zero when the values cross it. Tick labels share their decimals, shorten big numbers (120M, 1.5B)
   and show % for % changes.
+- **Totals in the legend:** each series' total follows its name ("NBIS -27.1%"): the change over the chart for a
+  ticker or a % change series, or a figure the model passes from the data (a portfolio's total return, say).
 - **Axes:** a left and a right y axis, each with as many series as needed (lines, bars or points). Either axis or
   both can be inverted; an inverted axis is labelled "(inverted)".
 - **Data:** a series is either a Yahoo symbol (NVDA, CBA.AX, ^GSPC, AUDUSD=X, GC=F, BTC-USD), whose closing prices

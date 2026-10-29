@@ -28,6 +28,7 @@ class Series:
     y: list[float]  # NaN = a gap
     axis: str = "left"
     kind: str = "line"
+    total: str = ""  # shown after the name in the legend, e.g. "+20.4%"
 
 
 @dataclass
@@ -103,6 +104,14 @@ def _formatter(Formatter, pct: bool):
     return Ticks()
 
 
+def legend_columns(labels: list[str]) -> int:
+    """As many legend columns as fit across the image: each takes the line sample, gaps and the widest label
+    (about 0.65 em a character at the legend's 10 pt)."""
+    em = 10 / 72 * DPI
+    entry = (3.6 + 0.65 * max(len(label) for label in labels)) * em
+    return max(1, min(len(labels), LEGEND_COLUMNS, int((SIZE_IN[0] * DPI - 2 * em) // entry)))
+
+
 def legend_order(handles: list, columns: int) -> list:
     """Matplotlib fills legend columns top to bottom; this order makes it read left to right, row by row."""
     rows = math.ceil(len(handles) / columns)
@@ -129,7 +138,7 @@ def figure(chart: Chart):
     both = right is not None and any(s.axis == "left" for s in chart.series)
     for i, (s, pos) in enumerate(zip(chart.series, xs, strict=True)):
         ax = right if s.axis == "right" else left
-        label = s.name + (" (right)" if both and s.axis == "right" else "")
+        label = " ".join(filter(None, (s.name, s.total))) + (" (right)" if both and s.axis == "right" else "")
         color = PALETTE[i % len(PALETTE)]
         if s.kind == "bar":
             shift = (bars.index(i) - (len(bars) - 1) / 2) * width
@@ -167,8 +176,8 @@ def figure(chart: Chart):
     elif all(float(v).is_integer() for s in chart.series for v in s.x):
         left.xaxis.set_major_locator(MaxNLocator(integer=True))
     handles = [h for ax in (left, right) if ax for h in ax.get_legend_handles_labels()[0]]
-    columns = min(len(handles), LEGEND_COLUMNS)
-    rows = math.ceil(len(handles) / columns) if len(handles) > 1 else 0
+    columns = legend_columns([h.get_label() for h in handles]) if handles else 1
+    rows = math.ceil(len(handles) / columns) if len(handles) > 1 or any(s.total for s in chart.series) else 0
     if rows:  # above the plot, under the title, without a frame
         left.legend(handles=legend_order(handles, columns), loc="lower left", bbox_to_anchor=(0, 1.01), ncol=columns,
                     frameon=False, fontsize=10, handlelength=1.4, columnspacing=1.4, borderaxespad=0, labelcolor=INK)

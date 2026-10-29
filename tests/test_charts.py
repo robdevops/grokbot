@@ -65,6 +65,33 @@ def test_tick_labels_share_their_decimals_and_shorten_big_numbers():
     assert [label(v, [-10, 0, 10], True) for v in (-10, -1e-15, 10)] == ["-10%", "0%", "10%"]
 
 
+def test_totals_go_in_the_legend_even_for_one_series():
+    days = [datetime(2026, 1, d) for d in (1, 2)]
+    legend = lambda chart: [t.get_text() for t in render.figure(chart).axes[0].get_legend().get_texts()]  # noqa: E731
+    assert legend(Chart("t", [Series("NBIS", days, [0.0, -27.1], total="-27.1%"),
+                              Series("Gold", days, [1.0, 2.0], axis="right", total="+100.0%"),
+                              Series("Mine", days, [1.0, 2.0])])) == ["NBIS -27.1%", "Mine", "Gold +100.0% (right)"]
+    assert legend(Chart("t", [Series("NVDA", days, [1.0, 2.0], total="+100.0%")])) == ["NVDA +100.0%"]
+    assert render.figure(Chart("t", [Series("NVDA", days, [1.0, 2.0])])).axes[0].get_legend() is None
+
+
+async def test_totals_are_the_models_own_or_the_change_over_the_chart(env, store):
+    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
+    chart, _ = await charts.build(make(env, store, yahoo), {"title": "t", "series": [
+        {"name": "Price", "ticker": "NVDA"},
+        {"name": "Change", "ticker": "NVDA", "percent_change": True},
+        {"name": "Fund", "x": ["2026-01-01", "2026-01-02"], "y": [5, 6], "total": "+12.4% since inception in 2019"},
+        {"name": "P/E", "x": ["2026-01-01", "2026-01-02"], "y": [30, 35]}]})
+    assert [s.total for s in chart.series] == ["+20.0%", "+20.0%", "+12.4% since inception", ""]
+
+
+def test_legend_columns_fit_the_labels_across_the_image():
+    assert render.legend_columns(["NBIS -31.1%", "CRWV -50.9%", "IREN -52.5%", "APLD -26.8%", "CORZ -9.3%"]) == 4
+    assert render.legend_columns(["A", "B", "C"]) == 3
+    assert render.legend_columns(list("abcdefgh")) == render.LEGEND_COLUMNS
+    assert render.legend_columns(["x" * 200]) == 1
+
+
 def test_the_legend_reads_left_to_right():
     assert render.legend_order(list("abcdefg"), 4) == list("aebfcgd")  # rows: a b c d / e f g
     assert render.legend_order(list("abc"), 3) == list("abc")

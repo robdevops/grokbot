@@ -24,6 +24,7 @@ PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max
 DEFAULT_INTERVAL = {"1d": "5m", "5d": "30m", "1mo": "1d", "3mo": "1d", "6mo": "1wk", "1y": "1wk",
                     "2y": "1mo", "5y": "1mo", "10y": "3mo", "max": "3mo"}
 MAX_CHARTS, MAX_SERIES, MAX_POINTS = 3, 8, 2000
+TOTAL_MAX = 24  # characters of a legend total
 CAPTION_HINT = 900  # Telegram captions hold 1024 characters; a longer reply continues in a text message
 HISTORY_TOOL = "get_historical_prices"
 
@@ -44,7 +45,8 @@ TOOL = ToolDef(
             "y": {"type": "array", "items": {"type": ["number", "null"]}},
             "axis": {"type": "string", "enum": ["left", "right"]},
             "kind": {"type": "string", "enum": list(KINDS)},
-            "percent_change": {"type": "boolean", "description": "Plot % change since the first point"}}}},
+            "percent_change": {"type": "boolean", "description": "Plot % change since the first point"},
+            "total": {"type": "string", "description": "For the legend, e.g. the total return from the data"}}}},
         "left_label": {"type": "string"},
         "right_label": {"type": "string"},
         "invert_left": {"type": "boolean"},
@@ -121,6 +123,20 @@ def unify_x(series: list[Series]) -> list[str]:
     return labels
 
 
+def total(s: Series, spec: dict) -> str:
+    """The figure after a series' name in the legend: the model's own, else the change over the chart for a % change
+    or a ticker's prices; other values have no total to assume."""
+    given = str(spec.get("total") or "").strip()
+    values = [v for v in s.y if not math.isnan(v)]
+    if given or not values:
+        return given if len(given) <= TOTAL_MAX else (given[:TOTAL_MAX].rsplit(" ", 1)[0] or given[:TOTAL_MAX])
+    if spec.get("percent_change"):
+        return f"{values[-1]:+.1f}%"
+    if spec.get("ticker") and values[0]:
+        return f"{(values[-1] / values[0] - 1) * 100:+.1f}%"
+    return ""
+
+
 def percent_change(y: list[float]) -> list[float]:
     base = next((v for v in y if not math.isnan(v)), math.nan)
     if math.isnan(base) or base == 0:
@@ -184,6 +200,7 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
     for s, spec in zip(series, specs, strict=True):
         if spec.get("percent_change"):
             s.y = percent_change(s.y)
+        s.total = total(s, spec)
     chart = Chart(title, series, str(args.get("left_label") or ""), str(args.get("right_label") or ""),
                   bool(args.get("invert_left")), bool(args.get("invert_right")), labels)
     for side in ("left", "right"):  # an axis of nothing but % changes labels its ticks with %
