@@ -94,7 +94,14 @@ def user_msg(bot: FakeBot, text, *, chat_id=-100, mid=1, sender="Bob", user_id=5
         m.replies.append({"text": text, **rkw})
         return bot._msg(chat_id, text)
 
+    async def reply_photo(photo, **rkw):
+        m.replies.append({"photo": photo, **rkw})
+        sent = bot._msg(chat_id, None)
+        sent.photo, sent.caption, sent.caption_html = [N(file_id="sent")], rkw.get("caption"), rkw.get("caption")
+        return sent
+
     m.reply_text = reply_text
+    m.reply_photo = reply_photo
     m.parse_entities = lambda types=None: {}
     m.parse_caption_entities = lambda types=None: {}
     return m

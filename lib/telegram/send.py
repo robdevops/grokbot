@@ -7,7 +7,7 @@ import logging
 
 from telegram import LinkPreviewOptions, Message
 from telegram.constants import ParseMode
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TelegramError
 
 from ..store import Store
 from ..textfmt import is_parse_error, plain_text, split_html
@@ -54,4 +54,15 @@ async def reply_chunks(msg: Message, html_text: str, store: Store, *, quote: boo
     for i, chunk in enumerate(chunks):
         markup = last_markup if i == len(chunks) - 1 else None
         sent = await reply_html(msg, chunk, quote=quote, reply_markup=markup)
+        await asyncio.to_thread(store.save, sent)
+
+
+async def reply_photos(msg: Message, photos: list[tuple[bytes, str]], store: Store, *, quote: bool = True) -> None:
+    """Reply with images (PNG bytes and a caption each), logging each message sent."""
+    for image, caption in photos:
+        try:
+            sent = await msg.reply_photo(image, caption=caption[:1024], do_quote=quote, disable_notification=True)
+        except TelegramError as e:  # the text reply still goes out
+            log.warning("Couldn't send a chart: %s", e)
+            continue
         await asyncio.to_thread(store.save, sent)

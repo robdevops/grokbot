@@ -16,6 +16,8 @@ from .. import config
 from ..ask import ask
 from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers, periods, post
+from ..features.charts import Charts, wants_chart
+from ..features.charts import tool as chart_tool
 from ..history import compact, format_rows
 from ..llm.base import BUSY_REPLY, is_busy
 from ..llm.gate import Route, is_portfolio_question, route
@@ -26,7 +28,7 @@ from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
 from .access import is_admin
 from .draft import Draft, start_typing
-from .send import reply_chunks, reply_html
+from .send import reply_chunks, reply_html, reply_photos
 
 log = logging.getLogger("bot")
 PORTFOLIO_ADMINS_ONLY = "Portfolio data is for admins only."
@@ -208,8 +210,9 @@ class Handlers:
             await draft.start()
         else:
             typing = await start_typing(ctx.bot, msg.chat_id)  # a Telegram hiccup is not fatal
+        charts = Charts()
         try:
-            html_text = await self._generate(msg, trig, draft)
+            html_text = await self._generate(msg, trig, draft, charts)
         except Exception as e:
             if is_busy(e):
                 log.warning("Reply failed, the provider is busy: %s", " ".join(str(e).split()))
@@ -224,9 +227,10 @@ class Handlers:
             else:
                 typing.cancel()
         markup = dm_buttons.keyboard() if trig.private and st.dm_buttons else None
+        await reply_photos(msg, charts.photos, ctx.store, quote=not trig.private)
         await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
 
-    async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None) -> str:
+    async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None, charts: Charts | None = None) -> str:
         ctx, st = self.ctx, self.ctx.st
         await ctx.registry.wait_started(config.MCP_STARTUP_WAIT)
         preset = dm_buttons.preset_for(trig.text) if trig.private and st.dm_buttons else None
@@ -259,6 +263,10 @@ class Handlers:
             if st.post_to_groups and trig.private and post.wants_post(trig.text):
                 extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
                 if chosen.simple:  # the model must not be told it has no tools
+                    chosen = Route([], False)
+            if charts is not None and wants_chart(trig.text):
+                extra.append(chart_tool(ctx, charts))
+                if chosen.simple:
                     chosen = Route([], False)
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)
             parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]

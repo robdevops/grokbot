@@ -1,4 +1,4 @@
-# Optional features and commands
+# Features and commands
 [README](../README.md) · [all docs](../README.md#more)
 
 ## Optional features (off by default)
@@ -29,6 +29,24 @@ Each is off by default. The holding-news DM and the movers reply are switched on
   channels. Telegram can't list a bot's chats, so the bot learns them from the messages it sees and
   from being added: a group it joined earlier is unknown until someone posts there. If the name
   matches none of your groups the reply is the same whether or not the group exists.
+
+## Charts
+Ask for a chart, graph or plot ("chart NVDA against AMD over a year, AMD on the right axis, inverted") and the bot
+draws one and sends it as a photo just before its text reply (up to 3 per reply). The model gets the `make_chart`
+tool only when the message asks for one (chart, graph, plot, visualise), so other requests don't pay for its
+definition.
+- **Axes:** a left and a right y axis, each with as many series as needed (lines, bars or points). Either axis or
+  both can be inverted; an inverted axis is labelled "(inverted)".
+- **Data:** a series is either a Yahoo symbol (NVDA, CBA.AX, ^GSPC, AUDUSD=X, GC=F, BTC-USD), whose closing prices
+  the bot fetches itself from the Yahoo MCP server's `get_historical_prices`, or values the model passes from other
+  tools or the chat (Sharesight, `period_returns`, search results). `percent_change` rebases a series to its % change,
+  to compare tickers on one axis.
+- **Price history:** the interval follows the period so the history fits in one Yahoo response (daily up to 3 months,
+  weekly for 6 months and a year, monthly for 2 and 5 years, quarterly beyond), at most 60 points. The model is told
+  each series' first and last value, change, low and high, so it can comment on a chart whose prices it never saw.
+- **Cost:** matplotlib loads on the first chart and keeps its font cache in `matplotlib/` inside `DATA_DIR`. A chart
+  takes about half a second to draw (about a second for the first), and after the first one the bot uses about 50 MB
+  more memory.
 
 ## Commands
 | Command | Who | What |

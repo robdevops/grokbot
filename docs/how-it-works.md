@@ -23,6 +23,8 @@
 - **Images:** photos in the mention, or in the message being replied to, are sent to the model
   (up to 2). A mid-size copy is sent at low detail, unless the text asks the
   model to read it (read, text, chart, table, screenshot...).
+- **Charts:** asked for a chart, graph or plot, the model can draw one and it is sent as a photo with the reply
+  (see [Charts](features.md#charts)).
 - **Time:** the current date and time (in `BOT_TZ`) is included in every prompt.
 - **Replies are final:** the prompt tells the model never to say it will "check later"; it makes its
   tool calls first (several at once) and answers in one go.
