@@ -8,13 +8,9 @@ from lib import config
 
 def test_data_dir_holds_the_data_files():
     base = {"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"}
-    mcp = str(config.ROOT / "mcp_servers.json")  # next to bot.py, whatever DATA_DIR is
-    plain = config.load(base)
-    assert (plain.db_path, plain.mcp_config) == ("chat_log.db", mcp)
-    s = config.load({**base, "DATA_DIR": "/data"})
-    assert (s.db_path, s.mcp_config) == ("/data/chat_log.db", mcp)
-    s = config.load({**base, "DATA_DIR": "/data", "DB_PATH": "other.db", "MCP_CONFIG": "/etc/mcp.json"})
-    assert (s.db_path, s.mcp_config) == ("/data/other.db", "/etc/mcp.json")  # relative joins, absolute stays
+    assert config.load(base).db_path == "chat_log.db"
+    assert config.load({**base, "DATA_DIR": "/data"}).db_path == "/data/chat_log.db"
+    assert config.MCP_CONFIG == config.ROOT / "mcp_servers.json"  # next to bot.py, whatever DATA_DIR is
 
 
 def test_data_dir_defaults_to_systemd_state_directory():
@@ -22,7 +18,6 @@ def test_data_dir_defaults_to_systemd_state_directory():
     assert config.load({**base, "STATE_DIRECTORY": "/var/lib/x"}).db_path == "/var/lib/x/chat_log.db"
     assert config.load({**base, "STATE_DIRECTORY": "/a:/b"}).db_path == "/a/chat_log.db"  # first of several
     assert config.load({**base, "STATE_DIRECTORY": "/a", "DATA_DIR": "/data"}).db_path == "/data/chat_log.db"
-    assert config.load({**base, "STATE_DIRECTORY": "/a", "DB_PATH": "/x/y.db"}).db_path == "/x/y.db"
 
 
 def test_period_backfill_is_all_by_default_and_can_be_listed_or_off():
@@ -81,12 +76,9 @@ def test_log_width_defaults_to_95(env):
     assert config.load({**env, "LOG_WIDTH": ""}).log_width == 95
 
 
-def test_token_saver_switches_defaults(env):
-    on, off = config.load(env), config.load({**env, "TOKEN_SAVER": "off"})
-    assert (on.max_tokens, off.max_tokens) == (3000, 3000)
-    assert on.max_tool_output < off.max_tool_output
-    assert config.load({**env, "FAST_MODEL": "f"}).fast_model == "f"
-    assert config.load({**env, "FAST_MODEL": "f", "TOKEN_SAVER": "off"}).fast_model == ""
+def test_token_limits():
+    assert config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"}).max_tokens == 3000
+    assert config.MAX_TOOL_OUTPUT == 12_000 and config.HISTORY_OWN_LINE_MAX < config.HISTORY_LINE_MAX
 
 
 def test_search_off_without_search_model(env):
@@ -120,7 +112,7 @@ def test_movers_bots_normalised(env):
     assert config.load({**env, "MOVERS_BOTS": "@FinBot, other"}).movers_bots == {"finbot", "other"}
 
 
-def test_readme_documents_every_env_var():
-    readme = (Path(__file__).parent.parent / "README.md").read_text()
-    missing = [n for n in config.ENV_VARS if not re.search(rf"\b{n}\b", readme)]
-    assert not missing, f"README.md does not mention: {missing}"
+def test_docs_document_every_env_var():
+    doc = (Path(__file__).parent.parent / "docs" / "configuration.md").read_text()
+    missing = [n for n in config.ENV_VARS if not re.search(rf"\b{n}\b", doc)]
+    assert not missing, f"docs/configuration.md does not mention: {missing}"

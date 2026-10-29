@@ -66,10 +66,10 @@ def is_portfolio_question(text: str, st: Settings) -> bool:
 
 
 def route(text: str, st: Settings, registry: Registry, *, force_full: bool = False) -> Route:
-    """Tools for this message. With TOKEN_SAVER off, or `force_full` (a search/data request such
-    as a movers list, a preset button or a retry after NEEDS_TOOLS), everything is offered."""
+    """Tools for this message. With `force_full` (a search/data request such as a movers list, a
+    preset button or a retry after NEEDS_TOOLS), everything is offered."""
     up = registry.up()
-    if force_full or not st.token_saver:
+    if force_full:
         return Route(up, st.search)
     portfolio = is_portfolio_question(text, st)
     market = portfolio or bool(MARKET_WORDS.search(text)) or _has_ticker(text)

@@ -95,8 +95,8 @@ def build_ctx(st: config.Settings) -> Ctx:
     async def on_down(server: MCPServer) -> None:
         await alert_down(ctx, server)
 
-    ctx.registry = Registry.load(st.mcp_config, timeout=config.MCP_TIMEOUT,
-                                 max_output=st.max_tool_output, on_down=on_down,
+    ctx.registry = Registry.load(str(config.MCP_CONFIG), timeout=config.MCP_TIMEOUT,
+                                 max_output=config.MAX_TOOL_OUTPUT, on_down=on_down,
                                  log_width=st.log_width)
     return ctx
 
@@ -186,7 +186,7 @@ def flush_cache(words: list[str]) -> str:
     if scope is None:
         return "Usage: --flush-cache [portfolio ID] [2024 | 2024-05 | 2024-05-17]"
     pid, first, last = scope
-    path = config.data_path(os.environ, "DB_PATH", "chat_log.db")
+    path = config.database_path(os.environ)
     n = Store(path).period_flush(pid, first and first.isoformat(), last and last.isoformat())
     return f"Flushed {n} cached periods ({describe_scope(pid, first, last)})."
 

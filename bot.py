@@ -2,7 +2,7 @@
 """Telegram group bot that answers @mentions with an LLM (xAI or OpenRouter).
 
 Usage: python bot.py [label]     (the label is ignored; it only shows in ps/top)
-See README.md for configuration; the code lives in the lib/ package.
+See README.md and docs/ for configuration; the code lives in the lib/ package.
 """
 
 from lib.app import main

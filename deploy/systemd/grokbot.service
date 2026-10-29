@@ -1,0 +1,19 @@
+[Unit]
+Description=grokbot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=grokbot
+WorkingDirectory=/opt/grokbot
+EnvironmentFile=/etc/grokbot.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/grokbot/.venv/bin/python bot.py
+Restart=on-failure
+RestartSec=10s
+SyslogIdentifier=grokbot
+
+[Install]
+WantedBy=multi-user.target

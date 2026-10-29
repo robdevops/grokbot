@@ -43,18 +43,18 @@ def tools_note(servers: list[MCPServer]) -> str:
             "which and quote the error briefly.\n")
 
 
-def system_prompt(bot_name: str, route: Route, search_what: str, *, saver: bool = True) -> str:
+def system_prompt(bot_name: str, route: Route, search_what: str) -> str:
     if route.simple:
         note = SIMPLE_NOTE
     else:
         note = (SEARCH_NOTE.format(what=search_what) if route.search else NO_SEARCH_NOTE) \
             + tools_note(route.servers) + (PARTIAL_NOTE if route.partial else "")
-    return SYSTEM.format(bot_name=bot_name, tools_note=note + "\n", refresh=REFRESH if saver else "")
+    return SYSTEM.format(bot_name=bot_name, tools_note=note + "\n", refresh=REFRESH)
 
 
-def no_tools_system(bot_name: str, *, saver: bool = True) -> str:
+def no_tools_system(bot_name: str) -> str:
     return SYSTEM.format(bot_name=bot_name, tools_note=NO_TOOLS_NOTE + "\n",
-                         refresh=REFRESH if saver else "")
+                         refresh=REFRESH)
 
 
 def down_note(down: list[MCPServer]) -> str:
@@ -68,7 +68,7 @@ def down_note(down: list[MCPServer]) -> str:
 
 
 def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str | None,
-                msg_id: int, now: str, down: str = "", saver: bool = True, middle: str = "",
+                msg_id: int, now: str, down: str = "", middle: str = "",
                 fresh: bool = False) -> str:
     """The user turn: transcript, the replied-to message, and the volatile tail (kept last so the
     cached prefix before it is unchanged)."""
@@ -81,12 +81,6 @@ def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str
         head += f"\n\nThe last message (#{msg_id}) is a reply to this message:\n{reply_quote}"
     head += middle
     tail = f"\n\nIt's now {now}. Respond to the last message (#{msg_id})."
-    if not saver:
-        tail += (" Do the whole job with your tools before replying: don't do part of it and offer "
-                 "to do the rest, and don't ask whether to continue. Don't imitate earlier replies "
-                 "of yours that did either. Fetch fresh data rather than reusing numbers from "
-                 "earlier replies, and follow the formatting rules in your instructions even "
-                 "where your earlier replies didn't.")
     if fresh:  # a portfolio question: stale numbers and refusals in the history must not be reused
         tail += (" Get current figures with your portfolio tools before answering (and your market tools "
                  "for anything else asked, such as prices or a comparison with market data); don't reuse "

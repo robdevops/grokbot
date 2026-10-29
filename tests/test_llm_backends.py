@@ -149,7 +149,7 @@ def test_zai_prices_cover_the_published_glm_models():
 
 
 async def test_zai_warns_once_about_models_without_a_price(caplog):
-    ZaiBackend(config.load({**ZAI_ENV, "MODEL": "glm-x", "FAST_MODEL": "glm-5.3-flash"}), FakeChatClient())
+    ZaiBackend(config.load({**ZAI_ENV, "MODEL": "glm-x"}), FakeChatClient())
     assert [r.getMessage() for r in caplog.records if "No z.ai price" in r.getMessage()] == [
         "No z.ai price for model glm-x; its cost will show $0"]
 

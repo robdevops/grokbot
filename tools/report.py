@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from zoneinfo import ZoneInfo
 
+from lib import config
 from lib.history import format_rows
 from lib.llm.gate import Route
 from lib.mcp.schema import ToolDef, compact_description, compact_schema
@@ -46,21 +47,16 @@ def sample_rows() -> list[HistoryRow]:
 
 
 def report() -> str:
-    tz, lines = ZoneInfo("UTC"), []
-    for saver in (False, True):
-        rows = sample_rows()
-        history = format_rows(rows, "Stock (@stockbot)", tz, line_max=240 if saver else 400, compact_text=saver,
-                              own_line_max=160 if saver else None)
-        sys_full = system_prompt("Stock", Route([], True), "the web", saver=saver)
-        tool = ToolDef("yahoo__get_historical_prices",
-                       compact_description(SAMPLE_TOOL["description"], 220 if saver else 600),
-                       compact_schema(SAMPLE_TOOL["schema"]))
-        tail = chat_prompt(transcript="", sender="Bob", private=False, reply_quote=None, msg_id=26,
-                           now="Tuesday 06 October 2026, 10:00 UTC", saver=saver)
-        lines.append(f"TOKEN_SAVER={'on' if saver else 'off'}: system ~{tokens(sys_full)}, "
-                     f"history (25 msgs) ~{tokens(history)}, tail ~{tokens(tail)}, "
-                     f"one tool definition ~{tokens(json.dumps(vars(tool)))}")
-    return "\n".join(lines)
+    rows = sample_rows()
+    history = format_rows(rows, "Stock (@stockbot)", ZoneInfo("UTC"), line_max=config.HISTORY_LINE_MAX,
+                          own_line_max=config.HISTORY_OWN_LINE_MAX)
+    sys_full = system_prompt("Stock", Route([], True), "the web")
+    tool = ToolDef("yahoo__get_historical_prices", compact_description(SAMPLE_TOOL["description"], 220),
+                   compact_schema(SAMPLE_TOOL["schema"]))
+    tail = chat_prompt(transcript="", sender="Bob", private=False, reply_quote=None, msg_id=26,
+                       now="Tuesday 06 October 2026, 10:00 UTC")
+    return (f"system ~{tokens(sys_full)}, history (25 msgs) ~{tokens(history)}, tail ~{tokens(tail)}, "
+            f"one tool definition ~{tokens(json.dumps(vars(tool)))}")
 
 
 if __name__ == "__main__":

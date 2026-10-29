@@ -27,7 +27,7 @@ def compact(text: str) -> str:
 
 
 def format_rows(rows: list[HistoryRow], own_name: str, tz: ZoneInfo, *, line_max: int,
-                compact_text: bool, own_line_max: int | None = None) -> str:
+                own_line_max: int | None = None) -> str:
     """One line per message, oldest first: `[#id] Wed 14:05 Name (replying to #x): text`.
     The bot's own earlier replies appear as "You". Long lines are cut (the bot's own, usually the
     longest, at `own_line_max` when given), except the bot's most recent reply, which is kept
@@ -39,7 +39,7 @@ def format_rows(rows: list[HistoryRow], own_name: str, tz: ZoneInfo, *, line_max
         when = datetime.fromtimestamp(r.ts, tz).strftime("%a %H:%M")
         reply = f" (replying to #{r.reply_to})" if r.reply_to else ""
         who = "You" if r.sender == own_name else r.sender
-        text = compact(r.text) if compact_text else r.text
+        text = compact(r.text)
         cap = LAST_REPLY_MAX if i == last_own else (
             own_line_max if (own_line_max and who == "You") else line_max)
         if len(text) > cap:

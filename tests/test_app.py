@@ -63,8 +63,8 @@ def test_main_accepts_and_ignores_a_label_and_unknown_args(monkeypatch, tmp_path
     monkeypatch.setenv("OPENROUTER_API_KEY", "b")
     monkeypatch.delenv("XAI_API_KEY", raising=False)
     monkeypatch.setenv("ADMIN_ONLY", "off")
-    monkeypatch.setenv("DB_PATH", str(tmp_path / "x.db"))
-    monkeypatch.setenv("MCP_CONFIG", str(tmp_path / "none.json"))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "MCP_CONFIG", tmp_path / "none.json")
     monkeypatch.setattr(app.Application, "run_polling", lambda self, **kw: started.update(kw))
     app.main(["mimo", "--whatever"])
     assert started["allowed_updates"] == ["message", "edited_message"]
@@ -77,8 +77,8 @@ def test_startup_logs_the_git_hash_and_whether_the_backfill_is_on(monkeypatch, t
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "1:x")
     monkeypatch.setenv("OPENROUTER_API_KEY", "b")
     monkeypatch.delenv("XAI_API_KEY", raising=False)
-    monkeypatch.setenv("DB_PATH", str(tmp_path / "x.db"))
-    monkeypatch.setenv("MCP_CONFIG", str(tmp_path / "none.json"))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "MCP_CONFIG", tmp_path / "none.json")
     monkeypatch.setattr(app.Application, "run_polling", lambda self, **kw: None)
     caplog.set_level("INFO", logger="bot")
     monkeypatch.setattr(app, "git_hash", lambda: "abc1234")
@@ -142,10 +142,10 @@ async def test_alert_down_notifies_admin_chats_only(env, store):
 def test_flush_cache_cli_needs_no_keys_and_flushes_by_portfolio_and_period(monkeypatch, tmp_path, capsys):
     from lib.store import PeriodRow, Store
 
-    db = str(tmp_path / "x.db")
+    db = str(tmp_path / "chat_log.db")
     for var in ("TELEGRAM_BOT_TOKEN", "OPENROUTER_API_KEY", "XAI_API_KEY", "ZAI_API_KEY"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setenv("DB_PATH", db)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     s = Store(db)
     row = lambda pid, a, b: PeriodRow(pid, a, b, 1.0, 1.0, "AUD", [])  # noqa: E731
     s.period_put([row(70007, "2023-12-26", "2024-01-01"), row(70007, "2024-03-01", "2024-03-31"),
