@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS kv (bot_id INTEGER, key TEXT, value TEXT, PRIMARY KEY
 CREATE TABLE IF NOT EXISTS charts (
     bot_id INTEGER, chat_id INTEGER, message_id INTEGER, spec TEXT, caption TEXT, period TEXT, ts INTEGER,
     PRIMARY KEY (bot_id, chat_id, message_id));
+-- Chart images already on Telegram (uploaded to TELEGRAM_PRELOAD_CHAT, or sent as the reply): reused by the period buttons.
+CREATE TABLE IF NOT EXISTS chart_files (
+    bot_id INTEGER, chat_id INTEGER, message_id INTEGER, period TEXT, file_id TEXT, caption TEXT, ts INTEGER,
+    PRIMARY KEY (bot_id, chat_id, message_id, period));
 CREATE TABLE IF NOT EXISTS usage (
     ts INTEGER, bot_id INTEGER, chat_id INTEGER, model TEXT, kind TEXT, rounds INTEGER,
     tokens_in INTEGER, tokens_cached INTEGER, tokens_out INTEGER, cost REAL);
@@ -170,6 +174,17 @@ class Store:
         self._run("INSERT OR REPLACE INTO charts VALUES (?,?,?,?,?,?,?)",
                   (self._own_id(), chat_id, message_id, spec, caption, period, now))
         self._run("DELETE FROM charts WHERE ts < ?", (now - CHART_KEEP_DAYS * 86400,))
+        self._run("DELETE FROM chart_files WHERE ts < ?", (now - CHART_KEEP_DAYS * 86400,))
+
+    def chart_file_put(self, chat_id: int, message_id: int, period: str, file_id: str, caption: str) -> None:
+        self._run("INSERT OR REPLACE INTO chart_files VALUES (?,?,?,?,?,?,?)",
+                  (self._own_id(), chat_id, message_id, period, file_id, caption, int(time.time())))
+
+    def chart_file_get(self, chat_id: int, message_id: int, period: str) -> tuple[str, str, int] | None:
+        rows = self._run("SELECT file_id, caption, ts FROM chart_files "
+                         "WHERE bot_id = ? AND chat_id = ? AND message_id = ? AND period = ?",
+                         (self._own_id(), chat_id, message_id, period))
+        return rows[0] if rows else None
 
     def chart_get(self, chat_id: int, message_id: int) -> tuple[str, str, str] | None:
         rows = self._run("SELECT spec, caption, period FROM charts WHERE bot_id = ? AND chat_id = ? AND message_id = ?",

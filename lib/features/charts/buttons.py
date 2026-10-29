@@ -7,10 +7,11 @@ import copy
 import html
 import json
 import logging
+import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
 from telegram.constants import ParseMode
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from ...context import Ctx
@@ -19,6 +20,8 @@ from . import ChartError, build, render
 
 log = logging.getLogger("bot")
 
+PRELOAD_MAX_AGE = 15 * 60  # seconds: an uploaded picture older than this is drawn again, with fresh prices
+_tasks: set[asyncio.Task] = set()  # preloads running; held so they aren't garbage-collected
 BUTTONS = (("1D", "1d"), ("1M", "1mo"), ("1Y", "1y"), ("5Y", "5y"))
 RELOAD = "reload"
 WORDS = {"1d": "1 day", "5d": "5 days", "1mo": "1 month", "3mo": "3 months", "6mo": "6 months", "ytd": "year to date",
@@ -64,9 +67,60 @@ def caption_for(chart, period: str) -> str:
 
 
 async def remember(ctx: Ctx, sent, args: dict) -> None:
-    """Keep what's needed to redraw a chart that went out with buttons."""
+    """Keep what's needed to redraw a chart that went out with buttons, and start uploading its other periods."""
     caption = getattr(sent, "caption_html", None) or ""
-    await asyncio.to_thread(ctx.store.chart_put, sent.chat_id, sent.message_id, json.dumps(args), caption, period_of(args))
+    period = period_of(args)
+    await asyncio.to_thread(ctx.store.chart_put, sent.chat_id, sent.message_id, json.dumps(args), caption, period)
+    if getattr(sent, "photo", None):  # the picture just sent can be swapped back in without drawing it again
+        await asyncio.to_thread(ctx.store.chart_file_put, sent.chat_id, sent.message_id, period,
+                                sent.photo[-1].file_id, caption)
+    if ctx.st.preload_chat is not None:
+        task = asyncio.create_task(preload(ctx, sent.chat_id, sent.message_id, args))
+        _tasks.add(task)
+        task.add_done_callback(_tasks.discard)
+
+
+async def preload(ctx: Ctx, chat_id: int, message_id: int, args: dict) -> None:
+    """Draw the other periods and upload them to TELEGRAM_PRELOAD_CHAT, keeping their file IDs for the buttons."""
+    shown = period_of(args)
+    for _, period in BUTTONS:
+        if period == shown:
+            continue
+        try:
+            chart, _ = await build(ctx, with_period(args, period))
+            retitle(chart, period)
+            image = await asyncio.to_thread(render.png, chart)
+            caption = caption_for(chart, period)
+            sent = await ctx.bot.send_photo(ctx.st.preload_chat, image, caption=caption, parse_mode=ParseMode.HTML,
+                                            disable_notification=True)
+            await asyncio.to_thread(ctx.store.chart_file_put, chat_id, message_id, period, sent.photo[-1].file_id, caption)
+        except ChartError as e:
+            log.debug("Chart preload of %s skipped: %s", period, e)
+        except TelegramError as e:  # not a chat the bot can post in: stop, one warning
+            log.warning("Chart preload to chat %s failed: %s", ctx.st.preload_chat, e)
+            return
+    log.debug("Chart %s in chat %s preloaded", message_id, chat_id)
+
+
+async def from_preload(ctx: Ctx, query, period: str) -> bool:
+    """Swap in an already-uploaded picture for `period`; False if there is none fresh, or Telegram refused it."""
+    msg = query.message
+    row = await asyncio.to_thread(ctx.store.chart_file_get, msg.chat_id, msg.message_id, period)
+    if row is None or time.time() - row[2] > PRELOAD_MAX_AGE:
+        return False
+    file_id, caption, _ = row
+    try:
+        await query.edit_message_media(InputMediaPhoto(file_id, caption=caption or None,
+                                                       parse_mode=ParseMode.HTML if caption else None),
+                                       reply_markup=keyboard(period))
+    except BadRequest as e:
+        if "not modified" not in str(e).lower():
+            log.warning("Couldn't reuse an uploaded chart (%s); drawing it again", e)
+            return False
+    await asyncio.to_thread(ctx.store.chart_set_period, msg.chat_id, msg.message_id, period)
+    log.info("Chart %s in chat %s swapped to %s from an upload", msg.message_id, msg.chat_id, period)
+    await query.answer()
+    return True
 
 
 async def on_button(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -83,6 +137,8 @@ async def on_button(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE
     period = shown if action == RELOAD else action
     if period not in WORDS:
         await query.answer()
+        return
+    if action != RELOAD and await from_preload(ctx, query, period):
         return
     try:
         chart, _ = await build(ctx, with_period(args, period))

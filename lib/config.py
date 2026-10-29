@@ -37,6 +37,7 @@ ENV_VARS: dict[str, str] = {
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
+    "TELEGRAM_PRELOAD_CHAT": "Chat ID of a private chat the bot can post in. Chart periods are uploaded there ahead of time and reused when a period button is tapped. Empty (default) = off.",
 }
 
 DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash", "zai": "glm-5.3-flash"}
@@ -82,6 +83,7 @@ class Settings:
     movers_bots: frozenset[str]
     dm_buttons: bool
     post_to_groups: bool
+    preload_chat: int | None  # where chart periods are pre-uploaded
     holding_news_time: str
     holding_news_recipients: dict[str, str]
     portfolio_names: frozenset[str]
@@ -115,6 +117,16 @@ def _flag(env: Mapping[str, str], name: str, default: bool = False) -> bool:
     if not value:
         return default
     return value in ("1", "true", "yes", "on")
+
+
+def _chat_id(env: Mapping[str, str], name: str) -> int | None:
+    value = env.get(name, "").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        raise ConfigError(f"{name} must be a Telegram chat ID (a number), not {value!r}.") from None
 
 
 def _ids(text: str) -> frozenset[int]:
@@ -179,6 +191,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         ),
         dm_buttons=_flag(env, "TELEGRAM_DM_BUTTONS"),
         post_to_groups=_flag(env, "POST_TO_GROUPS_FROM_DM"),
+        preload_chat=_chat_id(env, "TELEGRAM_PRELOAD_CHAT"),
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
         holding_news_recipients=recipients,
         portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),

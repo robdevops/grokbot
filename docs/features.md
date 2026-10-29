@@ -41,6 +41,10 @@ when the message asks for one (chart, graph, plot, visualise), so other requests
 - **Period buttons:** a single chart whose series are all tickers comes with buttons: 1D, 1M, 1Y, 5Y and ⟳ (reload).
   A tap fetches the prices again and redraws the chart in place, without asking the model. Another period gets a
   plain title and a caption with each series' total; the chart's own period brings back the model's caption.
+  Set `TELEGRAM_PRELOAD_CHAT` to a private chat the bot can post in (a private group, or a DM with you) and the
+  other periods are drawn and uploaded there in the background right after the reply; a tap then swaps in the
+  uploaded picture without fetching or drawing, and so does going back to the chart's own period. A picture older
+  than 15 minutes is drawn again with fresh prices, and ⟳ always is. Without the variable every tap draws.
   Anyone in the chat can tap. Charts of values the model passed, and albums, have no buttons (Telegram can't put
   buttons on an album). The buttons work for 90 days.
 - **Totals in the legend:** each series' total follows its name ("NBIS -27.1%"): the change over the chart for a

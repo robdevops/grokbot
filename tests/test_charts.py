@@ -1,3 +1,4 @@
+import asyncio
 import json
 import math
 from datetime import date, datetime
@@ -339,3 +340,72 @@ async def test_a_tap_on_a_forgotten_chart_or_a_failed_fetch_says_so(env, store):
     q = callback(known, "ch:1d")
     await buttons.on_button(ctx, N(callback_query=q), None)
     assert q.answers == ["NVDA: No historical data available for NVDA"] and q.edits == []
+
+
+async def settle():
+    for _ in range(50):
+        await asyncio.sleep(0)
+    await asyncio.gather(*list(buttons._tasks))
+
+
+PRELOAD = {"TELEGRAM_PRELOAD_CHAT": "-900"}
+
+
+async def test_other_periods_are_uploaded_to_the_preload_chat_and_reused_by_the_buttons(env, store):
+    ctx, yahoo, m = await chart_reply({**env, **PRELOAD}, store, history_json([100, 120]), TICKER_CHART)
+    await settle()
+    assert [p["chat_id"] for p in ctx.bot.photos] == [-900] * 3 and len(yahoo.calls) == 4  # the 3 other periods
+    assert [p["caption"] for p in ctx.bot.photos] == [
+        "1 day: NVDA +20.0%", "1 month: NVDA +20.0%", "5 years: NVDA +20.0%"]
+    sent = ctx.bot._msg(-100, None)
+    sent.message_id = 1001
+    calls_before = len(yahoo.calls)
+    q = callback(sent, "ch:1mo")
+    await buttons.on_button(ctx, N(callback_query=q), None)
+    assert len(yahoo.calls) == calls_before  # nothing fetched or drawn
+    [edit] = q.edits
+    assert edit["media"].media == "file-2" and edit["media"].caption == "1 month: NVDA +20.0%"
+    assert button_rows(edit["reply_markup"])[0][1] == ("• 1M", "ch:1mo") and store.chart_get(-100, 1001)[2] == "1mo"
+    q = callback(sent, "ch:1y")  # back to the chart as first sent
+    await buttons.on_button(ctx, N(callback_query=q), None)
+    assert q.edits[0]["media"].media == "sent" and q.edits[0]["media"].caption == "Up 20%."
+    assert len(yahoo.calls) == calls_before
+
+
+async def test_reload_and_stale_uploads_draw_again(env, store, monkeypatch):
+    ctx, yahoo, m = await chart_reply({**env, **PRELOAD}, store, history_json([100, 120]), TICKER_CHART)
+    await settle()
+    sent = ctx.bot._msg(-100, None)
+    sent.message_id = 1001
+    before = len(yahoo.calls)
+    await buttons.on_button(ctx, N(callback_query=callback(sent, "ch:reload")), None)
+    assert len(yahoo.calls) == before + 1
+    monkeypatch.setattr(buttons, "PRELOAD_MAX_AGE", -1)
+    q = callback(sent, "ch:1mo")
+    await buttons.on_button(ctx, N(callback_query=q), None)
+    assert len(yahoo.calls) == before + 2 and not isinstance(q.edits[0]["media"].media, str)
+
+
+async def test_without_the_variable_nothing_is_uploaded(env, store):
+    ctx, yahoo, _ = await chart_reply(env, store, history_json([100, 120]), TICKER_CHART)
+    await settle()
+    assert ctx.bot.photos == [] and len(yahoo.calls) == 1
+
+
+async def test_a_preload_chat_the_bot_cannot_post_in_stops_after_one_warning(env, store, caplog):
+    from telegram.error import Forbidden
+    ctx, _, h = make_ctx({**env, **PRELOAD}, store, [step(calls=[("1", "make_chart", json.dumps(TICKER_CHART))],
+                                                          finish="tool_calls"), step("Up.")],
+                         servers=(FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([1, 2])),))
+    ctx.bot.fail_send[-900] = Forbidden("bot was blocked")
+    await run(h, user_msg(ctx.bot, "@stockbot chart NVDA"))
+    await settle()
+    assert [r.getMessage() for r in caplog.records if "preload" in r.getMessage()] == [
+        "Chart preload to chat -900 failed: bot was blocked"]
+
+
+def test_the_preload_chat_must_be_a_number(env):
+    assert config.load({**env, "TELEGRAM_PRELOAD_CHAT": " -1001234 "}).preload_chat == -1001234
+    assert config.load(env).preload_chat is None
+    with pytest.raises(config.ConfigError, match="TELEGRAM_PRELOAD_CHAT must be a Telegram chat ID"):
+        config.load({**env, "TELEGRAM_PRELOAD_CHAT": "mychat"})
