@@ -281,6 +281,11 @@ def button_rows(markup):
     return [[(b.text, b.callback_data) for b in row] for row in markup.inline_keyboard]
 
 
+def shaded(markup):
+    """The callback data of the buttons drawn in Telegram's primary (shaded) style."""
+    return [b["callback_data"] for row in markup.to_dict()["inline_keyboard"] for b in row if b.get("style") == "primary"]
+
+
 async def chart_reply(env, store, reply, args):
     yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=reply)
     ctx, _, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(args))], finish="tool_calls"),
@@ -296,8 +301,9 @@ TICKER_CHART = {"title": "NVDA, 1 year", "series": [{"name": "NVDA", "ticker": "
 async def test_a_ticker_chart_gets_period_buttons_and_is_remembered(env, store):
     ctx, _, m = await chart_reply(env, store, history_json([100, 120]), TICKER_CHART)
     [reply] = m.replies
-    assert button_rows(reply["reply_markup"]) == [[("1D", "ch:1d"), ("1M", "ch:1mo"), ("• 1Y", "ch:1y"),
-                                                   ("5Y", "ch:5y"), ("⟳", "ch:reload")]]
+    assert button_rows(reply["reply_markup"]) == [[("1D", "ch:1d"), ("1M", "ch:1mo"), ("1Y", "ch:1y"),
+                                                   ("5Y", "ch:5y"), ("🔄", "ch:reload")]]
+    assert shaded(reply["reply_markup"]) == ["ch:1y"]  # only the period shown
     spec, caption, period = store.chart_get(-100, 1001)
     assert json.loads(spec) == TICKER_CHART and caption == "Up 20%." and period == "1y"
 
@@ -317,12 +323,12 @@ async def test_a_period_tap_redraws_without_the_model_and_its_own_period_restore
     assert yahoo.calls[-1] == ("get_historical_prices",
                                {"ticker": "NVDA", "period": "1mo", "interval": "1d", "response_format": "json"})
     [edit] = q.edits
-    assert edit["media"].caption == "1 month: NVDA +50.0%" and edit["media"].media.input_file_content.startswith(b"\x89PNG")
-    assert button_rows(edit["reply_markup"])[0][1] == ("• 1M", "ch:1mo") and store.chart_get(-100, 1001)[2] == "1mo"
+    assert edit["media"].caption == "NVDA, 1 month" and edit["media"].media.input_file_content.startswith(b"\x89PNG")
+    assert shaded(edit["reply_markup"]) == ["ch:1mo"] and store.chart_get(-100, 1001)[2] == "1mo"
     assert len(ctx.backend.seen) == 2  # the model's two steps for the first reply, none since
     q = callback(sent, "ch:reload")
     await buttons.on_button(ctx, N(callback_query=q), None)
-    assert yahoo.calls[-1][1]["period"] == "1mo" and q.edits[0]["media"].caption == "1 month: NVDA +50.0%"
+    assert yahoo.calls[-1][1]["period"] == "1mo" and q.edits[0]["media"].caption == "NVDA, 1 month"
     q = callback(sent, "ch:1y")
     await buttons.on_button(ctx, N(callback_query=q), None)
     assert q.edits[0]["media"].caption == "Up 20%." and q.answers == [None]
@@ -356,7 +362,7 @@ async def test_other_periods_are_uploaded_to_the_preload_chat_and_reused_by_the_
     await settle()
     assert [p["chat_id"] for p in ctx.bot.photos] == [-900] * 3 and len(yahoo.calls) == 4  # the 3 other periods
     assert [p["caption"] for p in ctx.bot.photos] == [
-        "1 day: NVDA +20.0%", "1 month: NVDA +20.0%", "5 years: NVDA +20.0%"]
+        "NVDA, 1 day", "NVDA, 1 month", "NVDA, 5 years"]
     sent = ctx.bot._msg(-100, None)
     sent.message_id = 1001
     calls_before = len(yahoo.calls)
@@ -364,8 +370,8 @@ async def test_other_periods_are_uploaded_to_the_preload_chat_and_reused_by_the_
     await buttons.on_button(ctx, N(callback_query=q), None)
     assert len(yahoo.calls) == calls_before  # nothing fetched or drawn
     [edit] = q.edits
-    assert edit["media"].media == "file-2" and edit["media"].caption == "1 month: NVDA +20.0%"
-    assert button_rows(edit["reply_markup"])[0][1] == ("• 1M", "ch:1mo") and store.chart_get(-100, 1001)[2] == "1mo"
+    assert edit["media"].media == "file-2" and edit["media"].caption == "NVDA, 1 month"
+    assert shaded(edit["reply_markup"]) == ["ch:1mo"] and store.chart_get(-100, 1001)[2] == "1mo"
     q = callback(sent, "ch:1y")  # back to the chart as first sent
     await buttons.on_button(ctx, N(callback_query=q), None)
     assert q.edits[0]["media"].media == "sent" and q.edits[0]["media"].caption == "Up 20%."
