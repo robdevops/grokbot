@@ -38,6 +38,11 @@ when the message asks for one (chart, graph, plot, visualise), so other requests
 - **Style:** a bold title on the left, the legend under it, no frame, no vertical rules, light horizontal rules and
   a darker line at zero when the values cross it. Tick labels share their decimals, shorten big numbers (120M, 1.5B)
   and show % for % changes.
+- **Period buttons:** a single chart whose series are all tickers comes with buttons: 1D, 1M, 1Y, 5Y and ⟳ (reload).
+  A tap fetches the prices again and redraws the chart in place, without asking the model. Another period gets a
+  plain title and a caption with each series' total; the chart's own period brings back the model's caption.
+  Anyone in the chat can tap. Charts of values the model passed, and albums, have no buttons (Telegram can't put
+  buttons on an album). The buttons work for 90 days.
 - **Totals in the legend:** each series' total follows its name ("NBIS -27.1%"): the change over the chart for a
   ticker or a % change series, or a figure the model passes from the data (a portfolio's total return, say).
 - **Axes:** a left and a right y axis, each with as many series as needed (lines, bars or points). Either axis or

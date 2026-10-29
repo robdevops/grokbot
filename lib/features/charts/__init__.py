@@ -235,6 +235,7 @@ class Charts:
 
     def __init__(self):
         self.photos: list[tuple[bytes, str]] = []
+        self.calls: list[dict] = []  # the make_chart arguments behind each photo, to redraw it from
 
 
 def tool(ctx: Ctx, charts: Charts):
@@ -250,6 +251,7 @@ def tool(ctx: Ctx, charts: Charts):
         except ChartError as e:
             return f"Error: {e}"
         charts.photos.append((image, chart.title))
+        charts.calls.append(args)
         log.debug("Chart %r: %d series in %.1f s", chart.title, len(chart.series), time.monotonic() - began)
         return (f"Chart {len(charts.photos)} is ready. Your reply becomes its caption, so keep the reply under "
                 f"{CAPTION_HINT} characters, and don't describe the chart or say you made one: say what it shows.\n"

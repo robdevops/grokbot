@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS holding_news_msgs (
 -- Groups the bot has seen (Telegram can't list a bot's chats), so "post in <name>" can find one.
 CREATE TABLE IF NOT EXISTS chats (chat_id INTEGER PRIMARY KEY, title TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS kv (bot_id INTEGER, key TEXT, value TEXT, PRIMARY KEY (bot_id, key));
+-- Charts sent with period buttons: the make_chart call to redraw from, the model's caption, the period shown.
+CREATE TABLE IF NOT EXISTS charts (
+    bot_id INTEGER, chat_id INTEGER, message_id INTEGER, spec TEXT, caption TEXT, period TEXT, ts INTEGER,
+    PRIMARY KEY (bot_id, chat_id, message_id));
 CREATE TABLE IF NOT EXISTS usage (
     ts INTEGER, bot_id INTEGER, chat_id INTEGER, model TEXT, kind TEXT, rounds INTEGER,
     tokens_in INTEGER, tokens_cached INTEGER, tokens_out INTEGER, cost REAL);
@@ -40,6 +44,7 @@ CREATE TABLE IF NOT EXISTS period_cache (
     portfolio_id INTEGER, start TEXT, end TEXT, pct REAL, gain REAL, currency TEXT, movers TEXT,
     v INTEGER, PRIMARY KEY (portfolio_id, start, end)) WITHOUT ROWID;
 """
+CHART_KEEP_DAYS = 90  # a chart's buttons stop working after this
 PERIOD_CACHE_VERSION = 1  # bump when the stored shape changes: rows of another version are dropped
 
 
@@ -158,6 +163,22 @@ class Store:
 
     def kv_set(self, key: str, value: str) -> None:
         self._run("INSERT OR REPLACE INTO kv VALUES (?,?,?)", (self._own_id(), key, value))
+
+    # -- charts with period buttons (per bot: DM message IDs are per bot) -----------------
+    def chart_put(self, chat_id: int, message_id: int, spec: str, caption: str, period: str) -> None:
+        now = int(time.time())
+        self._run("INSERT OR REPLACE INTO charts VALUES (?,?,?,?,?,?,?)",
+                  (self._own_id(), chat_id, message_id, spec, caption, period, now))
+        self._run("DELETE FROM charts WHERE ts < ?", (now - CHART_KEEP_DAYS * 86400,))
+
+    def chart_get(self, chat_id: int, message_id: int) -> tuple[str, str, str] | None:
+        rows = self._run("SELECT spec, caption, period FROM charts WHERE bot_id = ? AND chat_id = ? AND message_id = ?",
+                         (self._own_id(), chat_id, message_id))
+        return rows[0] if rows else None
+
+    def chart_set_period(self, chat_id: int, message_id: int, period: str) -> None:
+        self._run("UPDATE charts SET period = ? WHERE bot_id = ? AND chat_id = ? AND message_id = ?",
+                  (period, self._own_id(), chat_id, message_id))
 
     # -- holding news ------------------------------------------------------------------
     def recent_news(self, username: str, since_ts: int) -> list[str]:

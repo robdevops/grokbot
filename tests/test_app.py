@@ -34,10 +34,11 @@ def test_handlers_follow_the_flags(env, store):
         return app.build_app(Ctx(st, store, ScriptedBackend([]), registry())), st
 
     plain, st = build()
-    assert handler_kinds(plain) == ["CommandHandler", "CommandHandler", "MessageHandler"] and app.allowed_updates(st) == ["message", "edited_message"]
+    assert handler_kinds(plain) == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler"]
+    assert app.allowed_updates(st) == ["message", "edited_message", "callback_query"]  # chart buttons
     full, st = build(ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
     kinds = handler_kinds(full)
-    assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler"]
+    assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler", "CallbackQueryHandler"]
     assert "callback_query" in app.allowed_updates(st)
     assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits", "flushcache"}
     assert any(isinstance(h, MessageHandler) for h in full.handlers[0])
@@ -68,7 +69,7 @@ def test_main_accepts_and_ignores_a_label_and_unknown_args(monkeypatch, tmp_path
     monkeypatch.setattr(config, "MCP_CONFIG", tmp_path / "none.json")
     monkeypatch.setattr(app.Application, "run_polling", lambda self, **kw: started.update(kw))
     app.main(["mimo", "--whatever"])
-    assert started["allowed_updates"] == ["message", "edited_message"]
+    assert started["allowed_updates"] == ["message", "edited_message", "callback_query"]
     started.clear()
     app.main([])
     assert started

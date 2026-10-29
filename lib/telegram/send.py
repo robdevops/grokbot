@@ -59,21 +59,23 @@ async def reply_chunks(msg: Message, html_text: str, store: Store, *, quote: boo
 
 
 async def reply_with_photos(msg: Message, photos: list[bytes], html_text: str, store: Store, *, quote: bool = True,
-                            markup=None) -> None:
+                            markup=None, photo_markup=None) -> list:
     """An answer with charts as one reply: the photo (an album for several) with the answer as its caption. Text
-    too long for a caption continues in text messages; if Telegram refuses the photos, the text goes alone."""
+    too long for a caption continues in text messages; if Telegram refuses the photos, the text goes alone.
+    `photo_markup` (buttons for a single photo) takes the photo's place for `markup`. Returns the photo messages."""
     chunks = split_html(html_text, CAPTION_MAX) if html_text else [""]
     rest = "\n".join(chunks[1:])  # split_html cuts at newlines where it can
     try:
-        sent = await _send_photos(msg, photos, chunks[0], quote, None if rest else markup)
+        sent = await _send_photos(msg, photos, chunks[0], quote, photo_markup or (None if rest else markup))
     except TelegramError as e:
         log.warning("Couldn't send the chart, replying with text only: %s", e)
         await reply_chunks(msg, html_text, store, quote=quote, last_markup=markup)
-        return
+        return []
     for m in sent:
         await asyncio.to_thread(store.save, m)
     if rest:
         await reply_chunks(msg, rest, store, quote=quote, last_markup=markup)
+    return sent
 
 
 async def _send_photos(msg: Message, photos: list[bytes], caption: str, quote: bool, markup) -> list:

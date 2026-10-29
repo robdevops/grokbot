@@ -17,6 +17,7 @@ from ..ask import ask
 from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers, periods, post
 from ..features.charts import Charts, wants_chart
+from ..features.charts import buttons as chart_buttons
 from ..features.charts import tool as chart_tool
 from ..history import compact, format_rows
 from ..llm.base import BUSY_REPLY, is_busy
@@ -229,8 +230,13 @@ class Handlers:
                 typing.cancel()
         markup = dm_buttons.keyboard() if trig.private and st.dm_buttons else None
         if charts.photos:  # one reply: the chart with the answer as its caption
-            await reply_with_photos(msg, [image for image, _ in charts.photos], "" if html_text == NO_RESPONSE else html_text,
-                                    ctx.store, quote=not trig.private, markup=markup)
+            call = charts.calls[0] if len(charts.calls) == 1 and chart_buttons.redrawable(charts.calls[0]) else None
+            sent = await reply_with_photos(
+                msg, [image for image, _ in charts.photos], "" if html_text == NO_RESPONSE else html_text,
+                ctx.store, quote=not trig.private, markup=markup,
+                photo_markup=chart_buttons.keyboard(chart_buttons.period_of(call)) if call else None)
+            if call and sent:
+                await chart_buttons.remember(ctx, sent[0], call)
         else:
             await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
 

@@ -1,13 +1,14 @@
 import json
 import math
 from datetime import date, datetime
+from types import SimpleNamespace as N
 
 import pytest
 
 from lib import config
 from lib.context import Ctx
 from lib.features import charts
-from lib.features.charts import render
+from lib.features.charts import buttons, render
 from lib.features.charts.render import Chart, Series
 
 from .conftest import FakeBot, user_msg
@@ -258,3 +259,83 @@ async def test_a_chart_that_telegram_rejects_still_lets_the_text_through(env, st
     m.reply_photo = rejected
     await run(h, m)
     assert [r["text"] for r in m.replies] == ["Here."]
+
+
+def callback(sent, data):
+    """A tap on a button under `sent`, recording the answer and the edit."""
+    from types import SimpleNamespace as N
+    q = N(message=sent, data=data, answers=[], edits=[])
+
+    async def answer(text=None, **kw):
+        q.answers.append(text)
+
+    async def edit_message_media(media, **kw):
+        q.edits.append({"media": media, **kw})
+
+    q.answer, q.edit_message_media = answer, edit_message_media
+    return q
+
+
+def button_rows(markup):
+    return [[(b.text, b.callback_data) for b in row] for row in markup.inline_keyboard]
+
+
+async def chart_reply(env, store, reply, args):
+    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=reply)
+    ctx, _, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(args))], finish="tool_calls"),
+                                      step("Up 20%.")], servers=(yahoo,))
+    m = user_msg(ctx.bot, "@stockbot chart NVDA")
+    await run(h, m)
+    return ctx, yahoo, m
+
+
+TICKER_CHART = {"title": "NVDA, 1 year", "series": [{"name": "NVDA", "ticker": "NVDA"}]}
+
+
+async def test_a_ticker_chart_gets_period_buttons_and_is_remembered(env, store):
+    ctx, _, m = await chart_reply(env, store, history_json([100, 120]), TICKER_CHART)
+    [reply] = m.replies
+    assert button_rows(reply["reply_markup"]) == [[("1D", "ch:1d"), ("1M", "ch:1mo"), ("• 1Y", "ch:1y"),
+                                                   ("5Y", "ch:5y"), ("⟳", "ch:reload")]]
+    spec, caption, period = store.chart_get(-100, 1001)
+    assert json.loads(spec) == TICKER_CHART and caption == "Up 20%." and period == "1y"
+
+
+async def test_charts_of_passed_values_get_no_buttons(env, store):
+    _, _, m = await chart_reply(env, store, "", {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]})
+    assert m.replies[0]["reply_markup"] is None and store.chart_get(-100, 1001) is None
+
+
+async def test_a_period_tap_redraws_without_the_model_and_its_own_period_restores_the_caption(env, store):
+    ctx, yahoo, m = await chart_reply(env, store, history_json([100, 120]), TICKER_CHART)
+    sent = ctx.bot._msg(-100, None)
+    sent.message_id = 1001
+    yahoo.reply = history_json([50, 75])
+    q = callback(sent, "ch:1mo")
+    await buttons.on_button(ctx, N(callback_query=q), None)
+    assert yahoo.calls[-1] == ("get_historical_prices",
+                               {"ticker": "NVDA", "period": "1mo", "interval": "1d", "response_format": "json"})
+    [edit] = q.edits
+    assert edit["media"].caption == "1 month: NVDA +50.0%" and edit["media"].media.input_file_content.startswith(b"\x89PNG")
+    assert button_rows(edit["reply_markup"])[0][1] == ("• 1M", "ch:1mo") and store.chart_get(-100, 1001)[2] == "1mo"
+    assert len(ctx.backend.seen) == 2  # the model's two steps for the first reply, none since
+    q = callback(sent, "ch:reload")
+    await buttons.on_button(ctx, N(callback_query=q), None)
+    assert yahoo.calls[-1][1]["period"] == "1mo" and q.edits[0]["media"].caption == "1 month: NVDA +50.0%"
+    q = callback(sent, "ch:1y")
+    await buttons.on_button(ctx, N(callback_query=q), None)
+    assert q.edits[0]["media"].caption == "Up 20%." and q.answers == [None]
+
+
+async def test_a_tap_on_a_forgotten_chart_or_a_failed_fetch_says_so(env, store):
+    ctx, yahoo, _ = await chart_reply(env, store, history_json([100, 120]), TICKER_CHART)
+    unknown = ctx.bot._msg(-100, None)
+    q = callback(unknown, "ch:1d")
+    await buttons.on_button(ctx, N(callback_query=q), None)
+    assert q.answers == ["This chart can't be redrawn any more."] and q.edits == []
+    known = ctx.bot._msg(-100, None)
+    known.message_id = 1001
+    yahoo.reply = "No historical data available for NVDA"
+    q = callback(known, "ch:1d")
+    await buttons.on_button(ctx, N(callback_query=q), None)
+    assert q.answers == ["NVDA: No historical data available for NVDA"] and q.edits == []
