@@ -137,4 +137,4 @@ It's now {now}."""
 FILING_PROMPT = ("Call {tool} with ticker \"{ticker}\" and section \"{section}\". Its text is too long for one "
                  "message, so write what it returns as Telegram HTML in at most {limit} characters: keep the key facts, "
                  "figures, names and dates in their original order, drop detail and repetition, keep the headings. Use "
-                 "only <b>, <i> and \u2022 bullets, add no opinion, comment or preamble, and reply with that text only.")
+                 "only <b>, <i> and \u2022 bullets, add no opinion, comment or preamble, and reply with that text only.{order}")

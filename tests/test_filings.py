@@ -191,3 +191,55 @@ async def test_nothing_to_show_or_no_data_source_says_so(env, store):
     m = user_msg(bare.bot, "/narrative nvda")
     await commands.narrative(bare, update_for(m), N(args=["nvda"]))
     assert m.replies[0]["text"] == "No narrative found for NVDA."
+
+
+HEADINGS = """# Tesla (TSLA) — Earnings
+
+*Record FY26Q3. 3 matches in events.md.*
+
+## October 22, 2026 — Q3 results
+
+Revenue rose.
+
+## Jul 23, 2026 — Q2 results
+
+Margins fell.
+
+## 2026-04-22 — Q1 results
+
+Deliveries up.
+"""
+
+BULLETS = """# Tesla (TSLA) — Management changes
+
+- **October 3, 2026** — CFO resigns.
+- **June 1, 2026** — New director.
+- **March 9, 2026** — COO appointed.
+"""
+
+
+def test_events_are_put_in_ascending_order_whether_headed_or_bulleted():
+    out = filings.oldest_first(HEADINGS)
+    assert [line for line in out.split("\n") if line.startswith("## ")] == [
+        "## 2026-04-22 — Q1 results", "## Jul 23, 2026 — Q2 results", "## October 22, 2026 — Q3 results"]
+    assert out.startswith("# Tesla (TSLA) — Earnings\n\n*Record FY26Q3.") and "Margins fell." in out
+    assert [line.split("— ")[1] for line in filings.oldest_first(BULLETS).split("\n") if line.startswith("- ")] == [
+        "COO appointed.", "New director.", "CFO resigns."]
+    assert filings.oldest_first(filings.oldest_first(HEADINGS)) == filings.oldest_first(HEADINGS)  # already ascending
+
+
+@pytest.mark.parametrize("text", [
+    "# Title\n\nJust prose, no dated items.",
+    "# Title\n\n## Earnings releases\n\n- **October 3, 2026** — one\n\n## Guidance\n\ntext",  # an undated heading: unreadable
+    "# Title\n\n## October 3, 2026 — only one item\n\ntext",
+])
+def test_text_with_undated_or_single_items_is_left_alone(text):
+    assert filings.oldest_first(text) == text
+
+
+async def test_events_are_shown_oldest_first_and_narrative_is_left_as_the_model_wrote_it(env, store):
+    ctx = make(env, store, Scout(HEADINGS))
+    m = user_msg(ctx.bot, "/events tsla", chat_id=-100)
+    await commands.events(ctx, update_for(m), N(args=["tsla"]))
+    text = m.replies[0]["text"]
+    assert text.index("2026-04-22") < text.index("Jul 23, 2026") < text.index("October 22, 2026")
