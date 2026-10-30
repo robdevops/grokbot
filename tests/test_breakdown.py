@@ -105,3 +105,16 @@ async def test_figures_in_millions_are_scaled_and_a_result_that_cannot_be_used_i
     with caplog.at_level("WARNING", logger="bot"):
         assert await breakdown.fast(make(env, store, scout(json.dumps(odd))), "TSLA revenue breakdown", charts.Charts()) is None
     assert "units 'furlongs' not understood" in caplog.text
+
+
+@pytest.mark.parametrize("detail, labels", [
+    ({"revenue_by_product": {"Automotive sales": 20094, "Services & other": 4605},
+      "revenue_by_geography": {"United States": 12495, "China": 5209}}, ["product", "geography"]),
+    ({"segments": {"Automotive": {"revenue": 21000, "operating_income": 2000},
+                   "Energy": {"revenue": 2881, "operating_income": 500}}}, ["segment"]),
+    ({"revenue": {"Automotive": 21000, "Energy": 2881}, "operating_income": {"Automotive": 2000, "Energy": 500}}, ["revenue"]),
+    ({"by_product": [{"name": "Automotive", "revenue": 21000}, {"name": "Energy", "revenue": 2881}]}, ["by product"]),
+])
+def test_groupings_are_found_wherever_the_source_nests_them(detail, labels):
+    period = {"period": "Q3 FY2026", "fiscal_year": 2026, "fiscal_quarter": 3, "months": 3, "segment_detail": detail}
+    assert [label for label, _ in breakdown.groupings(period, 1e6)] == labels

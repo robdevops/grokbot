@@ -38,32 +38,64 @@ def requested_ticker(text: str) -> str | None:
     return ticker if TICKER.match(ticker) and is_ticker(ticker) else None
 
 
-def slices_of(group: dict, segments: bool = False) -> list[tuple[str, float]]:
-    """(name, value) of a grouping: a plain {name: value}, or for the reportable segments {name: {"revenue": value}},
-    where a bare number beside them (the total operating income) is no segment."""
-    out = []
-    for name, value in group.items():
-        if isinstance(value, dict):
-            value = value.get("revenue")
-        elif segments:
-            continue
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
-            out.append((str(name), float(value)))
+REVENUE_KEY = re.compile(r"^(?:net_?)?(?:revenues?|sales)(?:_usd)?$", re.IGNORECASE)
+NAME_KEYS = ("name", "segment", "label", "category", "product", "region", "geography")
+WANTED = ("revenue", "segment", "geograph", "product", "region", "customer")  # in the path of a grouping that is one
+UNWANTED = ("income", "profit", "margin", "asset", "cost", "expense", "capex", "ebit", "depreciation", "growth", "percent")
+
+
+def revenue_of(value) -> float | None:
+    """A slice's revenue: a bare number, or the revenue field of a {revenue: ..., operating_income: ...} object."""
+    if isinstance(value, dict):
+        value = next((v for k, v in value.items() if REVENUE_KEY.match(k)), None)
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        return float(value)
+    return None
+
+
+def slices_of(group) -> list[tuple[str, float]]:
+    """(name, value) of a grouping: {name: value}, {name: {"revenue": value, ...}} or [{"name": ..., "revenue": ...}].
+    Where the entries are objects, a bare number beside them (a total operating income) is no slice."""
+    if isinstance(group, list):
+        items = [(next((str(i[k]) for k in NAME_KEYS if isinstance(i.get(k), str)), ""), revenue_of(i))
+                 for i in group if isinstance(i, dict)]
+    else:
+        nested = any(isinstance(v, dict) for v in group.values())
+        items = [(str(n), revenue_of(v)) for n, v in group.items() if isinstance(v, dict) or not nested]
+    out = [(n, v) for n, v in items if n and v]
     while (overlap := subtotal_in(out)):  # a subtotal beside its parts would be counted twice
         out = [(n, v) for n, v in out if n != overlap[0]]
     return out
 
 
+def label_of(path: list[str]) -> str:
+    """What a grouping is split by, from where it was found: revenue_by_market_platform is "market platform"."""
+    last = path[-1].lower()
+    if last.startswith("revenue_by_"):
+        return last[len("revenue_by_"):].replace("_", " ")
+    return "segment" if "segment" in last else last.replace("_", " ")
+
+
 def groupings(period: dict, factor: float = 1.0) -> list[tuple[str, list[tuple[str, float]]]]:
-    """The pies of one period: its reportable segments, then each revenue_by_* breakdown, as (label, slices)."""
-    found = []
-    for key, value in period.items():
-        if not isinstance(value, dict) or not (key == "reportable_segments" or key.startswith("revenue_by_")):
-            continue
-        slices = [(n, v * factor) for n, v in slices_of(value, segments=key == "reportable_segments")]
-        if len(slices) >= 2:
-            label = "segment" if key == "reportable_segments" else key[len("revenue_by_"):].replace("_", " ")
-            found.append((label, slices))
+    """The pies of one period, as (label, slices): every group of two or more revenues found at any depth whose
+    path says it is about revenue, segments, products or regions (not income, profit or the like)."""
+    found, seen = [], []
+
+    def walk(node, path: list[str]) -> None:
+        if isinstance(node, (dict, list)) and path:
+            joined = "/".join(path).lower()
+            slices = slices_of(node)
+            if len(slices) >= 2 and any(w in joined for w in WANTED) and not any(w in joined for w in UNWANTED):
+                if slices not in seen:
+                    seen.append(slices)
+                    found.append((label_of(path), [(n, v * factor) for n, v in slices]))
+                return
+        children = node.items() if isinstance(node, dict) else enumerate(node) if isinstance(node, list) else ()
+        for key, child in children:
+            if isinstance(child, (dict, list)):
+                walk(child, path + [str(key)] if isinstance(node, dict) else path)
+
+    walk(period, [])
     return found[:MAX_CHARTS]
 
 
@@ -114,7 +146,8 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
         if (await make(args)).startswith("Chart ") and first is None:
             first = (label, slices)
     if first is None:
-        log.warning("Fast breakdown for %s: no pie could be drawn from %s", ticker, ", ".join(period) or "an empty period")
+        log.warning("Fast breakdown for %s: no pie could be drawn from the period: %s", ticker,
+                    json.dumps(period, separators=(",", ":"))[:600])
         return None
     log.info("Fast path: %d revenue pies for %s without the model", len(charts.photos), ticker)
     return caption(ticker, name, *first, symbol)
