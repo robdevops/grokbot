@@ -804,3 +804,14 @@ async def test_one_series_object_with_x_values_and_y_values_is_a_pie(env, store)
     out = await make_chart({"title": "Split", "series": {"name": "S", "kind": "pie", "x_values": ["A", "B"],
                                                          "y_values": [1, 2], "x_values2": None}})
     assert out.startswith("Chart 1 is ready")
+
+
+@pytest.mark.parametrize("title, expected", [
+    ("Tesla revenue by product line ($B)", "$28.1B"),
+    ("Revenue (€ million)", "€28.1M"),
+    ("Revenue by segment", ""),
+])
+async def test_a_pie_shows_its_sum_in_the_middle_in_the_titles_unit(env, store, title, expected):
+    spec = {"name": "S", "kind": "pie", "x": ["A", "B"], "y": [20.094, 8.0]}
+    chart, _ = await charts.build(make(env, store), {"title": title, "series": [spec]})
+    assert chart.series[0].total == expected

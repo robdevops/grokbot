@@ -235,6 +235,23 @@ def unify_x(series: list[Series]) -> list[str]:
     return labels
 
 
+UNIT_RE = re.compile(r"\(\s*(A\$|US\$|[$€£¥])?\s*(trillion|billion|million|thousand|[KMBT]n?|bn|mn)?\s*\)", re.IGNORECASE)
+
+
+def pie_total(s: Series, title: str) -> str:
+    """The sum of a pie's slices for its middle, in the unit the title gives in brackets ("($B)", "(€ million)");
+    nothing if the title names none, as a bare number could be anything."""
+    found = UNIT_RE.search(title)
+    if not found or not (found.group(1) or found.group(2)):
+        return ""
+    whole = sum(y for _, y in render.pie_slices(s))
+    short = {"trillion": "T", "billion": "B", "million": "M", "thousand": "K", "bn": "B", "mn": "M"}
+    unit = found.group(2) or ""
+    unit = short.get(unit.lower(), unit)
+    digits = f"{whole:,.0f}" if whole >= 1000 else f"{whole:,.1f}"
+    return f"{found.group(1) or ''}{digits}{unit}"
+
+
 def total(s: Series, spec: dict) -> str:
     """The figure next to a series' name: the change over the chart when the bot knows the values (a % change, or a
     ticker's prices), else the model's own, if it is a figure (it has a digit: models sometimes repeat the name);
@@ -336,6 +353,8 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
         if spec.get("percent_change"):
             s.y = percent_change(s.y)
         s.total = total(s, spec)
+    if pie and not series[0].total:
+        series[0].total = pie_total(series[0], title)
     chart = Chart(title, series, str(args.get("left_label") or ""), str(args.get("right_label") or ""),
                   bool(args.get("invert_left")), bool(args.get("invert_right")), labels,
                   dark=is_night(moment.hour))
