@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .llm.gate import NEEDS_TOOLS, Route
+from .mcp.schema import ToolDef
 from .mcp.server import MCPServer
 
 SYSTEM = """You are {bot_name}, a bot in a Telegram chat about stocks and investing. Reply like a regular participant: conversational, usually a few sentences, blunt, with your actual opinion and concrete numbers. Call people by name, never by message ID.
@@ -65,6 +66,29 @@ def down_note(down: list[MCPServer]) -> str:
     lines = "\n".join(f"- {s.label}: {(s.error or '').splitlines()[0][:200]}" for s in down)
     return ("\n\nThese data sources are DOWN right now; if a question needs one, say it's down and "
             f"quote the error briefly:\n{lines}")
+
+
+def first_sentence(text: str, limit: int = 90) -> str:
+    """The first sentence of a tool description, cut to `limit` characters at a word."""
+    sentence = " ".join(text.split()).split(". ")[0].rstrip(".")
+    return sentence if len(sentence) <= limit else sentence[:limit].rsplit(" ", 1)[0] + "…"
+
+
+def capabilities_note(servers: list[MCPServer], extras: list[ToolDef], search_what: str | None) -> str:
+    """For "what tools do you have?": every tool the asker may use, by group, so the answer comes from this list
+    and not from guesswork. Goes in the user turn, so the cached system prompt is unchanged."""
+    lines = []
+    for s in servers:
+        label = f"- {s.label}: {first_sentence(s.description, 70)}" if s.description else f"- {s.label}:"
+        tools = "; ".join(f"{t.name.split('__', 1)[-1]} ({first_sentence(t.description, 60)})" if t.description
+                          else t.name.split("__", 1)[-1] for t in s.tools)
+        lines.append(f"{label}\n  tools: {tools}")
+    if search_what:
+        lines.append(f"- search: web search across {search_what}, for news and anything current")
+    lines += [f"- {t.name}: {first_sentence(t.description, 110)}" for t in extras]
+    return ("\n\nThey are asking what tools or abilities you have. This is the complete list, so answer from it: "
+            "group them sensibly, say in a few words what each is for, and don't mention tools that aren't here "
+            "or paste the raw names of every one. Don't call any tool to answer.\n" + "\n".join(lines))
 
 
 def chat_prompt(*, transcript: str, sender: str, private: bool, reply_quote: str | None,

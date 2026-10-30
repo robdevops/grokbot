@@ -16,14 +16,15 @@ from .. import config
 from ..ask import ask
 from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers, periods, post
+from ..features.charts import TOOL as CHART_TOOL
 from ..features.charts import Charts, wants_chart
 from ..features.charts import buttons as chart_buttons
 from ..features.charts import tool as chart_tool
 from ..history import compact, format_rows
 from ..llm.base import BUSY_REPLY, is_busy
-from ..llm.gate import Route, is_portfolio_question, route
+from ..llm.gate import Route, asks_tools, is_portfolio_question, route
 from ..msgtext import describe, sender_name
-from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, chat_prompt, down_note
+from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, capabilities_note, chat_prompt, down_note
 from ..store import is_dm
 from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
@@ -240,6 +241,19 @@ class Handlers:
         else:
             await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
 
+    async def _answer_tools(self, msg: Message, trig: Trigger, admin: bool, draft: Draft | None) -> str:
+        """"What tools do you have?": the prompt carries the full list of what this person may use, and no tool is
+        offered, so the model reports its tools instead of guessing at them."""
+        ctx, st = self.ctx, self.ctx.st
+        servers = [s for s in ctx.registry.up() if admin or s.cfg.get("gate") != "portfolio"]
+        extras = ([periods.TOOL] if admin and any(s.cfg.get("gate") == "portfolio" for s in servers) else [])
+        extras += [CHART_TOOL] + ([post.TOOL] if st.post_to_groups else [])
+        note = capabilities_note(servers, extras, ctx.backend.search_what if st.search else None)
+        parts = [{"type": "text", "text": await self._chat_text(msg, trig, middle=note)}]
+        answer = await ask(ctx, parts, Route([], st.search), cache_key=f"chat-{msg.chat_id}",
+                           on_text=draft.update if draft else None, chat_id=msg.chat_id, admin=admin)
+        return format_answer(answer.text, movers_bots=st.movers_bots, summary=False)
+
     async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None, charts: Charts | None = None) -> str:
         ctx, st = self.ctx, self.ctx.st
         await ctx.registry.wait_started(config.MCP_STARTUP_WAIT)
@@ -267,6 +281,8 @@ class Handlers:
             if not admin and is_portfolio_question(context, st) and any(
                     s.cfg.get("gate") == "portfolio" for s in ctx.registry.up()):
                 return PORTFOLIO_ADMINS_ONLY
+            if asks_tools(trig.text):  # answered from the list of tools, with none offered
+                return await self._answer_tools(msg, trig, admin, draft)
             extra = []
             if admin and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers):
                 extra.append(periods.tool(ctx))

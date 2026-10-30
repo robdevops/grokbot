@@ -36,6 +36,21 @@ LIVE_WORDS = re.compile(
     r"score|weather|happening|headlines?|current\w*|updates?|recent\w*|just (now|in))\b", re.I)
 
 
+# "What tools do you have?", "list your capabilities", "what can you do?": answered from the tool list, not by
+# guessing. Needs a question word and a word for tools next to a word for the bot, so "which tools does NVDA use" and
+# "what do you think of the new features" don't match.
+ASK_WORDS = re.compile(r"\b(what|which|list|show|tell me|name|give me|describe)\b", re.I)
+_TOOLS = r"(?:tools?|capabilit\w*|data sources?|features|functions|access to)"
+_YOU = r"(?:you|your|ur|u)"
+TOOLS_NEAR_YOU = re.compile(rf"\b{_YOU}\b\W+(?:\w+\W+){{0,2}}?{_TOOLS}\b|\b{_TOOLS}\W+(?:\w+\W+){{0,3}}?{_YOU}\b", re.I)
+WHAT_CAN_YOU = re.compile(r"\bwhat (can|could) you (do|help)\b|\bwhat are you (able|capable)\b|\bwhat do you (do|offer)\b", re.I)
+
+
+def asks_tools(text: str) -> bool:
+    """Is this message asking what the bot can do or which tools it has?"""
+    return bool(WHAT_CAN_YOU.search(text) or (ASK_WORDS.search(text) and TOOLS_NEAR_YOU.search(text)))
+
+
 @dataclass(frozen=True)
 class Route:
     servers: list[MCPServer] = field(default_factory=list)  # MCP servers to offer
