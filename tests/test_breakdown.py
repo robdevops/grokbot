@@ -206,3 +206,12 @@ async def test_alphabet_has_revenue_by_type_and_segments_with_totals_and_subtota
     assert [n for n, _ in by_type] == ["Google search and other", "Youtube ads", "Google network",
                                        "Google subscriptions platforms and devices", "Google cloud", "Other bets",
                                        "Hedging gains losses"]  # no advertising/services subtotals, no total revenues
+
+
+def test_contribution_and_other_profit_figures_beside_the_segments_are_no_slices():
+    period = {"period": "Q2 FY2026", "segments": {
+        "government": {"revenue": 991}, "commercial": {"revenue": 944},
+        "government_segment_contribution": {"revenue": 700}, "commercial_contribution": {"revenue": 735},
+        "adjusted_operating_income": {"revenue": 300}}}
+    [(label, slices)] = breakdown.groupings(period)
+    assert label == "segment" and [n for n, _ in slices] == ["Government", "Commercial"]

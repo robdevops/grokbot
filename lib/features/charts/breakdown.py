@@ -44,7 +44,8 @@ def requested_ticker(text: str) -> str | None:
 REVENUE_KEY = re.compile(r"^(?:net_?)?(?:revenues?|sales)(?:_usd)?$", re.IGNORECASE)
 NAME_KEYS = ("name", "segment", "label", "category", "product", "region", "geography")
 WANTED = ("revenue", "segment", "geograph", "product", "region", "customer")  # in the path of a grouping that is one
-UNWANTED = ("income", "profit", "margin", "asset", "cost", "expense", "capex", "ebit", "depreciation", "growth", "percent")
+UNWANTED = re.compile(r"\b(?:income|profit|margin|assets?|costs?|expenses?|capex|ebitda?|depreciation|growth|percent|"
+                      r"contribution|operating|gross|net|adjusted)\b", re.IGNORECASE)  # figures that aren't revenue
 
 
 def revenue_of(value) -> float | None:
@@ -58,9 +59,9 @@ def revenue_of(value) -> float | None:
 
 def pretty(name: str) -> str:
     """A snake_case key as a slice name: automotive_segment is "Automotive", energy_generation_and_storage_segment
-    is "Energy generation and storage". Names that are already words are left alone."""
+    is "Energy generation and storage". Names that are already words keep their capitals; an all-lowercase one gets its first."""
     if "_" not in name or " " in name:
-        return name
+        return name[:1].upper() + name[1:] if name.islower() else name
     words = name.replace("_", " ").strip()
     words = re.sub(r"\s+(?:segment|revenues?)$", "", words, flags=re.IGNORECASE) or words
     return words[:1].upper() + words[1:]
@@ -75,7 +76,8 @@ def slices_of(group) -> list[tuple[str, float]]:
     else:
         nested = any(isinstance(v, dict) for v in group.values())
         items = [(str(n), revenue_of(v)) for n, v in group.items() if isinstance(v, dict) or not nested]
-    out = [(pretty(n), v) for n, v in items if n and v and not re.search(r"\btotal\b", n.replace("_", " "), re.I)]
+    out = [(pretty(n), v) for n, v in items
+           if n and v and not re.search(r"\btotal\b", n.replace("_", " "), re.I) and not UNWANTED.search(n.replace("_", " "))]
     while (overlap := subtotal_in(out)):  # a subtotal beside its parts would be counted twice
         out = [(n, v) for n, v in out if n != overlap[0]]
     return out
@@ -99,7 +101,7 @@ def groupings(period: dict, factor: float = 1.0) -> list[tuple[str, list[tuple[s
         if isinstance(node, (dict, list)) and path:
             joined = "/".join(path).lower()
             slices = slices_of(node)
-            if len(slices) >= 2 and any(w in joined for w in WANTED) and not any(w in path[-1].lower() for w in UNWANTED):
+            if len(slices) >= 2 and any(w in joined for w in WANTED) and not UNWANTED.search(path[-1].replace("_", " ")):
                 if slices not in seen:
                     seen.append(slices)
                     found.append((label_of(path), [(n, v * factor) for n, v in slices]))
