@@ -626,3 +626,25 @@ async def test_a_chart_request_ends_with_a_line_telling_the_model_to_draw_it(env
 def test_the_model_is_told_to_use_the_finest_split_of_a_pie():
     assert "use the sub-lines, the finest split, not the subtotal" in charts.TOOL.description
     assert "finest split with no overlaps" in charts.chart_hint("NVDA revenue breakdown")
+
+
+def test_a_subtotal_drawn_beside_its_parts_is_found_by_its_sum_and_its_name():
+    both = [("Data Center", 89023.0), ("Data Center - Hyperscale", 48710.0),
+            ("Data Center - AI Clouds, Industrial, & Enterprise", 40313.0), ("Edge Computing", 7198.0)]
+    assert charts.subtotal_in(both) == ("Data Center", ["Data Center - Hyperscale",
+                                                         "Data Center - AI Clouds, Industrial, & Enterprise"])
+    assert charts.subtotal_in(both[1:]) is None  # the sub-lines and Edge
+    assert charts.subtotal_in([both[0], both[3]]) is None  # the subtotal and Edge
+    assert charts.subtotal_in([("A", 20.0), ("B", 10.0), ("C", 10.0)]) is None  # a coincidence: no name in common
+    assert charts.subtotal_in([(f"s{i}", 1.0) for i in range(20)]) is None  # too many to search
+
+
+async def test_a_pie_with_a_subtotal_and_its_parts_is_refused_with_the_fix(env, store):
+    names = ["Data Center", "Data Center - Hyperscale", "Data Center - AI Clouds", "Edge Computing"]
+    made = charts.Charts()
+    _, make_chart = charts.tool(make(env, store), made)
+    out = await make_chart({"title": "t", "series": [pie("p", names, [89.023, 48.710, 40.313, 7.198])]})
+    assert out.startswith("Error: Data Center is a subtotal of Data Center - Hyperscale + Data Center - AI Clouds")
+    assert "Draw the sub-lines without Data Center" in out and made.photos == []
+    ok = await make_chart({"title": "t", "series": [pie("p", names[1:], [48.710, 40.313, 7.198])]})
+    assert ok.startswith("Chart 1 is ready") and "Edge Computing 7.5%" in ok

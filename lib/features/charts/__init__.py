@@ -4,6 +4,7 @@ Series are values the model passes, or a ticker whose price history the bot fetc
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import logging
 import math
@@ -258,6 +259,11 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
         series[0].x = [str(v) for v in series[0].x]  # names, even when they look like years
         if not render.pie_slices(series[0]):
             raise ChartError("a pie chart needs at least one value above zero")
+        overlap = subtotal_in(render.pie_slices(series[0]))
+        if overlap:
+            parent, parts = overlap
+            raise ChartError(f"{parent} is a subtotal of {' + '.join(parts)} (it equals their sum), so a pie with all of "
+                             f"them counts it twice. Draw the sub-lines without {parent}, or {parent} without them.")
     labels = [] if pie else unify_x(series)
     for s, spec in zip(series, specs, strict=True):
         if spec.get("percent_change"):
@@ -281,6 +287,26 @@ def _fmt(v: float) -> str:
 
 def _x(v) -> str:
     return v.strftime("%Y-%m-%d %H:%M").removesuffix(" 00:00") if isinstance(v, datetime) else str(v)
+
+
+SUBTOTAL_TOLERANCE = 0.001  # relative: how close a sum must be to count as equal
+SUBTOTAL_MAX_SLICES = 12  # more than this isn't searched (2^11 subsets of the others)
+
+
+def subtotal_in(slices: list[tuple[str, float]]) -> tuple[str, list[str]] | None:
+    """A slice that is the sum of two or more of the others and whose name is part of theirs (Data Center next to Data
+    Center - Hyperscale and Data Center - AI Clouds): a subtotal drawn beside its parts, which counts it twice. The
+    name test keeps coincidences (a region of 20 beside two of 10) from being refused."""
+    if not 3 <= len(slices) <= SUBTOTAL_MAX_SLICES:
+        return None
+    for name, value in slices:
+        others = [(n, v) for n, v in slices if n != name]
+        for size in range(2, len(others) + 1):
+            for combo in itertools.combinations(others, size):
+                if abs(sum(v for _, v in combo) - value) <= value * SUBTOTAL_TOLERANCE and any(
+                        name.lower() in n.lower() for n, _ in combo):
+                    return name, [n for n, _ in combo]
+    return None
 
 
 def pie_summary(s: Series) -> str:
