@@ -36,8 +36,9 @@ TOOL = ToolDef(
     "relationship. A series is a ticker (any Yahoo symbol: NVDA, CBA.AX, ^GSPC, AUDUSD=X, GC=F, BTC-USD), whose "
     "price history is fetched for you, or x/y values from tool results or the chat, never invented. For a share-of-"
     "total breakdown (revenue by segment or region; also whenever a breakdown or the segments are asked for) use kind pie: one series per chart, x the slice names and y their "
-    "values, parts of one whole only (never a subtotal beside its parts); call it once per breakdown and the charts "
-    "go out together as an album. Then comment on what it shows; don't describe the chart.",
+    "values, parts of one whole only (never a subtotal beside its parts). A source that returns several groupings "
+    "(segments, products or platforms, regions) gets one pie for every grouping, not just the first: ask it for all "
+    "of them, call this once per grouping, and the charts go out together as an album. Then comment on what it shows; don't describe the chart.",
     {"type": "object", "required": ["title", "series"], "properties": {
         "title": {"type": "string"},
         "series": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {
