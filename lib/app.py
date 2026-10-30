@@ -131,10 +131,12 @@ async def log_tool_size(ctx: Ctx) -> None:
 
 
 async def register_menu(ctx: Ctx) -> None:
-    """The command menu: /segments for everyone, and /tokens too for the people who can use it (a scoped menu
+    """The command menu: /segments, /narrative and /events for everyone, and /tokens too for the people who can use it (a scoped menu
     replaces the default one, so it lists both): administrators of every group, and the users in ADMIN_CHAT_IDS
     in their own chat with the bot."""
-    everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER")]
+    everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER"),
+                BotCommand("narrative", "10-K/10-Q narrative: /narrative TICKER [section]"),
+                BotCommand("events", "8-K events: /events TICKER [section]")]
     admins = everyone + [BotCommand("tokens", "Provider balance, token use and cost")]
     try:
         await ctx.bot.set_my_commands(everyone)
@@ -198,12 +200,15 @@ def build_app(ctx: Ctx) -> Application:
     app.add_handler(CommandHandler(["tokens", "usage", "credits"], command(commands.credits)))
     app.add_handler(CommandHandler("flushcache", command(commands.flush_cache)))
     app.add_handler(CommandHandler("segments", handlers.segments))
+    app.add_handler(CommandHandler("narrative", command(commands.narrative)))
+    app.add_handler(CommandHandler("events", command(commands.events)))
     app.add_handler(MessageHandler(
         (filters.ChatType.GROUPS | filters.ChatType.PRIVATE)
         & (filters.UpdateType.MESSAGE | filters.UpdateType.EDITED_MESSAGE)
         & ~filters.StatusUpdate.ALL, handlers.on_message))
     app.add_handler(CallbackQueryHandler(command(chart_buttons.on_button), pattern=r"^ch:"))  # chart periods
     app.add_handler(CallbackQueryHandler(command(chart_pages.on_page), pattern=r"^cp:"))  # which of several charts
+    app.add_handler(CallbackQueryHandler(command(commands.on_filing_button), pattern=r"^fl:"))  # section buttons
     if st.holding_news:  # the Unsubscribe / Undo buttons on holding-news messages
         app.add_handler(CallbackQueryHandler(command(holding_news.on_button), pattern=r"^hn:"))
     if st.post_to_groups or st.admin_only:  # keeps the list of groups the bot is in

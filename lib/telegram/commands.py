@@ -1,8 +1,9 @@
-"""Admin command: /tokens, also /usage and /credits (provider balance, where there is one, and the token ledger)."""
+"""Commands: /tokens (also /usage, /credits; admins) and /narrative and /events (anyone), and the admin cache flush."""
 
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import time
 
@@ -10,9 +11,12 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ..context import Ctx
+from ..features import filings
 from ..features.periods import backfill
 from ..features.periods.windows import describe_scope, flush_scope
+from ..store import is_dm
 from .access import is_admin
+from .send import reply_chunks
 
 log = logging.getLogger("bot")
 
@@ -79,3 +83,49 @@ async def flush_cache(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TY
     log.info("Flushed %d cached period returns (%s)", n, what)
     await _reply(ctx, update, f"Flushed {n} cached periods ({what})."
                  + (" Refilling in the background." if ctx.st.period_backfill else ""))
+
+
+async def show_filing(ctx: Ctx, msg, kind: filings.Kind, ticker: str, index: int | None, section: str) -> None:
+    """One section of a ticker's narrative or events, with a button for each of the others."""
+    text = await filings.fetch(ctx, kind, ticker, section)
+    if not text:
+        await reply_chunks(msg, f"No {kind.noun} found for {html.escape(ticker)}.", ctx.store, quote=False)
+        return
+    await reply_chunks(msg, filings.to_html(text), ctx.store, quote=not is_dm(msg.chat_id),
+                       last_markup=filings.keyboard(kind, ticker, index))
+
+
+async def _filing_command(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE, kind: filings.Kind) -> None:
+    msg, words = update.effective_message, list(context.args or [])
+    await asyncio.to_thread(ctx.store.save, msg)
+    ticker = words[0].lstrip("$").upper() if words else ""
+    if not filings.TICKER.match(ticker):
+        await reply_chunks(msg, f"Usage: /{kind.command} TICKER [section]", ctx.store, quote=False)
+        return
+    index, section = filings.pick(kind, words[1:])
+    await show_filing(ctx, msg, kind, ticker, index, section)
+
+
+async def narrative(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/narrative TICKER [section]: the 10-K/10-Q narrative (all by default), from TickerScout."""
+    await _filing_command(ctx, update, context, filings.KINDS["n"])
+
+
+async def events(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/events TICKER [section]: the 8-K events digest (earnings by default), from TickerScout."""
+    await _filing_command(ctx, update, context, filings.KINDS["e"])
+
+
+async def on_filing_button(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """A section button under a narrative or events reply: send that section as a new reply."""
+    query = update.callback_query
+    try:
+        code, ticker, number = query.data[len(filings.PREFIX):].split(":")
+        kind = filings.KINDS[code]
+        index = int(number)
+        section = kind.sections[index][1]
+    except (ValueError, KeyError, IndexError):
+        await query.answer("That button is out of date.")
+        return
+    await query.answer()
+    await show_filing(ctx, query.message, kind, ticker, index, section)
