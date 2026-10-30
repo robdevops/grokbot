@@ -87,6 +87,7 @@ def test_startup_logs_the_git_hash_and_whether_the_backfill_is_on(monkeypatch, t
     monkeypatch.setenv("PERIOD_BACKFILL", "off")
     app.main(["grokbot"])
     assert "Starting instance grokbot (abc1234): " in caplog.text and "Period backfill" not in caplog.text
+    assert "Reasoning default, MCP servers: none" in [r.getMessage() for r in caplog.records]
     caplog.clear()
     monkeypatch.setattr(app, "git_hash", lambda: "")
     monkeypatch.setenv("PERIOD_BACKFILL", "RobSMSF, other")

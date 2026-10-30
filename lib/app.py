@@ -254,9 +254,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     ctx = build_ctx(st)
     app = build_app(ctx)
     commit = git_hash()
-    log.info("Starting%s%s: %s on %s, reasoning %s, MCP servers: %s",
-             f" instance {args.label}" if args.label else "", f" ({commit})" if commit else "", st.model, st.provider,
-             st.reasoning or "default", ", ".join(ctx.registry.servers) or "none")
+    log.info("Starting%s%s: %s on %s",
+             f" instance {args.label}" if args.label else "", f" ({commit})" if commit else "", st.model, st.provider)
+    log.info("Reasoning %s, MCP servers: %s", st.reasoning or "default", ", ".join(ctx.registry.servers) or "none")
     if st.period_backfill:
         log.info("Period backfill: on for %s", ", ".join(sorted(st.period_backfill)))
     app.run_polling(allowed_updates=allowed_updates(st))
