@@ -110,7 +110,7 @@ def groupings(period: dict, factor: float = 1.0) -> list[tuple[str, list[tuple[s
                 walk(child, path + [str(key)] if isinstance(node, dict) else path)
 
     walk(period, [])
-    return found[:MAX_CHARTS]
+    return sorted(found, key=lambda g: g[0] != "segment")[:MAX_CHARTS]  # the segments first: the caption totals them
 
 
 def scaled(slices: list[tuple[str, float]]) -> tuple[list[tuple[str, float]], str]:

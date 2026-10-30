@@ -185,3 +185,24 @@ async def test_when_the_segments_tool_has_no_breakdowns_the_income_statement_is_
                                            "TSLA Q3 FY2026 revenue by region ($B)"]
     assert caption.startswith("<b>TSLA</b> Q3 FY2026 revenue $23.9B: Automotive is 88% of the segment split.")
     assert [c for c, _ in server.calls] == ["get_segments", "get_segments", "get_statements"] and not caplog.records
+
+
+async def test_alphabet_has_revenue_by_type_and_segments_with_totals_and_subtotals_left_out(env, store):
+    googl = (Path(__file__).parent / "fixtures" / "tickerscout" / "get_segments__GOOGL.json").read_text()
+
+    class Scout(FakeMcp):
+        async def call(self, tool, args):
+            self.calls.append((tool, args))
+            return googl if args["breakdown"] == "all" else json.dumps({"available": False, "message": "none"})
+
+    made = charts.Charts()
+    caption = await breakdown.fast(make(env, store, Scout("ticker-scout", tools=("get_segments",))),
+                                   "GOOGL revenue breakdown", made)
+    assert [t for _, t in made.photos] == ["GOOGL Q3 FY2026 revenue by segment ($B)",
+                                           "GOOGL Q3 FY2026 revenue by type ($B)"]
+    assert caption == "<b>GOOGL</b> Q3 FY2026 revenue $127.6B: Google services is 75% of the segment split."
+    period = json.loads(googl)["periods"][0]
+    by_type = dict(breakdown.groupings(period))["type"]
+    assert [n for n, _ in by_type] == ["Google search and other", "Youtube ads", "Google network",
+                                       "Google subscriptions platforms and devices", "Google cloud", "Other bets",
+                                       "Hedging gains losses"]  # no advertising/services subtotals, no total revenues
