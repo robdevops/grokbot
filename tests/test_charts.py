@@ -621,3 +621,8 @@ async def test_a_chart_request_ends_with_a_line_telling_the_model_to_draw_it(env
     assert "call make_chart with kind pie once for each grouping" in pies
     assert "call make_chart rather than describing the numbers" in plain and "pie" not in plain.split("Group chat")[-1][-200:]
     assert "make_chart" not in none
+
+
+def test_the_model_is_told_to_use_the_finest_split_of_a_pie():
+    assert "use the sub-lines, the finest split, not the subtotal" in charts.TOOL.description
+    assert "finest split with no overlaps" in charts.chart_hint("NVDA revenue breakdown")

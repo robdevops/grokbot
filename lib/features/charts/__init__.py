@@ -36,7 +36,8 @@ TOOL = ToolDef(
     "relationship. A series is a ticker (any Yahoo symbol: NVDA, CBA.AX, ^GSPC, AUDUSD=X, GC=F, BTC-USD), whose "
     "price history is fetched for you, or x/y values from tool results or the chat, never invented. For a share-of-"
     "total breakdown (revenue by segment or region; also whenever a breakdown or the segments are asked for) use kind pie: one series per chart, x the slice names and y their "
-    "values, parts of one whole only (never a subtotal beside its parts). A source that returns several groupings "
+    "values, parts of one whole only: never a subtotal beside its parts, and where a line is split into sub-lines "
+    "(Data Center into Hyperscale and AI Clouds) use the sub-lines, the finest split, not the subtotal. A source that returns several groupings "
     "(segments, products or platforms, regions) gets one pie for every grouping, not just the first: ask it for all "
     "of them, call this once per grouping, and the charts go out together as an album. Then comment on what it shows; don't describe the chart.",
     {"type": "object", "required": ["title", "series"], "properties": {
@@ -102,7 +103,8 @@ def chart_hint(text: str) -> str:
     """A line for the end of the prompt: offering make_chart isn't enough, some models answer in text anyway."""
     if PIE_WORDS.search(text):
         return ("\n\nThey want this drawn, not described: fetch the data (every grouping the source has: segments, "
-                "products or platforms, regions), then call make_chart with kind pie once for each grouping.")
+                "products or platforms, regions), then call make_chart with kind pie once for each grouping, using the "
+                "finest split with no overlaps (a line's sub-lines, not their subtotal).")
     return "\n\nThey want a chart: call make_chart rather than describing the numbers."
 
 
