@@ -24,6 +24,7 @@ PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max
 DEFAULT_INTERVAL = {"1d": "5m", "5d": "30m", "1mo": "1d", "3mo": "1d", "6mo": "1wk", "1y": "1wk",
                     "2y": "1mo", "5y": "1mo", "10y": "3mo", "max": "3mo"}
 MAX_CHARTS, MAX_SERIES, MAX_POINTS = 3, 8, 2000
+NIGHT_FROM, NIGHT_TO = 21, 7  # the dark theme from 9 pm to 7 am (BOT_TZ), when the chart is drawn
 TOTAL_MAX = 24  # characters of a legend total
 CAPTION_HINT = 900  # Telegram captions hold 1024 characters; a longer reply continues in a text message
 HISTORY_TOOL = "get_historical_prices"
@@ -55,6 +56,40 @@ TOOL = ToolDef(
 
 class ChartError(ValueError):
     """A problem with the request, reported to the model so it can fix the call."""
+
+
+def now(tz) -> datetime:
+    return datetime.now(tz)
+
+
+def is_night(hour: int) -> bool:
+    return hour >= NIGHT_FROM or hour < NIGHT_TO
+
+
+def date_range(first: datetime, last: datetime) -> str:
+    """30 Sep - 28 Oct 2026 (the year once when it is the same), or a single date for one day."""
+    def day(d: datetime, year: bool) -> str:
+        return f"{d.day} {d:%b}" + (f" {d.year}" if year else "")
+    if first.date() == last.date():
+        return day(last, True)
+    return f"{day(first, first.year != last.year)} - {day(last, True)}"
+
+
+PERIOD_WORDS = {"1d": "the past day", "5d": "the past 5 days", "1mo": "the past month", "3mo": "the past 3 months",
+                "6mo": "the past 6 months", "ytd": "the year to date", "1y": "the past year", "2y": "the past 2 years",
+                "5y": "the past 5 years", "10y": "the past 10 years", "max": "all time"}
+
+
+def subtitle_for(specs: list[dict], series: list[Series], pct: bool) -> str:
+    """What the chart shows and when, like "% change over the past month, 30 Sep - 28 Oct 2026"."""
+    periods = {spec.get("period") or "1y" for spec in specs if spec.get("ticker")}
+    head = ""
+    if len(periods) == 1 and all(spec.get("ticker") for spec in specs):
+        head = ("% change" if pct else "Closing price") + f" over {PERIOD_WORDS[periods.pop()]}"
+    elif pct:
+        head = "% change"
+    times = [x for s in series for x in s.x if isinstance(x, datetime)]
+    return ", ".join(filter(None, (head, date_range(min(times), max(times)) if times else "")))
 
 
 def wants_chart(text: str) -> bool:
@@ -173,7 +208,8 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
         raise ChartError("give a title and at least one series")
     if len(specs) > MAX_SERIES:
         raise ChartError(f"at most {MAX_SERIES} series per chart")
-    today = datetime.now(ctx.st.tz).date()
+    moment = now(ctx.st.tz)
+    today = moment.date()
     fetches, series, notes = [], [], [""] * len(specs)
     for i, spec in enumerate(specs):
         if not isinstance(spec, dict) or not str(spec.get("name") or "").strip():
@@ -202,10 +238,12 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
             s.y = percent_change(s.y)
         s.total = total(s, spec)
     chart = Chart(title, series, str(args.get("left_label") or ""), str(args.get("right_label") or ""),
-                  bool(args.get("invert_left")), bool(args.get("invert_right")), labels)
+                  bool(args.get("invert_left")), bool(args.get("invert_right")), labels,
+                  dark=is_night(moment.hour))
     for side in ("left", "right"):  # an axis of nothing but % changes labels its ticks with %
         on_side = [spec for s, spec in zip(series, specs, strict=True) if s.axis == side]
         setattr(chart, f"{side}_percent", bool(on_side) and all(spec.get("percent_change") for spec in on_side))
+    chart.subtitle = subtitle_for(specs, series, chart.left_percent and not any(s.axis == "right" for s in series))
     return chart, [summary(s, specs[i].get("percent_change"), notes[i]) for i, s in enumerate(series)]
 
 

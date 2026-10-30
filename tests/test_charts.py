@@ -1,6 +1,7 @@
 import asyncio
 import json
 import math
+from dataclasses import replace
 from datetime import date, datetime
 from types import SimpleNamespace as N
 
@@ -67,14 +68,77 @@ def test_tick_labels_share_their_decimals_and_shorten_big_numbers():
     assert [label(v, [-10, 0, 10], True) for v in (-10, -1e-15, 10)] == ["-10%", "0%", "10%"]
 
 
-def test_totals_go_in_the_legend_even_for_one_series():
-    days = [datetime(2026, 1, d) for d in (1, 2)]
+DAYS = [datetime(2026, 1, d) for d in (1, 2)]
+
+
+def end_label_texts(chart):
+    return [t.get_text() for t in render.figure(chart).axes[0].texts]
+
+
+def test_lines_are_named_at_their_ends_with_their_totals_and_have_no_legend():
+    chart = Chart("t", [Series("NBIS", DAYS, [0.0, -27.1], total="-27.1%"), Series("Mine", DAYS, [1.0, 2.0])])
+    assert render.figure(chart).axes[0].get_legend() is None
+    assert end_label_texts(chart) == ["NBIS  -27.1%", "Mine"]
+    assert end_label_texts(Chart("t", [Series("NVDA", DAYS, [1.0, 2.0], total="+100.0%")])) == ["NVDA  +100.0%"]
+
+
+def test_two_axes_or_bars_keep_a_legend_with_the_totals():
     legend = lambda chart: [t.get_text() for t in render.figure(chart).axes[0].get_legend().get_texts()]  # noqa: E731
-    assert legend(Chart("t", [Series("NBIS", days, [0.0, -27.1], total="-27.1%"),
-                              Series("Gold", days, [1.0, 2.0], axis="right", total="+100.0%"),
-                              Series("Mine", days, [1.0, 2.0])])) == ["NBIS -27.1%", "Mine", "Gold +100.0% (right)"]
-    assert legend(Chart("t", [Series("NVDA", days, [1.0, 2.0], total="+100.0%")])) == ["NVDA +100.0%"]
-    assert render.figure(Chart("t", [Series("NVDA", days, [1.0, 2.0])])).axes[0].get_legend() is None
+    two = Chart("t", [Series("NBIS", DAYS, [0.0, -27.1], total="-27.1%"),
+                      Series("Gold", DAYS, [1.0, 2.0], axis="right", total="+100.0%"),
+                      Series("Mine", DAYS, [1.0, 2.0])])
+    assert legend(two) == ["NBIS -27.1%", "Mine", "Gold +100.0% (right)"] and end_label_texts(two) == []
+    assert legend(Chart("t", [Series("A", DAYS, [1.0, 2.0], kind="bar", total="+5%")])) == ["A +5%"]
+
+
+def test_one_y_axis_has_no_title_unless_it_is_inverted_and_two_keep_theirs():
+    one = Chart("t", [Series("a", DAYS, [1.0, 2.0])], left_label="Price")
+    assert render.figure(one).axes[0].get_ylabel() == ""
+    assert render.figure(replace(one, invert_left=True)).axes[0].get_ylabel() == "inverted"
+    two = Chart("t", [Series("a", DAYS, [1.0, 2.0]), Series("b", DAYS, [1.0, 2.0], axis="right")],
+                left_label="Price", right_label="Rate")
+    assert [ax.get_ylabel() for ax in render.figure(two).axes] == ["Price", "Rate"]
+
+
+def test_a_chart_of_right_axis_series_alone_is_drawn_on_one_axis_with_the_right_settings():
+    chart = Chart("t", [Series("a", DAYS, [1.0, 2.0], axis="right")], right_label="Rate", invert_right=True)
+    fig = render.figure(chart)
+    assert len(fig.axes) == 1 and fig.axes[0].yaxis_inverted() and fig.axes[0].get_ylabel() == "inverted"
+    assert end_label_texts(chart) == ["a"]
+
+
+def test_end_labels_are_pushed_apart_in_order_and_kept_on_the_plot():
+    assert render.spread([0.5], 0.1) == [0.5]
+    assert render.spread([0.5, 0.52, 0.9], 0.1) == pytest.approx([0.5, 0.6, 0.9])
+    assert render.spread([0.52, 0.5], 0.1) == pytest.approx([0.6, 0.5])  # order is by height, not by series
+    assert render.spread([0.95, 0.98, 1.0], 0.1) == pytest.approx([0.8, 0.9, 1.0])  # pushed back down from the top
+
+
+def test_the_x_axis_has_strokes_above_its_labels_and_the_y_axis_none():
+    ax = render.figure(Chart("t", [Series("a", DAYS, [1.0, 2.0])])).axes[0]
+    assert ax.xaxis.get_major_ticks()[0].tick1line.get_markersize() == 5
+    assert ax.yaxis.get_major_ticks()[0].tick1line.get_markersize() == 0
+
+
+def test_the_dark_theme_has_a_dark_background_and_light_text():
+    light = render.figure(Chart("t", [Series("a", DAYS, [1.0, 2.0])]))
+    dark = render.figure(Chart("t", [Series("a", DAYS, [1.0, 2.0])], dark=True))
+    assert light.get_facecolor()[:3] == (1.0, 1.0, 1.0)
+    assert dark.get_facecolor()[:3] == pytest.approx((0x14 / 255, 0x1a / 255, 0x22 / 255))
+    assert dark.axes[0].get_title(loc="left") == "t" and dark.axes[0]._left_title.get_color() == render.THEMES["dark"].ink
+
+
+def test_charts_are_dark_from_9pm_to_7am():
+    assert [charts.is_night(h) for h in (6, 7, 12, 20, 21, 23, 0)] == [True, False, False, False, True, True, True]
+
+
+async def test_a_chart_drawn_at_night_is_dark(env, store, monkeypatch):
+    from zoneinfo import ZoneInfo
+    args = {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}
+    for hour, dark in ((22, True), (13, False)):
+        monkeypatch.setattr(charts, "now", lambda tz, h=hour: datetime(2026, 10, 30, h, 0, tzinfo=ZoneInfo("UTC")))
+        chart, _ = await charts.build(make(env, store), args)
+        assert chart.dark is dark
 
 
 async def test_totals_are_the_models_own_or_the_change_over_the_chart(env, store):
@@ -433,3 +497,40 @@ async def test_an_upload_is_reused_for_an_hour_but_the_1d_chart_for_15_minutes(e
     assert await tap("1mo", 59 * 60) == 0 and await tap("1d", 14 * 60) == 0  # both still fresh
     assert await tap("1mo", 61 * 60) == 1  # an hour on: drawn again
     assert await tap("1d", 16 * 60) == 2  # the day chart already after 15 minutes
+
+
+def test_date_ranges_show_the_year_once():
+    d = datetime
+    assert charts.date_range(d(2026, 9, 30), d(2026, 10, 28)) == "30 Sep - 28 Oct 2026"
+    assert charts.date_range(d(2025, 12, 5), d(2026, 1, 9)) == "5 Dec 2025 - 9 Jan 2026"
+    assert charts.date_range(d(2026, 10, 28, 9, 30), d(2026, 10, 28, 16, 0)) == "28 Oct 2026"
+
+
+async def test_the_subtitle_says_what_the_chart_shows_and_when(env, store):
+    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
+    ctx = make(env, store, yahoo)
+    sub = lambda *series, **kw: charts.build(ctx, {"title": "t", "series": list(series), **kw})  # noqa: E731
+    chart, _ = await sub({"name": "A", "ticker": "A", "period": "1mo", "percent_change": True},
+                         {"name": "B", "ticker": "B", "period": "1mo", "percent_change": True})
+    assert chart.subtitle == "% change over the past month, 1 Jan - 2 Jan 2026"
+    chart, _ = await sub({"name": "A", "ticker": "A"})
+    assert chart.subtitle == "Closing price over the past year, 1 Jan - 2 Jan 2026"
+    chart, _ = await sub({"name": "A", "ticker": "A", "period": "5y"}, {"name": "B", "ticker": "B", "period": "1y"})
+    assert chart.subtitle == "1 Jan - 2 Jan 2026"  # periods differ: just the dates
+    chart, _ = await sub({"name": "Mine", "x": ["a", "b"], "y": [1, 2]})
+    assert chart.subtitle == ""
+
+
+def test_the_subtitle_sits_under_the_title_and_the_date_is_not_repeated_bottom_right():
+    chart = Chart("t", [Series("a", DAYS, [1.0, 2.0])], subtitle="Closing price, 1 Jan - 2 Jan 2026")
+    ax = render.figure(chart).axes[0]
+    assert [t.get_text() for t in ax.texts if "Closing" in t.get_text()] == ["Closing price, 1 Jan - 2 Jan 2026"]
+    assert not ax.xaxis.get_offset_text().get_visible()
+
+
+def test_the_line_at_zero_is_as_light_as_the_other_rules():
+    chart = Chart("t", [Series("a", DAYS, [-1.0, 2.0])])
+    ax = render.figure(chart).axes[0]
+    zero = [line for line in ax.get_lines() if list(line.get_ydata()) == [0, 0]]
+    assert zero and zero[0].get_linewidth() == render.RULE_WIDTH == ax.yaxis.get_gridlines()[0].get_linewidth()
+    assert zero[0].get_color() == render.THEMES["light"].rule
