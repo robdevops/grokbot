@@ -19,28 +19,30 @@ from . import ChartError, build, render
 log = logging.getLogger("bot")
 
 PREFIX = "cp:"  # callback data: cp:<index of the chart>
-LABEL_MAX = 20
+LABEL_MAX = 13  # a button in a row of three shows about this much
 _tasks: set[asyncio.Task] = set()  # uploads running; held so they aren't garbage-collected
 
 
 def labels_for(titles: list[str]) -> list[str]:
-    """A short button label for each chart: its title without the words they all start or end with ("NVDA Q2
-    Revenue by Segment", "... by Platform" give "Segment", "Platform"), or its number if that leaves nothing useful."""
-    words = [t.split() for t in titles]
+    """The key word of each chart, for its button: what its title has that the others don't (the words they all start
+    or end with, and anything in brackets, are dropped), then the last word of that ("NVDA Revenue by Market Platform
+    (finest)" gives "Platform"). Two words if the one word repeats, and the number if even that does."""
+    words = [re.sub(r"\([^)]*\)", " ", t).split() for t in titles]
     start = 0
     while all(len(w) > start for w in words) and len({w[start].lower() for w in words}) == 1:
         start += 1
     end = 0
     while all(len(w) - start > end for w in words) and len({w[-1 - end].lower() for w in words}) == 1:
         end += 1
-    labels = []
-    for w in words:
-        label = re.sub(r"^[\W_]+|[\W_]+$", "", " ".join(w[start:len(w) - end]))
-        label = label[:1].upper() + label[1:]
-        labels.append(label if len(label) <= LABEL_MAX else label[:LABEL_MAX - 1].rstrip() + "…")
-    if any(not label for label in labels) or len(set(labels)) < len(labels):
-        return [f"Chart {i + 1}" for i in range(len(titles))]
-    return labels
+    parts = [[re.sub(r"^[\W_]+|[\W_]+$", "", x) for x in w[start:len(w) - end]] for w in words]
+    parts = [[x for x in p if x] for p in parts]
+    for count in (1, 2):
+        labels = [" ".join(p[-count:]) for p in parts]
+        labels = [(label[:1].upper() + label[1:]) if len(label) <= LABEL_MAX else label[:LABEL_MAX - 1] + "…"
+                  for label in labels]
+        if all(labels) and len(set(labels)) == len(labels):
+            return labels
+    return [f"Chart {i + 1}" for i in range(len(titles))]
 
 
 def keyboard(labels: list[str], current: int) -> InlineKeyboardMarkup:

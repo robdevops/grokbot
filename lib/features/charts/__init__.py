@@ -100,6 +100,24 @@ def subtitle_for(specs: list[dict], series: list[Series], pct: bool) -> str:
 PIE_WORDS = re.compile(r"\b(pies?|donuts?|breakdowns?|break down|segments?)\b", re.I)
 
 
+def asks_pie(text: str) -> bool:
+    return bool(PIE_WORDS.search(text))
+
+
+def pie_default(args: dict, prefer_pie: bool) -> dict:
+    """A breakdown was asked for, and the model drew one series of names and values as the default line chart: that
+    is a pie. A kind it chose itself (bar, scatter, pie) stays."""
+    specs = args.get("series")
+    if not (prefer_pie and isinstance(specs, list) and len(specs) == 1 and isinstance(specs[0], dict)):
+        return args
+    spec = specs[0]
+    x = spec.get("x")
+    if (spec.get("kind") in (None, "", "line") and not spec.get("ticker") and isinstance(x, list) and x
+            and all(as_date(v) is None and as_number(v) is None for v in x)):
+        return {**args, "series": [{**spec, "kind": "pie"}]}
+    return args
+
+
 def chart_hint(text: str) -> str:
     """A line for the end of the prompt: offering make_chart isn't enough, some models answer in text anyway."""
     if PIE_WORDS.search(text):
@@ -337,6 +355,7 @@ class Charts:
 
     def __init__(self):
         self.slots: list[dict] = []  # state: pending | done | failed
+        self.prefer_pie = False  # the message asked for a breakdown: one series of names and values is a pie
 
     @property
     def photos(self) -> list[tuple[bytes, str]]:
@@ -356,6 +375,7 @@ def tool(ctx: Ctx, charts: Charts):
     async def make(args: dict) -> str:
         if charts.active() >= MAX_CHARTS:
             return f"Error: at most {MAX_CHARTS} charts per reply."
+        args = pie_default(args, charts.prefer_pie)
         slot = {"state": "pending"}  # taken before the first await, so in the order the calls were made
         charts.slots.append(slot)
         began = time.monotonic()

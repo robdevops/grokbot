@@ -631,14 +631,15 @@ async def test_a_pie_with_a_subtotal_and_its_parts_is_refused_with_the_fix(env, 
     assert ok.startswith("Chart 1 is ready") and "Edge Computing 7.5%" in ok
 
 
-def test_button_labels_are_the_part_of_each_title_that_differs():
+def test_button_labels_are_the_key_word_of_what_differs_in_each_title():
     labels = pages.labels_for
-    assert labels(["NVDA Q2 FY2027 Revenue by Reportable Segments", "NVDA Q2 FY2027 Revenue by Market Platform",
-                   "NVDA Q2 FY2027 Revenue by Customer Headquarters"]) == [
-        "Reportable Segments", "Market Platform", "Customer Headquarte…"]
+    assert labels(["NVDA Q2 FY2027 Revenue by Reportable Segments", "NVDA Q2 FY2027 Revenue by Market Platform (finest)",
+                   "NVDA Q2 FY2027 Revenue by Customer Headquarters"]) == ["Segments", "Platform", "Headquarters"]
     assert labels(["NVDA price", "AMD price"]) == ["NVDA", "AMD"]
+    assert labels(["Sales by US state", "Sales by EU state"]) == ["US", "EU"]  # the words they share are dropped
     assert labels(["Same", "Same"]) == ["Chart 1", "Chart 2"]  # nothing differs
     assert labels(["A", "A B"]) == ["Chart 1", "Chart 2"]  # one title is the other's prefix
+    assert labels(["Revenue by Intergovernmental", "Revenue by Segment"]) == ["Intergovernm…", "Segment"]
 
 
 PIE_CALLS = [("1", "make_chart", json.dumps({"title": f"NVDA revenue by {n}", "series": [pie(n, ["a", "b"], [3, 1])]}))
@@ -735,3 +736,30 @@ async def test_a_failed_chart_gives_up_its_place_and_its_number(env, store):
     assert (await make_chart(bad)).startswith("Error: ")
     assert [(await make_chart(good)).split(" is ready")[0] for _ in range(3)] == ["Chart 1", "Chart 2", "Chart 3"]
     assert (await make_chart(good)) == "Error: at most 3 charts per reply."
+
+
+def test_a_breakdown_of_names_and_values_drawn_as_the_default_line_becomes_a_pie():
+    line = {"title": "t", "series": [{"name": "p", "x": ["Compute", "Graphics"], "y": [88, 8]}]}
+    pie_of = lambda args, prefer=True: charts.pie_default(args, prefer)["series"][0].get("kind")  # noqa: E731
+    assert pie_of(line) == "pie"
+    assert pie_of(line, prefer=False) is None  # not asked for a breakdown
+    assert pie_of({**line, "series": [{**line["series"][0], "kind": "line"}]}) == "pie"
+    assert pie_of({**line, "series": [{**line["series"][0], "kind": "bar"}]}) == "bar"  # the model's own choice
+    assert pie_of({**line, "series": [{**line["series"][0], "x": ["2024-01-01", "2024-02-01"]}]}) is None  # dates
+    assert pie_of({**line, "series": [{**line["series"][0], "x": [2024, 2025]}]}) is None  # numbers
+    assert pie_of({**line, "series": [{"name": "p", "ticker": "NVDA"}]}) is None
+    two = {**line, "series": line["series"] * 2}
+    assert charts.pie_default(two, True) is two
+
+
+async def test_asked_for_a_breakdown_a_line_of_names_and_values_is_drawn_as_a_donut(env, store):
+    call = {"title": "By platform", "series": [{"name": "Platform", "x": ["Hyperscale", "AI Clouds", "Edge"],
+                                                "y": [48.7, 40.3, 7.2]}]}
+    ctx, backend, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(call))], finish="tool_calls"),
+                                           step("ok")])
+    await run(h, user_msg(ctx.bot, "@stockbot NVDA revenue breakdown"))
+    assert "(pie, 3 slices" in backend.results_log[0][0]  # drawn as a pie, though the model left the kind out
+    ctx, backend, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(call))], finish="tool_calls"),
+                                           step("ok")])
+    await run(h, user_msg(ctx.bot, "@stockbot chart NVDA revenue", mid=2))
+    assert "(pie" not in backend.results_log[0][0]  # not a breakdown request: the model's line stays

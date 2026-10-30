@@ -17,7 +17,7 @@ from ..ask import ask
 from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers, periods, post
 from ..features.charts import TOOL as CHART_TOOL
-from ..features.charts import Charts, chart_hint, wants_chart
+from ..features.charts import Charts, asks_pie, chart_hint, wants_chart
 from ..features.charts import buttons as chart_buttons
 from ..features.charts import pages as chart_pages
 from ..features.charts import tool as chart_tool
@@ -299,6 +299,7 @@ class Handlers:
             hint = ""
             if charts is not None and wants_chart(trig.text):
                 hint = chart_hint(trig.text)
+                charts.prefer_pie = asks_pie(trig.text)
                 extra.append(chart_tool(ctx, charts))
                 if chosen.simple:
                     chosen = Route([], False)
