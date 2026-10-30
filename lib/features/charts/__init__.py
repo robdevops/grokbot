@@ -165,7 +165,8 @@ def chart_hint(text: str) -> str:
         return ("\n\nThey want this drawn, not described: fetch the data (every grouping the source has: segments, "
                 "products or platforms, regions), then call make_chart with kind pie once for each grouping, using the "
                 "finest split with no overlaps (a line's sub-lines, not their subtotal). Each pie is one series whose x are "
-                "the slice names and y their values, not a series per slice.")
+                "the slice names and y their values, not a series per slice. "
+                "Then reply with one line under 120 characters, the period and the main takeaway: it is the caption.")
     return "\n\nThey want a chart: call make_chart rather than describing the numbers."
 
 
@@ -457,8 +458,9 @@ def tool(ctx: Ctx, charts: Charts):
         log.debug("Chart %r: %d series in %.1f s", chart.title, len(chart.series), time.monotonic() - began)
         position = next(i for i, other in enumerate(charts.slots) if other is slot)  # not index(): equal charts match
         number = sum(1 for other in charts.slots[:position + 1] if other["state"] != "failed")
-        return (f"Chart {number} is ready. Your reply becomes its caption, so keep the reply under "
-                f"{CAPTION_HINT} characters, and don't describe the chart or say you made one: say what it shows.\n"
+        limit = "one line under 120 characters" if chart.series[0].kind == "pie" else f"{CAPTION_HINT} characters"
+        return (f"Chart {number} is ready. Your reply becomes its caption, so keep the reply to {limit}, "
+                "and don't describe the chart or say you made one: say what it shows.\n"
                 + "\n".join(lines))
 
     return TOOL, make

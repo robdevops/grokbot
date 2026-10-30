@@ -815,3 +815,10 @@ async def test_a_pie_shows_its_sum_in_the_middle_in_the_titles_unit(env, store, 
     spec = {"name": "S", "kind": "pie", "x": ["A", "B"], "y": [20.094, 8.0]}
     chart, _ = await charts.build(make(env, store), {"title": title, "series": [spec]})
     assert chart.series[0].total == expected
+
+
+async def test_a_pie_asks_for_a_one_line_caption(env, store):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "Split ($B)", "series": [{"name": "S", "kind": "pie", "x": ["A", "B"], "y": [1, 2]}]})
+    assert "one line under 120 characters" in out
+    assert "one line under 120 characters" in charts.chart_hint("TSLA revenue breakdown")
