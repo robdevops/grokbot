@@ -21,6 +21,7 @@ FILLER = {"revenue", "revenues", "breakdown", "breakdowns", "break", "down", "se
           "s", "and", "give", "get", "what", "is", "are"}
 TICKER = re.compile(r"^[A-Z]{1,5}(?:[.-][A-Z]{1,3})?$")
 CURRENCIES = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
+UNITS = (("actual dollars", 1.0), ("thousand", 1e3), ("million", 1e6), ("billion", 1e9))  # of the "units" text
 STEPS = ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K"))
 
 
@@ -53,13 +54,13 @@ def slices_of(group: dict, segments: bool = False) -> list[tuple[str, float]]:
     return out
 
 
-def groupings(period: dict) -> list[tuple[str, list[tuple[str, float]]]]:
+def groupings(period: dict, factor: float = 1.0) -> list[tuple[str, list[tuple[str, float]]]]:
     """The pies of one period: its reportable segments, then each revenue_by_* breakdown, as (label, slices)."""
     found = []
     for key, value in period.items():
         if not isinstance(value, dict) or not (key == "reportable_segments" or key.startswith("revenue_by_")):
             continue
-        slices = slices_of(value, segments=key == "reportable_segments")
+        slices = [(n, v * factor) for n, v in slices_of(value, segments=key == "reportable_segments")]
         if len(slices) >= 2:
             label = "segment" if key == "reportable_segments" else key[len("revenue_by_"):].replace("_", " ")
             found.append((label, slices))
@@ -89,19 +90,23 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
     server = next((s for s in ctx.registry.up() if TOOL in s.fn_names.values()), None)
     if not ticker or not server:
         return None
+    out = await server.call(TOOL, {"ticker": ticker, "breakdown": "all", "period": "latest quarter"})
     try:
-        payload = json.loads(await server.call(TOOL, {"ticker": ticker, "breakdown": "all", "period": "latest quarter"}))
+        payload = json.loads(out)
         period = payload["periods"][0]
         symbol = CURRENCIES.get(str(payload.get("reporting_currency")))
-        if not symbol or "actual dollars" not in str(payload.get("units", "")):
-            return None
+        factor = next((f for key, f in UNITS if key in str(payload.get("units", "")).lower()), None)
     except (ValueError, KeyError, IndexError, TypeError):
-        log.debug("Fast breakdown for %s: unreadable %s result, leaving it to the model", ticker, TOOL)
+        log.warning("Fast breakdown for %s: couldn't read the %s result (%s)", ticker, TOOL, " ".join(out.split())[:200])
+        return None
+    if not symbol or not factor:
+        log.warning("Fast breakdown for %s: currency %r or units %r not understood", ticker,
+                    payload.get("reporting_currency"), payload.get("units"))
         return None
     name = str(period.get("period") or "latest quarter")
     _, make = tool(ctx, charts)
     first = None
-    for label, slices in groupings(period):
+    for label, slices in groupings(period, factor):
         values, suffix = scaled(slices)
         args = {"title": f"{ticker} {name} revenue by {label} ({symbol}{suffix})",
                 "series": [{"name": f"Revenue by {label}", "kind": "pie",
@@ -109,6 +114,7 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
         if (await make(args)).startswith("Chart ") and first is None:
             first = (label, slices)
     if first is None:
+        log.warning("Fast breakdown for %s: no pie could be drawn from %s", ticker, ", ".join(period) or "an empty period")
         return None
     log.info("Fast path: %d revenue pies for %s without the model", len(charts.photos), ticker)
     return caption(ticker, name, *first, symbol)

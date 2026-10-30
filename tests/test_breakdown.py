@@ -92,3 +92,16 @@ async def test_revenuepie_without_a_ticker_or_data_says_so(env, store, args, sai
     m = user_msg(ctx.bot, "/revenuepie " + " ".join(args))
     await h.revenuepie(update_for(m), N(args=args))
     assert m.replies[0]["text"] == said
+
+
+async def test_figures_in_millions_are_scaled_and_a_result_that_cannot_be_used_is_logged(env, store, caplog):
+    tesla = {"units": "USD millions", "reporting_currency": "USD", "periods": [{"period": "Q3 FY2026", "revenue_by_product": {
+        "Automotive sales": 20094, "Services & other": 4605, "Energy generation & storage": 2881}}]}
+    made = charts.Charts()
+    caption = await breakdown.fast(make(env, store, scout(json.dumps(tesla))), "TSLA revenue breakdown", made)
+    assert caption.startswith("<b>TSLA</b> Q3 FY2026 revenue $27.6B") and [t for _, t in made.photos] == [
+        "TSLA Q3 FY2026 revenue by product ($B)"]
+    odd = {**tesla, "units": "furlongs"}
+    with caplog.at_level("WARNING", logger="bot"):
+        assert await breakdown.fast(make(env, store, scout(json.dumps(odd))), "TSLA revenue breakdown", charts.Charts()) is None
+    assert "units 'furlongs' not understood" in caplog.text
