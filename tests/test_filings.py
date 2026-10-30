@@ -82,15 +82,6 @@ async def test_events_command_replies_with_the_default_section_and_buttons_for_t
     assert store.history(-100, 20)[0].text == "/events tsla"
 
 
-async def test_narrative_defaults_to_business_and_takes_a_section(env, store):
-    scout = Scout("# Tesla (TSLA) — Legal\n\nA case.")
-    ctx = make(env, store, scout)
-    for words in (["TSLA"], ["TSLA", "risk", "factors"]):
-        await commands.narrative(ctx, update_for(user_msg(ctx.bot, "/narrative", chat_id=-100)), N(args=words))
-    assert [a["section"] for _, a in scout.calls] == ["business", "risk factors"]
-    assert all(t == "get_narrative" for t, _ in scout.calls)
-
-
 def tap(sent, data):
     """A tap on a button under `sent`, recording the answer and the edit."""
     q = N(message=sent, data=data, answered=[], edits=[])
@@ -105,34 +96,39 @@ def tap(sent, data):
     return q
 
 
-async def test_a_button_edits_the_message_and_posts_nothing_more(env, store):
-    scout = Scout("# Tesla (TSLA) — Legal\n\nA case.")
-    ctx = make(env, store, scout)
-    sent = user_msg(ctx.bot, "earlier reply", chat_id=-100)
-    q = tap(sent, "fl:n:TSLA:5")
-    await commands.on_filing_button(ctx, N(callback_query=q), None)
-    assert scout.calls == [("get_narrative", {"ticker": "TSLA", "section": "legal"})]
-    assert sent.replies == [] and q.answered == [None]
-    [edit] = q.edits
-    assert edit["text"].startswith("<b>Tesla (TSLA) — Legal</b>") and edit["parse_mode"] == "HTML"
-    assert shaded(edit["reply_markup"]) == ["fl:n:TSLA:5"]  # the section now shown
+def tool_call(tool, ticker, section):
+    return [("1", f"ticker-scout__{tool}", json.dumps({"ticker": ticker, "section": section}))]
 
 
-async def test_a_section_too_long_for_one_message_is_shortened_by_a_model_that_calls_the_tool(env, store):
+LONG = "# Tesla (TSLA) — Business\n\n" + "Long paragraph of detail. " * 400
+
+
+async def test_narrative_goes_straight_to_the_model_which_calls_the_tool_itself(env, store):
     filings._shortened.clear()
-    scout = Scout("# Tesla (TSLA) — Business\n\n" + "Long paragraph of detail. " * 400)
-    call = ("1", "ticker-scout__get_narrative", json.dumps({"ticker": "TSLA", "section": "business"}))
-    ctx, backend, _ = make_ctx(env, store, [step(calls=[call], finish="tool_calls"), step("**Tesla** sells cars and energy.")],
-                               servers=(scout,))
-    for _ in range(2):  # the second tap on the same section reuses the answer
-        q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:0")
+    scout = Scout("# Tesla (TSLA) — Business\n\nA long text.")
+    ctx, backend, _ = make_ctx(env, store, [step(calls=tool_call("get_narrative", "TSLA", "business"), finish="tool_calls"),
+                                            step("**Tesla** sells cars and energy.")], servers=(scout,))
+    m = user_msg(ctx.bot, "/narrative tsla", chat_id=-100)
+    await commands.narrative(ctx, update_for(m), N(args=["tsla"]))
+    assert m.replies[0]["text"] == "<b>Tesla</b> sells cars and energy."
+    assert len(backend.seen) == 2 and scout.calls == [("get_narrative", {"ticker": "TSLA", "section": "business"})]
+    assert shaded(m.replies[0]["reply_markup"]) == ["fl:n:TSLA:0"]
+
+
+async def test_a_narrative_section_is_remembered_so_a_second_tap_asks_nothing(env, store):
+    filings._shortened.clear()
+    scout = Scout()
+    ctx, backend, _ = make_ctx(env, store, [step(calls=tool_call("get_narrative", "TSLA", "legal"), finish="tool_calls"),
+                                            step("A case.")], servers=(scout,))
+    for _ in range(2):
+        q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:5")
         await commands.on_filing_button(ctx, N(callback_query=q), None)
-        assert q.edits[0]["text"] == "<b>Tesla</b> sells cars and energy."
-    assert len(backend.seen) == 2  # one request, two rounds: the tool call, then the answer
-    assert [c for c, _ in scout.calls] == ["get_narrative"] * 3  # the size check, the model's call, the next tap's check
+        [edit] = q.edits
+        assert edit["text"] == "A case." and shaded(edit["reply_markup"]) == ["fl:n:TSLA:5"] and q.answered == [None]
+    assert len(backend.seen) == 2 and len(scout.calls) == 1
 
 
-async def test_a_failing_model_leaves_the_start_of_the_text(env, store):
+async def test_when_the_model_fails_a_narrative_shows_the_start_of_the_text(env, store):
     filings._shortened.clear()
     scout = Scout("# Tesla (TSLA) — Business\n\n" + "Line of detail.\n" * 600)
     ctx, backend, _ = make_ctx(env, store, [], servers=(scout,))  # nothing scripted: the model call fails
@@ -140,6 +136,27 @@ async def test_a_failing_model_leaves_the_start_of_the_text(env, store):
     await commands.on_filing_button(ctx, N(callback_query=q), None)
     text = q.edits[0]["text"]
     assert text.startswith("<b>Tesla (TSLA) — Business</b>") and len(text) <= filings.LIMIT and text.endswith("…")
+
+
+async def test_an_events_section_that_fits_is_shown_as_it_is_with_no_model(env, store):
+    scout = Scout()
+    ctx, backend, _ = make_ctx(env, store, [], servers=(scout,))
+    q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:e:TSLA:0")
+    await commands.on_filing_button(ctx, N(callback_query=q), None)
+    [edit] = q.edits
+    assert edit["text"].startswith("<b>Tesla (TSLA) — Earnings</b>") and backend.seen == []
+    assert shaded(edit["reply_markup"]) == ["fl:e:TSLA:0"] and q.answered == [None]
+
+
+async def test_an_events_section_too_long_for_one_message_is_shortened_by_the_model(env, store):
+    filings._shortened.clear()
+    scout = Scout("# Tesla (TSLA) — Earnings\n\n" + "Long paragraph of detail. " * 400)
+    ctx, backend, _ = make_ctx(env, store, [step(calls=tool_call("get_events", "TSLA", "earnings"), finish="tool_calls"),
+                                            step("Short earnings.")], servers=(scout,))
+    q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:e:TSLA:0")
+    await commands.on_filing_button(ctx, N(callback_query=q), None)
+    assert q.edits[0]["text"] == "Short earnings." and len(backend.seen) == 2
+    assert [c for c, _ in scout.calls] == ["get_events", "get_events"]  # the size check, then the model's
 
 
 @pytest.mark.parametrize("data", ["fl:x:TSLA:1", "fl:n:TSLA:99", "fl:n:TSLA:one", "fl:n"])

@@ -35,16 +35,17 @@ class Kind:
     tool: str
     noun: str
     sections: tuple[tuple[str, str], ...]  # (button label, `section` argument); the first is the default
+    via_model: bool  # long prose that rarely fits one message: the model gets the tool itself, no look at the size first
 
 
 KINDS = {
     "n": Kind("n", "narrative", "get_narrative", "narrative", (
         ("Business", "business"), ("Risk factors", "risk factors"), ("MD&A", "md&a"),
-        ("Current quarter", "current quarter"), ("Subsequent events", "subsequent events"), ("Legal", "legal"))),
+        ("Current quarter", "current quarter"), ("Subsequent events", "subsequent events"), ("Legal", "legal")), True),
     "e": Kind("e", "events", "get_events", "events", (
         ("Earnings", "earnings"), ("Management", "management changes"), ("Capital returns", "capital returns"),
         ("Debt & financing", "debt and financing"), ("M&A", "m&a"), ("Governance", "governance"),
-        ("Restructuring", "restructuring"), ("Legal", "legal"))),
+        ("Restructuring", "restructuring"), ("Legal", "legal")), False),
 }
 
 
@@ -114,33 +115,39 @@ def fit(body: str, limit: int) -> str:
     return chunks[0] + ("\u2026" if len(chunks) > 1 else "")
 
 
-async def shorten(ctx: Ctx, kind: Kind, ticker: str, section: str, body: str, limit: int, chat_id: int) -> str:
-    """The model's short version of a section that doesn't fit one message. The model calls the tool itself, so a
-    reply that runs out of tokens while thinking over the result is retried by the tool loop. Remembered, so a repeat
-    tap costs nothing; the start of the text if the model fails or still runs over."""
-    key = (kind.code, ticker, section, len(body))
-    if key not in _shortened:
-        server = next((s for s in ctx.registry.up() if kind.tool in s.fn_names.values()), None)
-        prompt = FILING_PROMPT.format(tool=kind.tool, ticker=ticker, section=section, limit=limit)
-        try:
-            answer = await ask(ctx, [{"type": "text", "text": prompt}], Route([server], False), kind="filing",
-                               chat_id=chat_id)
-        except Exception as e:
-            log.warning("Couldn't shorten %s %s for %s, cutting it instead: %s", kind.noun, section, ticker, e)
-            return fit(body, limit)
-        if len(_shortened) >= _SHORTENED_MAX:
-            _shortened.clear()
-        _shortened[key] = md_to_html(answer.text.strip())
-    return fit(_shortened[key], limit)
+async def summarise(ctx: Ctx, kind: Kind, ticker: str, section: str, limit: int, chat_id: int) -> str | None:
+    """The model's version of a section, to fit `limit` characters. The model calls the tool itself, so a reply that
+    runs out of tokens while thinking over the result is retried by the tool loop. Remembered, so a repeat tap costs
+    nothing. None if there is no data source or the model fails."""
+    key = (kind.code, ticker, section)
+    if key in _shortened:
+        return _shortened[key]
+    server = next((s for s in ctx.registry.up() if kind.tool in s.fn_names.values()), None)
+    if server is None:
+        return None
+    prompt = FILING_PROMPT.format(tool=kind.tool, ticker=ticker, section=section, limit=limit)
+    try:
+        answer = await ask(ctx, [{"type": "text", "text": prompt}], Route([server], False), kind="filing", chat_id=chat_id)
+    except Exception as e:
+        log.warning("The model couldn't write the %s %s for %s: %s", kind.noun, section, ticker, e)
+        return None
+    if len(_shortened) >= _SHORTENED_MAX:
+        _shortened.clear()
+    _shortened[key] = md_to_html(answer.text.strip())
+    return _shortened[key]
 
 
 async def message_for(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int) -> str | None:
-    """The section as one message of Telegram HTML (the model shortens what is too long), or None if there is none."""
+    """The section as one message of Telegram HTML, or None if there is none. Narrative goes to the model at once;
+    events are fetched and shown as they are unless too long for one message, when the model shortens them. Where
+    the model fails, the start of the text is shown."""
+    if kind.via_model and (short := await summarise(ctx, kind, ticker, section, LIMIT, chat_id)):
+        return fit(short, LIMIT)
     text = await fetch(ctx, kind, ticker, section)
     if not text:
         return None
     text, note = cut_note(text)
-    body = to_html(text)
-    if len(body) + len(note) > LIMIT:
-        body = await shorten(ctx, kind, ticker, section, body, LIMIT - len(note), chat_id)
-    return body + note
+    body, room = to_html(text), LIMIT - len(note)
+    if len(body) > room and not kind.via_model:
+        body = await summarise(ctx, kind, ticker, section, room, chat_id) or body
+    return fit(body, room) + note
