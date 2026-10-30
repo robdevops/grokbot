@@ -35,20 +35,26 @@ Ask for a chart, graph or plot ("chart NVDA against AMD over a year, AMD on the 
 replies once: the chart as a photo with its answer as the caption (2 or 3 charts come as one album). An answer too
 long for a caption (about 1,000 characters) continues in a text message. The model gets the `make_chart` tool only
 when the message asks for one (chart, graph, plot, visualise), so other requests don't pay for its definition.
-- **Style:** a bold title on the left, the legend under it, no frame, no vertical rules, light horizontal rules and
-  a darker line at zero when the values cross it. Tick labels share their decimals, shorten big numbers (120M, 1.5B)
-  and show % for % changes.
+- **Style:** a bold title on the left with a quiet subtitle under it, no frame and no vertical rules, rules of one
+  light weight (the one at zero too), short strokes above the x labels, and grey axis text. The subtitle says what
+  the chart shows and when, like "% change over the past month, 30 Sep - 28 Oct 2026". Tick labels share their
+  decimals, shorten big numbers (120M, 1.5B) and show % for % changes. A single y axis has no title (an inverted
+  one says "inverted"); two axes keep theirs. Charts are drawn in a dark theme from 9 pm to 7 am (`BOT_TZ`).
+- **Line labels:** with lines on one axis, each line ends in a small square and a label with its name and total
+  ("NVDA  -5.7%"), nudged apart where they would overlap, and there is no legend. Two axes, bars or points keep
+  a legend, with the totals in it.
 - **Period buttons:** a single chart whose series are all tickers comes with buttons: 1D, 1M, 1Y, 5Y and 🔄 (reload); the period shown is shaded.
   A tap fetches the prices again and redraws the chart in place, without asking the model. Another period gets a
   plain title, repeated as the caption; the chart's own period brings back the model's caption.
   Set `TELEGRAM_PRELOAD_CHAT` to a private chat the bot can post in (a private group, or a DM with you) and the
   other periods are drawn and uploaded there in the background right after the reply; a tap then swaps in the
   uploaded picture without fetching or drawing, and so does going back to the chart's own period. A picture older
-  than 15 minutes is drawn again with fresh prices, and 🔄 always is. Without the variable every tap draws.
+  than an hour (15 minutes for 1D) is drawn again with fresh prices, and 🔄 always is. Without the variable every tap draws.
   Anyone in the chat can tap. Charts of values the model passed, and albums, have no buttons (Telegram can't put
   buttons on an album). The buttons work for 90 days.
-- **Totals in the legend:** each series' total follows its name ("NBIS -27.1%"): the change over the chart for a
-  ticker or a % change series, or a figure the model passes from the data (a portfolio's total return, say).
+- **Totals:** each series' total ("-27.1%") is the change over the chart for a ticker or a % change series,
+  or a figure the model passes from the data (a portfolio's total return, say). It shows in the line label or
+  the legend.
 - **Axes:** a left and a right y axis, each with as many series as needed (lines, bars or points). Either axis or
   both can be inverted; an inverted axis is labelled "(inverted)".
 - **Data:** a series is either a Yahoo symbol (NVDA, CBA.AX, ^GSPC, AUDUSD=X, GC=F, BTC-USD), whose closing prices

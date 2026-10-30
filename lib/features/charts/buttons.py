@@ -20,7 +20,8 @@ from . import ChartError, build, render
 
 log = logging.getLogger("bot")
 
-PRELOAD_MAX_AGE = 15 * 60  # seconds: an uploaded picture older than this is drawn again, with fresh prices
+PRELOAD_MAX_AGE = 60 * 60  # seconds: an uploaded picture older than this is drawn again, with fresh prices
+DAY_MAX_AGE = 15 * 60  # the 1D chart moves within the hour, so its picture goes stale sooner
 _tasks: set[asyncio.Task] = set()  # preloads running; held so they aren't garbage-collected
 BUTTONS = (("1D", "1d"), ("1M", "1mo"), ("1Y", "1y"), ("5Y", "5y"))
 RELOAD = "reload"
@@ -109,7 +110,7 @@ async def from_preload(ctx: Ctx, query, period: str) -> bool:
     """Swap in an already-uploaded picture for `period`; False if there is none fresh, or Telegram refused it."""
     msg = query.message
     row = await asyncio.to_thread(ctx.store.chart_file_get, msg.chat_id, msg.message_id, period)
-    if row is None or time.time() - row[2] > PRELOAD_MAX_AGE:
+    if row is None or time.time() - row[2] > (DAY_MAX_AGE if period == "1d" else PRELOAD_MAX_AGE):
         return False
     file_id, caption, _ = row
     try:
