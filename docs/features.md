@@ -47,11 +47,16 @@ for its definition.
   a legend, with the totals in it.
 - **Pie charts:** for a share-of-total breakdown (revenue by segment, platform or region) the model draws a donut
   with `kind: pie`: one series per chart, slice names and values, with each slice's % of the total in a legend
-  beside it and the total in the middle. Past 8 slices the smallest are added up as "Other". A request for
-  several breakdowns makes several pies (up to 5), sent as one image with a button for each. Like other charts of
+  beside it and the total in the middle. Past 8 slices the smallest are added up as "Other".
+  **Fast path:** a plain "NVDA revenue breakdown" (a ticker and breakdown/segments words, nothing else) skips the model:
+  the bot calls the TickerScout `get_segments` tool itself (any MCP server that has a tool of that name) for the
+  latest quarter, draws a pie for the reportable segments and each revenue breakdown, drops subtotals beside their
+  parts, and replies with a one-line caption. Anything else (a period, two tickers, a question), a missing or down
+  source or an unreadable result goes to the model as usual.
+  A request for several breakdowns makes several pies (up to 5), sent as one image with a button for each. Like other charts of
   values the model passes, pies get no period buttons. The model is told to use parts of one whole only, never a subtotal beside its parts.
   This pairs with any MCP source that returns breakdowns, such as a company-segments tool.
-- **Several charts, one image:** when a reply has 2 or 3 charts (for example a breakdown by segment, platform and
+- **Several charts, one image:** when a reply has 2 to 5 charts (for example a breakdown by segment, platform and
   region), the first is the image and each chart has a button under it, labelled with the part of its title that
   differs ("Segment", "Platform", "Region"). A tap swaps the image in place and keeps the answer as the caption; the one
   shown is shaded. With `TELEGRAM_PRELOAD_CHAT` the other charts are uploaded in the background, so even the first tap

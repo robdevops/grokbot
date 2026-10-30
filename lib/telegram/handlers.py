@@ -18,6 +18,7 @@ from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers, periods, post
 from ..features.charts import TOOL as CHART_TOOL
 from ..features.charts import Charts, asks_pie, chart_hint, wants_chart
+from ..features.charts import breakdown as chart_breakdown
 from ..features.charts import buttons as chart_buttons
 from ..features.charts import pages as chart_pages
 from ..features.charts import tool as chart_tool
@@ -281,6 +282,8 @@ class Handlers:
                                must_search=True, cache_key=f"chat-{chat_id}", on_text=on_text,
                                kind="movers", chat_id=chat_id)
         else:
+            if charts is not None and (caption := await chart_breakdown.fast(ctx, trig.text, charts)):
+                return caption  # drawn from the data source's own numbers, no model involved
             context = await self._gate_text(msg, trig)
             chosen = route(context, st, ctx.registry)
             admin = not st.admin_only or await self._is_admin(msg)

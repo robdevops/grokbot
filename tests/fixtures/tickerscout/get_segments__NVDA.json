@@ -1,0 +1,47 @@
+{
+ "ticker": "NVDA",
+ "company": "NVIDIA Corporation",
+ "units": "actual dollars (not millions), except per-share amounts and share counts (share counts are actual shares)",
+ "reporting_currency": "USD",
+ "showing": [
+  "segments",
+  "revenue_by_product",
+  "revenue_by_geography"
+ ],
+ "periods": [
+  {
+   "period": "Q2 FY2027",
+   "kind": "quarter",
+   "fiscal_year": 2027,
+   "fiscal_quarter": 2,
+   "period_start": "2026-04-27",
+   "period_end": "2026-07-26",
+   "period_type": "three months",
+   "reportable_segments": {
+    "Compute & Networking": {
+     "revenue": 88299000000,
+     "operating_income": 62696000000
+    },
+    "Graphics": {
+     "revenue": 7922000000,
+     "operating_income": 3899000000
+    },
+    "total_segment_operating_income": 66595000000
+   },
+   "revenue_by_market_platform": {
+    "Data Center": 89023000000,
+    "Data Center - Hyperscale": 48710000000,
+    "Data Center - AI Clouds, Industrial, & Enterprise": 40313000000,
+    "Edge Computing": 7198000000
+   },
+   "revenue_by_customer_headquarters": {
+    "United States": 60074000000,
+    "Taiwan": 26985000000,
+    "China (including Hong Kong)": 7880000000,
+    "Other": 1282000000
+   }
+  }
+ ],
+ "source_url": "https://tickerscout.ai/nvda/financials.json",
+ "attribution": "Ticker Scout (tickerscout.ai). Factual synthesis of public SEC filings, not investment advice."
+}
