@@ -763,3 +763,25 @@ async def test_asked_for_a_breakdown_a_line_of_names_and_values_is_drawn_as_a_do
                                            step("ok")])
     await run(h, user_msg(ctx.bot, "@stockbot chart NVDA revenue", mid=2))
     assert "(pie" not in backend.results_log[0][0]  # not a breakdown request: the model's line stays
+
+
+def test_a_breakdown_drawn_as_one_series_per_slice_is_one_pie():
+    dots = {"title": "NVDA revenue by segment", "series": [
+        {"name": "Compute & Networking", "x": ["Compute & Networking"], "y": [88.3]},
+        {"name": "Graphics", "x": ["Graphics"], "y": [7.9], "kind": "pie"}]}
+    [merged] = charts.pie_default(dots, True)["series"]
+    assert merged["kind"] == "pie" and merged["x"] == ["Compute & Networking", "Graphics"] and merged["y"] == [88.3, 7.9]
+    assert charts.pie_default(dots, False) is dots  # not a breakdown request
+    many = {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}, {"name": "b", "x": [1, 2], "y": [1, 2]}]}
+    assert charts.pie_default(many, True) is many  # series of several points are lines
+    bars = {"title": "t", "series": [{"name": "a", "x": ["q"], "y": [1], "kind": "bar"}, {"name": "b", "x": ["q"], "y": [2]}]}
+    assert charts.pie_default(bars, True) is bars  # a kind the model chose
+
+
+async def test_asked_for_a_breakdown_dots_named_at_their_ends_become_a_donut(env, store):
+    call = {"title": "By segment", "series": [{"name": "Compute", "x": ["Compute"], "y": [88.3]},
+                                              {"name": "Graphics", "x": ["Graphics"], "y": [7.9]}]}
+    ctx, backend, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(call))], finish="tool_calls"),
+                                           step("ok")])
+    await run(h, user_msg(ctx.bot, "@stockbot NVDA revenue breakdown"))
+    assert "(pie, 2 slices, total 96.2): Compute 91.8%, Graphics 8.2%" in backend.results_log[0][0]

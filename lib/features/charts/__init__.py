@@ -108,8 +108,10 @@ def pie_default(args: dict, prefer_pie: bool) -> dict:
     """A breakdown was asked for, and the model drew one series of names and values as the default line chart: that
     is a pie. A kind it chose itself (bar, scatter, pie) stays."""
     specs = args.get("series")
-    if not (prefer_pie and isinstance(specs, list) and len(specs) == 1 and isinstance(specs[0], dict)):
+    if not (prefer_pie and isinstance(specs, list) and specs and all(isinstance(s, dict) for s in specs)):
         return args
+    if len(specs) > 1:
+        return one_slice_per_series(args, specs)
     spec = specs[0]
     x = spec.get("x")
     if (spec.get("kind") in (None, "", "line") and not spec.get("ticker") and isinstance(x, list) and x
@@ -118,12 +120,27 @@ def pie_default(args: dict, prefer_pie: bool) -> dict:
     return args
 
 
+def one_slice_per_series(args: dict, specs: list[dict]) -> dict:
+    """The model drew each slice as a series of its own, one point each (a line chart of dots, named at their ends):
+    several series that each hold one value, with no kind but line or pie, are the slices of one pie."""
+    points = []
+    for spec in specs:
+        x, y = spec.get("x"), spec.get("y")
+        if (spec.get("kind") not in (None, "", "line", "pie") or spec.get("ticker") or not isinstance(x, list)
+                or not isinstance(y, list) or len(x) != 1 or len(y) != 1 or as_number(y[0]) is None):
+            return args
+        points.append((str(spec.get("name") or x[0]).strip(), y[0]))
+    return {**args, "series": [{"name": "Share", "kind": "pie", "x": [n for n, _ in points],
+                                "y": [v for _, v in points]}]}
+
+
 def chart_hint(text: str) -> str:
     """A line for the end of the prompt: offering make_chart isn't enough, some models answer in text anyway."""
     if PIE_WORDS.search(text):
         return ("\n\nThey want this drawn, not described: fetch the data (every grouping the source has: segments, "
                 "products or platforms, regions), then call make_chart with kind pie once for each grouping, using the "
-                "finest split with no overlaps (a line's sub-lines, not their subtotal).")
+                "finest split with no overlaps (a line's sub-lines, not their subtotal). Each pie is one series whose x are "
+                "the slice names and y their values, not a series per slice.")
     return "\n\nThey want a chart: call make_chart rather than describing the numbers."
 
 
