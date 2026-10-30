@@ -104,6 +104,20 @@ def asks_pie(text: str) -> bool:
     return bool(PIE_WORDS.search(text))
 
 
+def unquote_series(args: dict) -> dict:
+    """Some models send `series` as a string holding the JSON list: read it."""
+    specs = args.get("series")
+    if isinstance(specs, str):
+        try:
+            specs = json.loads(specs)
+        except ValueError:
+            return args
+        if isinstance(specs, dict):
+            specs = [specs]
+        return {**args, "series": specs}
+    return args
+
+
 def pie_default(args: dict, prefer_pie: bool) -> dict:
     """A breakdown was asked for, and the model drew one series of names and values as the default line chart: that
     is a pie. A kind it chose itself (bar, scatter, pie) stays."""
@@ -253,12 +267,19 @@ async def price_history(ctx: Ctx, ticker: str, period: str, interval: str) -> tu
     return [r.get("Date") or r.get("Datetime") or "" for r in rows], [r["Close"] for r in rows], note
 
 
+def check_shape(title: str, specs) -> None:
+    if not title:
+        raise ChartError("give the chart a title")
+    if not isinstance(specs, list) or not specs or not all(isinstance(sp, dict) for sp in specs):
+        raise ChartError("series must be a list of objects like {\"name\": ..., \"x\": [...], \"y\": [...]} "
+                         "(or {\"name\", \"ticker\"}); send valid JSON and don't repeat the call as it was")
+
+
 async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
     """The chart a make_chart call asks for, and a line per series for the model."""
     title = str(args.get("title") or "").strip()
     specs = args.get("series")
-    if not title or not isinstance(specs, list) or not specs:
-        raise ChartError("give a title and at least one series")
+    check_shape(title, specs)
     if len(specs) > MAX_SERIES:
         raise ChartError(f"at most {MAX_SERIES} series per chart")
     if any(isinstance(sp, dict) and sp.get("kind") == "pie" for sp in specs) and (
@@ -392,7 +413,7 @@ def tool(ctx: Ctx, charts: Charts):
     async def make(args: dict) -> str:
         if charts.active() >= MAX_CHARTS:
             return f"Error: at most {MAX_CHARTS} charts per reply."
-        args = pie_default(args, charts.prefer_pie)
+        args = pie_default(unquote_series(args), charts.prefer_pie)
         slot = {"state": "pending"}  # taken before the first await, so in the order the calls were made
         charts.slots.append(slot)
         began = time.monotonic()

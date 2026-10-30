@@ -218,7 +218,7 @@ async def test_percent_change_rebases_and_puts_percent_on_the_ticks(env, store):
 
 
 @pytest.mark.parametrize("args, error", [
-    ({"series": [{"name": "a", "x": [1], "y": [1]}]}, "give a title"),
+    ({"series": [{"name": "a", "x": [1], "y": [1]}]}, "give the chart a title"),
     ({"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1]}]}, "x and y lists of the same length"),
     ({"title": "t", "series": [{"name": "a", "x": [1], "y": ["high"]}]}, "y values must be numbers"),
     ({"title": "t", "series": [{"name": "a", "x": [1], "y": [1], "axis": "top"}]}, "axis is left or right"),
@@ -785,3 +785,15 @@ async def test_asked_for_a_breakdown_dots_named_at_their_ends_become_a_donut(env
                                            step("ok")])
     await run(h, user_msg(ctx.bot, "@stockbot NVDA revenue breakdown"))
     assert "(pie, 2 slices, total 96.2): Compute 91.8%, Graphics 8.2%" in backend.results_log[0][0]
+
+
+async def test_series_sent_as_a_json_string_is_read(env, store):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "Split", "series": '[{"name": "S", "kind": "pie", "x": ["A", "B"], "y": [1, 2]}]'})
+    assert out.startswith("Chart 1 is ready")
+
+
+async def test_series_that_is_not_a_list_of_objects_says_how_it_should_look(env, store):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "Split", "series": {"name": "Revenue", "x\": [1": 1}})
+    assert out.startswith("Error: series must be a list of objects")

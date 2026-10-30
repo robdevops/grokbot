@@ -62,6 +62,14 @@ def brief_args(args: dict) -> str:
     return " ".join(parts)
 
 
+def bad_json(call: Call, e: json.JSONDecodeError) -> str:
+    """The model's arguments weren't JSON: its mistake, not a failure of the bot, so one warning line and a
+    message that tells it how to retry."""
+    log.warning("Tool %s: the model sent arguments that aren't valid JSON (%s)", call.name, e)
+    return (f"Error: the arguments of {call.name} weren't valid JSON ({e}). Send one JSON object with every key "
+            "and string in double quotes, keeping it as small and flat as the tool allows.")
+
+
 async def _run_mcp(call: Call, registry: Registry) -> str:
     found = registry.lookup(call.name)
     if not found:
@@ -80,6 +88,8 @@ async def _run_mcp(call: Call, registry: Registry) -> str:
         log.debug("MCP %s.%s -> %d chars%s", server.label, tool, len(out),
                  f": {out}" if len(out) <= 120 else "")
         return out
+    except json.JSONDecodeError as e:
+        return bad_json(call, e)
     except TimeoutError:
         return f"Error: {tool} timed out after {server.timeout:g}s."
     except Exception as e:
@@ -94,6 +104,8 @@ async def _run_local(call: Call, fn) -> str:
             return "Error: arguments must be a JSON object."
         log.debug("Local tool %s %s", call.name, brief_args({k: v for k, v in args.items() if k != "text"}))
         return await fn(args)
+    except json.JSONDecodeError as e:
+        return bad_json(call, e)
     except Exception as e:
         log.exception("Local tool %s failed", call.name)
         return f"Error: {type(e).__name__}: {e}"

@@ -301,3 +301,12 @@ def test_gate_marks_routes_that_offer_fewer_tools(settings):
 
 def test_wants_tools():
     assert wants_tools("NEEDS_TOOLS") and wants_tools("  needs_tools.") and not wants_tools("Sure thing")
+
+
+async def test_arguments_that_are_not_json_are_a_warning_and_a_message_for_the_model(caplog):
+    mcp = FakeMcp()
+    b = ScriptedBackend([step(calls=[("1", "yahoo__get_quote", '{"t" "X"}')], finish="tool_calls"), step("done")])
+    with caplog.at_level("WARNING", logger="bot"):
+        await run(b, registry(mcp), with_tools(mcp))
+    assert mcp.calls == [] and "weren't valid JSON" in b.results_log[0][0]
+    assert [r.levelname for r in caplog.records] == ["WARNING"] and not caplog.records[0].exc_info
