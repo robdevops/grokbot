@@ -218,7 +218,7 @@ def figure(chart: Chart):
         elif s.kind == "scatter":
             ax.scatter(pos, s.y, label=label, color=color, s=22, linewidths=0, zorder=3)
         else:
-            ax.plot(pos, s.y, label=label, color=color, linewidth=2.2, solid_capstyle="round",
+            ax.plot(pos, s.y, label=label, color=color, linewidth=1.6, solid_capstyle="round",
                     solid_joinstyle="round", marker="o" if len(pos) <= 12 and not labelled else None, markersize=4,
                     zorder=3)
     for ax, side in ((left, "left"), (right, "right")):

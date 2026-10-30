@@ -159,17 +159,18 @@ def unify_x(series: list[Series]) -> list[str]:
 
 
 def total(s: Series, spec: dict) -> str:
-    """The figure after a series' name in the legend: the model's own, else the change over the chart for a % change
-    or a ticker's prices; other values have no total to assume."""
-    given = str(spec.get("total") or "").strip()
+    """The figure next to a series' name: the change over the chart when the bot knows the values (a % change, or a
+    ticker's prices), else the model's own, if it is a figure (it has a digit: models sometimes repeat the name);
+    other values have no total to assume."""
     values = [v for v in s.y if not math.isnan(v)]
-    if given or not values:
-        return given if len(given) <= TOTAL_MAX else (given[:TOTAL_MAX].rsplit(" ", 1)[0] or given[:TOTAL_MAX])
-    if spec.get("percent_change"):
+    if values and spec.get("percent_change"):
         return f"{values[-1]:+.1f}%"
-    if spec.get("ticker") and values[0]:
+    if values and values[0] and spec.get("ticker"):
         return f"{(values[-1] / values[0] - 1) * 100:+.1f}%"
-    return ""
+    given = str(spec.get("total") or "").strip()
+    if not any(c.isdigit() for c in given):
+        return ""
+    return given if len(given) <= TOTAL_MAX else (given[:TOTAL_MAX].rsplit(" ", 1)[0] or given[:TOTAL_MAX])
 
 
 def percent_change(y: list[float]) -> list[float]:

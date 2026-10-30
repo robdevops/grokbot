@@ -534,3 +534,13 @@ def test_the_line_at_zero_is_as_light_as_the_other_rules():
     zero = [line for line in ax.get_lines() if list(line.get_ydata()) == [0, 0]]
     assert zero and zero[0].get_linewidth() == render.RULE_WIDTH == ax.yaxis.get_gridlines()[0].get_linewidth()
     assert zero[0].get_color() == render.THEMES["light"].rule
+
+
+async def test_a_total_that_is_not_a_figure_is_dropped_and_computed_ones_win(env, store):
+    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
+    chart, _ = await charts.build(make(env, store, yahoo), {"title": "t", "series": [
+        {"name": "NVDA", "ticker": "NVDA", "total": "NVDA"},  # the model repeated the name
+        {"name": "Pct", "ticker": "NVDA", "percent_change": True, "total": "+99%"},
+        {"name": "Fund", "x": ["2026-01-01", "2026-01-02"], "y": [5, 6], "total": "Fund"},
+        {"name": "Fund 2", "x": ["2026-01-01", "2026-01-02"], "y": [5, 6], "total": "+12.4%"}]})
+    assert [s.total for s in chart.series] == ["+20.0%", "+20.0%", "", "+12.4%"]
