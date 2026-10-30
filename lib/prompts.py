@@ -132,3 +132,9 @@ If nothing qualifies, reply with exactly the word NOTHING, with no bullet or any
 • Name (TICKER): what happened, with one source link.
 {already}
 It's now {now}."""
+
+
+SHORTEN_PROMPT = ("Below is the {noun} text for {ticker} from a filings data source, as Telegram HTML. It is too long "
+                  "for one message. Shorten it to at most {limit} characters: keep the key facts, figures, names and "
+                  "dates in their original order, drop detail and repetition, keep the headings. Use only <b>, <i> and "
+                  "\u2022 bullets, add no opinion, comment or preamble, and reply with the shortened text only.\n\n{text}")

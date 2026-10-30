@@ -8,6 +8,8 @@ import logging
 import time
 
 from telegram import Update
+from telegram.constants import ParseMode
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from ..context import Ctx
@@ -15,8 +17,10 @@ from ..features import filings
 from ..features.periods import backfill
 from ..features.periods.windows import describe_scope, flush_scope
 from ..store import is_dm
+from ..textfmt import is_parse_error, plain_text
 from .access import is_admin
-from .send import reply_chunks
+from .draft import start_typing
+from .send import NO_PREVIEW, reply_chunks, reply_html
 
 log = logging.getLogger("bot")
 
@@ -85,14 +89,46 @@ async def flush_cache(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TY
                  + (" Refilling in the background." if ctx.st.period_backfill else ""))
 
 
-async def show_filing(ctx: Ctx, msg, kind: filings.Kind, ticker: str, index: int | None, section: str) -> None:
-    """One section of a ticker's narrative or events, with a button for each of the others."""
-    text = await filings.fetch(ctx, kind, ticker, section)
-    if not text:
-        await reply_chunks(msg, f"No {kind.noun} found for {html.escape(ticker)}.", ctx.store, quote=False)
-        return
-    await reply_chunks(msg, filings.to_html(text), ctx.store, quote=not is_dm(msg.chat_id),
-                       last_markup=filings.keyboard(kind, ticker, index))
+async def edit_in_place(query, text: str, markup) -> None:
+    """Replace the text of the message a button sits under, as HTML first and plain text if Telegram rejects it."""
+    for html_ok in (True, False):
+        try:
+            await query.edit_message_text(
+                text if html_ok else plain_text(text), parse_mode=ParseMode.HTML if html_ok else None,
+                reply_markup=markup, link_preview_options=NO_PREVIEW)
+            return
+        except BadRequest as e:
+            if "not modified" in str(e).lower():
+                return
+            if not html_ok or not is_parse_error(e):
+                raise
+
+
+async def show_filing(ctx: Ctx, msg, kind: filings.Kind, ticker: str, index: int | None, section: str,
+                      query=None) -> None:
+    """One section of a ticker's narrative or events as one message, with a button for each of the others: a reply
+    to the command, or, from a button (`query`), the message the button sits under, edited."""
+    typing = await start_typing(ctx.bot, msg.chat_id)
+    try:
+        text = await filings.message_for(ctx, kind, ticker, section, msg.chat_id)
+    finally:
+        typing.cancel()
+    markup = filings.keyboard(kind, ticker, index)
+    try:
+        if query and text:
+            await edit_in_place(query, text, markup)
+            await query.answer()
+        elif query:
+            await query.answer(f"No {kind.noun} found for {ticker}.", show_alert=True)
+        elif text:
+            sent = await reply_html(msg, text, quote=not is_dm(msg.chat_id), reply_markup=markup)
+            await asyncio.to_thread(ctx.store.save, sent)
+        else:
+            await reply_chunks(msg, f"No {kind.noun} found for {html.escape(ticker)}.", ctx.store, quote=False)
+    except TelegramError as e:
+        log.warning("Couldn't show %s %s for %s: %s", kind.noun, section, ticker, e)
+        if query:
+            await query.answer("Couldn't show that section.")
 
 
 async def _filing_command(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE, kind: filings.Kind) -> None:
@@ -127,5 +163,4 @@ async def on_filing_button(ctx: Ctx, update: Update, context: ContextTypes.DEFAU
     except (ValueError, KeyError, IndexError):
         await query.answer("That button is out of date.")
         return
-    await query.answer()
-    await show_filing(ctx, query.message, kind, ticker, index, section)
+    await show_filing(ctx, query.message, kind, ticker, index, section, query=query)  # answers the tap itself

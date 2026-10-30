@@ -6,8 +6,9 @@ from lib.features import filings
 from lib.telegram import commands
 
 from .conftest import update_for, user_msg
-from .fakes import FakeMcp
+from .fakes import FakeMcp, step
 from .test_charts import make
+from .test_handlers import make_ctx
 
 EARNINGS = ("# Tesla (TSLA) — Earnings\n\n*Record FY26Q3. 2 matches in events.md.*\n\n"
             "## Q3 results\n\n**Revenue** rose 12% & margins <fell>.\n\n- Guidance raised\n- See *note* 4\n")
@@ -54,8 +55,9 @@ def test_markdown_becomes_telegram_html_and_a_cut_is_explained():
     assert out.startswith("<b>Tesla (TSLA) — Earnings</b>") and "<b>Q3 results</b>" in out
     assert "<b>Revenue</b> rose 12% &amp; margins &lt;fell&gt;." in out
     assert "• Guidance raised" in out and "• See <i>note</i> 4" in out
-    cut = filings.to_html("text\n...[truncated; 51234 chars total]")
-    assert cut.startswith("text") and "full text is 51,234 characters" in cut and "truncated" not in cut
+    text, note = filings.cut_note("text\n...[truncated; 51234 chars total]")
+    assert text == "text" and "full text is 51,234 characters" in note and "truncated" not in note
+    assert filings.cut_note("plain") == ("plain", "")
 
 
 async def test_events_command_replies_with_the_default_section_and_buttons_for_the_rest(env, store):
@@ -79,20 +81,52 @@ async def test_narrative_defaults_to_all_and_takes_a_section(env, store):
     assert all(t == "get_narrative" for t, _ in scout.calls)
 
 
-async def test_a_button_sends_that_section_as_a_new_reply(env, store):
-    scout = Scout("# Tesla (TSLA) — Legal\n\nA case.")
-    ctx = make(env, store, scout)
-    sent = user_msg(ctx.bot, "earlier reply", chat_id=-100)
-    q = N(message=sent, data="fl:n:TSLA:6", answered=[])
+def tap(sent, data):
+    """A tap on a button under `sent`, recording the answer and the edit."""
+    q = N(message=sent, data=data, answered=[], edits=[])
 
     async def answer(text=None, **kw):
         q.answered.append(text)
 
-    q.answer = answer
+    async def edit_message_text(text, **kw):
+        q.edits.append({"text": text, **kw})
+
+    q.answer, q.edit_message_text = answer, edit_message_text
+    return q
+
+
+async def test_a_button_edits_the_message_and_posts_nothing_more(env, store):
+    scout = Scout("# Tesla (TSLA) — Legal\n\nA case.")
+    ctx = make(env, store, scout)
+    sent = user_msg(ctx.bot, "earlier reply", chat_id=-100)
+    q = tap(sent, "fl:n:TSLA:6")
     await commands.on_filing_button(ctx, N(callback_query=q), None)
     assert scout.calls == [("get_narrative", {"ticker": "TSLA", "section": "legal"})]
-    assert sent.replies[0]["text"].startswith("<b>Tesla (TSLA) — Legal</b>") and q.answered == [None]
-    assert "Legal" not in [t for row in rows(sent.replies[0]["reply_markup"]) for t, _ in row]
+    assert sent.replies == [] and q.answered == [None]
+    [edit] = q.edits
+    assert edit["text"].startswith("<b>Tesla (TSLA) — Legal</b>") and edit["parse_mode"] == "HTML"
+    assert "Legal" not in [t for row in rows(edit["reply_markup"]) for t, _ in row]
+
+
+async def test_a_section_too_long_for_one_message_is_shortened_by_the_model_and_remembered(env, store):
+    filings._shortened.clear()
+    scout = Scout("# Tesla (TSLA) — Business\n\n" + "Long paragraph of detail. " * 400)
+    ctx, backend, _ = make_ctx(env, store, [step("**Tesla** sells cars and energy."), step("unused")], servers=(scout,))
+    for _ in range(2):  # the second tap on the same section reuses the answer
+        q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:1")
+        await commands.on_filing_button(ctx, N(callback_query=q), None)
+        assert q.edits[0]["text"] == "<b>Tesla</b> sells cars and energy."
+    assert len(backend.seen) == 1  # asked once
+
+
+async def test_a_failing_model_leaves_the_start_of_the_text(env, store):
+    filings._shortened.clear()
+    scout = Scout("# Tesla (TSLA) — Business\n\n" + "Line of detail.\n" * 600)
+    ctx, backend, _ = make_ctx(env, store, [], servers=(scout,))  # nothing scripted: the model call fails
+    q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:1")
+    await commands.on_filing_button(ctx, N(callback_query=q), None)
+    text = q.edits[0]["text"]
+    assert text.startswith("<b>Tesla (TSLA) — Business</b>") and len(text) <= filings.LIMIT and text.endswith("…")
 
 
 @pytest.mark.parametrize("data", ["fl:x:TSLA:1", "fl:n:TSLA:99", "fl:n:TSLA:one", "fl:n"])
