@@ -795,5 +795,12 @@ async def test_series_sent_as_a_json_string_is_read(env, store):
 
 async def test_series_that_is_not_a_list_of_objects_says_how_it_should_look(env, store):
     _, make_chart = charts.tool(make(env, store), charts.Charts())
-    out = await make_chart({"title": "Split", "series": {"name": "Revenue", "x\": [1": 1}})
+    out = await make_chart({"title": "Split", "series": "not json at all"})
     assert out.startswith("Error: series must be a list of objects")
+
+
+async def test_one_series_object_with_x_values_and_y_values_is_a_pie(env, store):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "Split", "series": {"name": "S", "kind": "pie", "x_values": ["A", "B"],
+                                                         "y_values": [1, 2], "x_values2": None}})
+    assert out.startswith("Chart 1 is ready")

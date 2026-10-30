@@ -104,18 +104,29 @@ def asks_pie(text: str) -> bool:
     return bool(PIE_WORDS.search(text))
 
 
+ALIASES = {"x_values": "x", "labels": "x", "names": "x", "categories": "x",
+           "y_values": "y", "values": "y", "data": "y"}  # what models call a series' x and y when they forget
+
+
 def unquote_series(args: dict) -> dict:
-    """Some models send `series` as a string holding the JSON list: read it."""
+    """Weaker models send `series` as a string holding the JSON, or as one object instead of a list, and
+    name x and y something else: read all of those."""
     specs = args.get("series")
     if isinstance(specs, str):
         try:
             specs = json.loads(specs)
         except ValueError:
             return args
-        if isinstance(specs, dict):
-            specs = [specs]
-        return {**args, "series": specs}
-    return args
+    if isinstance(specs, dict):
+        specs = [specs]
+    if not isinstance(specs, list):
+        return args
+    fixed = []
+    for spec in specs:
+        if isinstance(spec, dict):
+            spec = {ALIASES.get(k, k): v for k, v in spec.items() if v is not None}
+        fixed.append(spec)
+    return {**args, "series": fixed}
 
 
 def pie_default(args: dict, prefer_pie: bool) -> dict:
