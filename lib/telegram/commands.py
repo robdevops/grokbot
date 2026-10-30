@@ -143,7 +143,7 @@ async def _filing_command(ctx: Ctx, update: Update, context: ContextTypes.DEFAUL
 
 
 async def narrative(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/narrative TICKER [section]: the 10-K/10-Q narrative (all by default), from TickerScout."""
+    """/narrative TICKER [section]: the 10-K/10-Q narrative (business by default), from TickerScout."""
     await _filing_command(ctx, update, context, filings.KINDS["n"])
 
 

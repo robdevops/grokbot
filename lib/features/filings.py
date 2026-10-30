@@ -39,7 +39,7 @@ class Kind:
 
 KINDS = {
     "n": Kind("n", "narrative", "get_narrative", "narrative", (
-        ("All", "all"), ("Business", "business"), ("Risk factors", "risk factors"), ("MD&A", "md&a"),
+        ("Business", "business"), ("Risk factors", "risk factors"), ("MD&A", "md&a"),
         ("Current quarter", "current quarter"), ("Subsequent events", "subsequent events"), ("Legal", "legal"))),
     "e": Kind("e", "events", "get_events", "events", (
         ("Earnings", "earnings"), ("Management", "management changes"), ("Capital returns", "capital returns"),

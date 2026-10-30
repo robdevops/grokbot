@@ -24,13 +24,14 @@ def rows(markup):
 
 
 @pytest.mark.parametrize("words, expected", [
-    ([], (0, "all")),
-    (["risk", "factors"], (2, "risk factors")),
-    (["MD&A"], (3, "md&a")),
-    (["legal"], (6, "legal")),
+    ([], (0, "business")),
+    (["risk", "factors"], (1, "risk factors")),
+    (["MD&A"], (2, "md&a")),
+    (["legal"], (5, "legal")),
+    (["all"], (None, "all")),  # not a button, but the tool takes it
     (["Item", "1A"], (None, "Item 1A")),  # a heading of the filing, passed on as it is
 ])
-def test_narrative_sections_by_name_or_default(words, expected):
+def test_narrative_sections_by_name_or_default_business(words, expected):
     assert filings.pick(filings.KINDS["n"], words) == expected
 
 
@@ -47,7 +48,8 @@ def test_buttons_are_the_other_sections_in_rows_of_three():
     assert rows(markup)[0] == [("Management", "fl:e:TSLA:1"), ("Capital returns", "fl:e:TSLA:2"),
                                ("Debt & financing", "fl:e:TSLA:3")]
     assert "Earnings" not in [t for row in rows(markup) for t, _ in row]
-    assert len(filings.keyboard(filings.KINDS["n"], "TSLA", None).inline_keyboard[0]) == 3
+    narrative = rows(filings.keyboard(filings.KINDS["n"], "TSLA", 0))
+    assert [t for row in narrative for t, _ in row] == ["Risk factors", "MD&A", "Current quarter", "Subsequent events", "Legal"]
 
 
 def test_markdown_becomes_telegram_html_and_a_cut_is_explained():
@@ -72,12 +74,12 @@ async def test_events_command_replies_with_the_default_section_and_buttons_for_t
     assert store.history(-100, 20)[0].text == "/events tsla"
 
 
-async def test_narrative_defaults_to_all_and_takes_a_section(env, store):
+async def test_narrative_defaults_to_business_and_takes_a_section(env, store):
     scout = Scout("# Tesla (TSLA) — Legal\n\nA case.")
     ctx = make(env, store, scout)
     for words in (["TSLA"], ["TSLA", "risk", "factors"]):
         await commands.narrative(ctx, update_for(user_msg(ctx.bot, "/narrative", chat_id=-100)), N(args=words))
-    assert [a["section"] for _, a in scout.calls] == ["all", "risk factors"]
+    assert [a["section"] for _, a in scout.calls] == ["business", "risk factors"]
     assert all(t == "get_narrative" for t, _ in scout.calls)
 
 
@@ -99,7 +101,7 @@ async def test_a_button_edits_the_message_and_posts_nothing_more(env, store):
     scout = Scout("# Tesla (TSLA) — Legal\n\nA case.")
     ctx = make(env, store, scout)
     sent = user_msg(ctx.bot, "earlier reply", chat_id=-100)
-    q = tap(sent, "fl:n:TSLA:6")
+    q = tap(sent, "fl:n:TSLA:5")
     await commands.on_filing_button(ctx, N(callback_query=q), None)
     assert scout.calls == [("get_narrative", {"ticker": "TSLA", "section": "legal"})]
     assert sent.replies == [] and q.answered == [None]
@@ -113,7 +115,7 @@ async def test_a_section_too_long_for_one_message_is_shortened_by_the_model_and_
     scout = Scout("# Tesla (TSLA) — Business\n\n" + "Long paragraph of detail. " * 400)
     ctx, backend, _ = make_ctx(env, store, [step("**Tesla** sells cars and energy."), step("unused")], servers=(scout,))
     for _ in range(2):  # the second tap on the same section reuses the answer
-        q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:1")
+        q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:0")
         await commands.on_filing_button(ctx, N(callback_query=q), None)
         assert q.edits[0]["text"] == "<b>Tesla</b> sells cars and energy."
     assert len(backend.seen) == 1  # asked once
@@ -123,7 +125,7 @@ async def test_a_failing_model_leaves_the_start_of_the_text(env, store):
     filings._shortened.clear()
     scout = Scout("# Tesla (TSLA) — Business\n\n" + "Line of detail.\n" * 600)
     ctx, backend, _ = make_ctx(env, store, [], servers=(scout,))  # nothing scripted: the model call fails
-    q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:1")
+    q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:0")
     await commands.on_filing_button(ctx, N(callback_query=q), None)
     text = q.edits[0]["text"]
     assert text.startswith("<b>Tesla (TSLA) — Business</b>") and len(text) <= filings.LIMIT and text.endswith("…")
