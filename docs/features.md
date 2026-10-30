@@ -34,7 +34,8 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 Ask for a chart, graph or plot ("chart NVDA against AMD over a year, AMD on the right axis, inverted") and the bot
 replies once: the chart as a photo with its answer as the caption (2 or 3 charts come as one album). An answer too
 long for a caption (about 1,000 characters) continues in a text message. The model gets the `make_chart` tool only
-when the message asks for one (chart, graph, plot, visualise), so other requests don't pay for its definition.
+when the message asks for one (chart, graph, plot, pie, visualise, breakdown, segments), so other requests don't pay
+for its definition.
 - **Style:** a bold title on the left with a quiet subtitle under it, no frame and no vertical rules, rules of one
   light weight (the one at zero too), short strokes above the x labels, and grey axis text. The subtitle says what
   the chart shows and when, like "% change over the past month, 30 Sep - 28 Oct 2026". Tick labels share their

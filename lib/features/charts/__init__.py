@@ -18,7 +18,7 @@ from .render import KINDS, Chart, Series
 
 log = logging.getLogger("bot")
 
-CHART_WORDS = re.compile(r"\b(charts?|charting|graphs?|plot|plots|plotting|pies?|donuts?|visuali[sz]e)\b", re.I)
+CHART_WORDS = re.compile(r"\b(charts?|charting|graphs?|plot|plots|plotting|pies?|donuts?|visuali[sz]e|breakdowns?|break down|segments?)\b", re.I)
 PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max")
 # Yahoo's server returns at most ~90 rows in one call, so each period gets an interval that fits.
 DEFAULT_INTERVAL = {"1d": "5m", "5d": "30m", "1mo": "1d", "3mo": "1d", "6mo": "1wk", "1y": "1wk",
@@ -31,11 +31,11 @@ HISTORY_TOOL = "get_historical_prices"
 
 TOOL = ToolDef(
     "make_chart",
-    "Draw a chart, sent as a photo with your reply; use it when asked for a chart, graph or plot. Series go on the "
+    "Draw a chart, sent as a photo with your reply; use it when asked for a chart, graph, plot, breakdown or segments. Series go on the "
     "left or right y axis (different scales on different axes); invert an axis when asked or to show an inverse "
     "relationship. A series is a ticker (any Yahoo symbol: NVDA, CBA.AX, ^GSPC, AUDUSD=X, GC=F, BTC-USD), whose "
     "price history is fetched for you, or x/y values from tool results or the chat, never invented. For a share-of-"
-    "total breakdown (revenue by segment or region) use kind pie: one series per chart, x the slice names and y their "
+    "total breakdown (revenue by segment or region; also whenever a breakdown or the segments are asked for) use kind pie: one series per chart, x the slice names and y their "
     "values, parts of one whole only (never a subtotal beside its parts); call it once per breakdown and the charts "
     "go out together as an album. Then comment on what it shows; don't describe the chart.",
     {"type": "object", "required": ["title", "series"], "properties": {

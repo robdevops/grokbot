@@ -598,3 +598,11 @@ async def test_three_pies_go_as_one_album_and_pie_words_offer_the_tool(env, stor
     assert backend.seen[0]["tools"] == ["make_chart"]
     [reply] = m.replies
     assert len(reply["album"]) == 3 and [c for _, c in reply["album"]] == ["Mostly a.", None, None]
+
+
+def test_breakdown_and_segment_requests_offer_the_chart_tool_too():
+    for text in ("segment breakdown NVDA", "NVDA revenue segments", "break down NVDA revenue", "show a pie of it",
+                 "plot this", "give me the breakdown by region"):
+        assert charts.wants_chart(text), text
+    for text in ("how is NVDA doing?", "what does NVDA make", "any news on AMD"):
+        assert not charts.wants_chart(text), text
