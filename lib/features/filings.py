@@ -14,7 +14,7 @@ from .. import config
 from ..ask import ask
 from ..context import Ctx
 from ..llm.gate import Route
-from ..prompts import SHORTEN_PROMPT
+from ..prompts import FILING_PROMPT
 from ..textfmt import md_to_html, split_html
 
 log = logging.getLogger("bot")
@@ -115,13 +115,16 @@ def fit(body: str, limit: int) -> str:
 
 
 async def shorten(ctx: Ctx, kind: Kind, ticker: str, section: str, body: str, limit: int, chat_id: int) -> str:
-    """The model's short version of a section that doesn't fit one message (remembered, so a repeat tap costs
-    nothing); the start of the text if the model fails or still runs over."""
+    """The model's short version of a section that doesn't fit one message. The model calls the tool itself, so a
+    reply that runs out of tokens while thinking over the result is retried by the tool loop. Remembered, so a repeat
+    tap costs nothing; the start of the text if the model fails or still runs over."""
     key = (kind.code, ticker, section, len(body))
     if key not in _shortened:
-        prompt = SHORTEN_PROMPT.format(noun=kind.noun, ticker=ticker, limit=limit, text=body)
+        server = next((s for s in ctx.registry.up() if kind.tool in s.fn_names.values()), None)
+        prompt = FILING_PROMPT.format(tool=kind.tool, ticker=ticker, section=section, limit=limit)
         try:
-            answer = await ask(ctx, [{"type": "text", "text": prompt}], Route([], False), kind="filing", chat_id=chat_id)
+            answer = await ask(ctx, [{"type": "text", "text": prompt}], Route([server], False), kind="filing",
+                               chat_id=chat_id)
         except Exception as e:
             log.warning("Couldn't shorten %s %s for %s, cutting it instead: %s", kind.noun, section, ticker, e)
             return fit(body, limit)

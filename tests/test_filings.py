@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace as N
 
 import pytest
@@ -117,15 +118,18 @@ async def test_a_button_edits_the_message_and_posts_nothing_more(env, store):
     assert shaded(edit["reply_markup"]) == ["fl:n:TSLA:5"]  # the section now shown
 
 
-async def test_a_section_too_long_for_one_message_is_shortened_by_the_model_and_remembered(env, store):
+async def test_a_section_too_long_for_one_message_is_shortened_by_a_model_that_calls_the_tool(env, store):
     filings._shortened.clear()
     scout = Scout("# Tesla (TSLA) — Business\n\n" + "Long paragraph of detail. " * 400)
-    ctx, backend, _ = make_ctx(env, store, [step("**Tesla** sells cars and energy."), step("unused")], servers=(scout,))
+    call = ("1", "ticker-scout__get_narrative", json.dumps({"ticker": "TSLA", "section": "business"}))
+    ctx, backend, _ = make_ctx(env, store, [step(calls=[call], finish="tool_calls"), step("**Tesla** sells cars and energy.")],
+                               servers=(scout,))
     for _ in range(2):  # the second tap on the same section reuses the answer
         q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:0")
         await commands.on_filing_button(ctx, N(callback_query=q), None)
         assert q.edits[0]["text"] == "<b>Tesla</b> sells cars and energy."
-    assert len(backend.seen) == 1  # asked once
+    assert len(backend.seen) == 2  # one request, two rounds: the tool call, then the answer
+    assert [c for c, _ in scout.calls] == ["get_narrative"] * 3  # the size check, the model's call, the next tap's check
 
 
 async def test_a_failing_model_leaves_the_start_of_the_text(env, store):
