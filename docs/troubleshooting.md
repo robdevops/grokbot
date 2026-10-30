@@ -1,7 +1,7 @@
 # Troubleshooting
 [README](../README.md) · [all docs](../README.md#more)
 
-- **"More than one API key is set"**: set only one of `XAI_API_KEY`, `OPENROUTER_API_KEY`, `ZAI_API_KEY`.
+- **"More than one API key is set"**: set only one of `XAI_API_KEY` and `OPENROUTER_API_KEY`.
 - **The bot ignores messages in a group**: run `/setprivacy` -> Disable in @BotFather and re-add it.
 - **An MCP server shows as down**: the alert includes the server's own error (often a missing
   environment variable or `npx` not installed). Fix it and restart the bot.

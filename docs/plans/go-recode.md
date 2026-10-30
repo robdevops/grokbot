@@ -26,7 +26,7 @@ Written 2026-10-23 against commit a221d98. Before starting:
   - Reply latency stays LLM-bound.
   - The unit's total memory stays dominated by the two npx Node trees.
 - **Decisions taken:** keep the Node MCP servers and a generic MCP client; same repo, Go replaces Python at parity;
-  xAI + OpenRouter + z.ai at launch.
+  xAI + OpenRouter at launch (z.ai was removed).
 - **Branch:** one long-lived branch from `main` with a draft PR. Python stays runnable until the deletion commit.
 
 ## Stack
@@ -54,7 +54,7 @@ Written 2026-10-23 against commit a221d98. Before starting:
 | PTB parsing, `lib/msgtext.py` | `internal/tg/{poll,types,html,api,errors}.go`: `html.go` = PTB `text_html`/`caption_html` from entities (history bytes must match: UTF-16 offsets, nesting, escaping) |
 | `lib/history.py`, `lib/textfmt.py`, `lib/tickers*.py` | `internal/history`, `internal/textfmt/{textfmt,split}.go`, `internal/tickers` |
 | `lib/mcp/*` | `internal/mcp/{server,proc,tap,cache,registry,schema,results,sharesight}.go` |
-| `lib/llm/*` | `internal/llm/{base,errors,httpc,sse,chat,openrouter,zai,xai,runner,calls,policy,gate}.go` (provider differences only in the three adapters) |
+| `lib/llm/*` | `internal/llm/{base,errors,httpc,sse,chat,openrouter,xai,runner,calls,policy,gate}.go` (provider differences only in the two adapters) |
 | `lib/prompts.py`, `lib/ask.py` | `internal/prompts`, `internal/ask` |
 | `lib/telegram/send.py`, `draft.py` | `internal/reply` (separate package, otherwise features ↔ handlers would form an import cycle) |
 | `lib/telegram/{handlers,commands,access}.py` | `internal/telegram/{dispatch,trigger,handlers,generate,commands,access}.go` |
@@ -203,7 +203,7 @@ Written 2026-10-23 against commit a221d98. Before starting:
        the Python lines in `.gitignore`;
      - update the Makefile (`check`, `build`, `prompt-report`), `.github/workflows/check.yml` (Go + Node, keeping the
        weekly run and the Telegram ping), CLAUDE.md (Go map + compat gotchas), README.md quick start, `docs/running.md`,
-       `docs/development.md`, `docs/how-it-works.md`, `docs/configuration.md` (z.ai price table path), and the
+       `docs/development.md`, `docs/how-it-works.md`, `docs/configuration.md`, and the
        `ExecStart` line of `deploy/systemd/grokbot.service`.
    - The goldens stay frozen in `testdata/` and change only on purpose (`-update`).
 
@@ -219,7 +219,7 @@ Written 2026-10-23 against commit a221d98. Before starting:
   - INSERT OR REPLACE and the startup DELETEs;
   - `SEARCH` off only for exactly `off`.
 - **Fix after parity, one commit each** (the ones also present in the Python bot can be fixed there first):
-  1. An `error` inside an OpenRouter/z.ai stream chunk gets the `raise_provider_error` handling it was meant to have
+  1. An `error` inside an OpenRouter stream chunk gets the `raise_provider_error` handling it was meant to have
      (429/503/529 → busy reply). Today the openai SDK raises `APIError` first, so it bypasses the ladder.
   2. xAI `add_user_message` also sets `pending`, so the MAX_TOKENS re-ask works after the `previous_response_id` fallback.
   3. `seconds_until` across DST, so holding news fires on time on change days.

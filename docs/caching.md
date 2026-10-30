@@ -20,7 +20,7 @@ the pass stops and tries again after ten minutes; windows Sharesight simply has 
 
 ## Caching and token saving
 **Provider prompt caching** (xAI and OpenRouter keep a conversation on the server holding its cached
-prompt; z.ai caches automatically and gets no key): xAI gets `prompt_cache_key` and the `x-grok-conv-id` header; OpenRouter gets `session_id`,
+prompt): xAI gets `prompt_cache_key` and the `x-grok-conv-id` header; OpenRouter gets `session_id`,
 the `x-session-id` header and `prompt_cache_key`. The key is `<bot name>-chat-<chat id>` (ASCII,
 at most 128 characters). Prompts are ordered so the cacheable part comes first: system prompt,
 tools (sorted), history (stepped window), and the volatile part last (time, down-server notice).

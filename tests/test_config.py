@@ -49,8 +49,6 @@ def test_provider_defaults():
     assert (x.provider, x.model, x.api_key) == ("xai", "grok-4.3", "a")
     o = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "b"})
     assert (o.provider, o.model) == ("openrouter", "z-ai/glm-5.3-flash")
-    z = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "c"})
-    assert (z.provider, z.model, z.api_key, z.search) == ("zai", "glm-5.3-flash", "c", True)
 
 
 def test_model_and_reasoning(env):
@@ -116,3 +114,8 @@ def test_docs_document_every_env_var():
     doc = (Path(__file__).parent.parent / "docs" / "configuration.md").read_text()
     missing = [n for n in config.ENV_VARS if not re.search(rf"\b{n}\b", doc)]
     assert not missing, f"docs/configuration.md does not mention: {missing}"
+
+
+def test_a_zai_key_alone_is_no_longer_a_provider():
+    with pytest.raises(config.ConfigError, match="Set XAI_API_KEY"):
+        config.load({"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "c"})

@@ -10,15 +10,14 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider (default model `z-ai/glm-5.3-flash`). |
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
 | `XAI_API_KEY` | xAI key; selects the xAI provider (default model `grok-4.3`). |
-| `ZAI_API_KEY` | z.ai key; selects z.ai directly (default model `glm-5.3-flash`). Prompts and chat history go to z.ai, a China-based provider. Cost is estimated from a price table in `lib/llm/zai.py`. |
 
 ### Common settings
 | Variable | Meaning |
 |---|---|
 | `BOT_TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
-| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai). |
-| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off). |
-| `SEARCH` | on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on. |
+| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter). |
+| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default. |
+| `SEARCH` | on|off. Web search (and X search on xAI). Default on. |
 
 ### Advanced and optional
 | Variable | Meaning |
@@ -49,12 +48,7 @@ treat them as rough; speed varies by provider.
 | `xiaomi/mimo-v2.6-flash` | 0.14 / 0.28 | ~56 tok/s | 38 |
 | `z-ai/glm-5.3-flash` (default on OpenRouter) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 |
 | `grok-4.3` / `x-ai/grok-4.3` (default on xAI) | 1.25 / 2.50 | ~105-146 tok/s | 25 (at high reasoning) |
-| `glm-5.3-flash` (default on z.ai) | 0.15 / 0.50 (cached input 0.03) | ~50 tok/s | 57 |
-| `glm-5.3-flashx` (z.ai) | 0.37 / 1.25 (cached input 0.075) | not found | not found |
-| `glm-5.3` (z.ai) | 1.40 / 4.40 (cached input 0.26) | not found | not found |
-| `glm-5.2` (z.ai) | 1.40 / 4.40 (cached input 0.26) | not found | not found |
 | `xiaomi/mimo-v2.5-pro` | 0.30 / 0.61 | ~29-46 tok/s | unreliable (retires 21 Oct 2026) |
 | `xiaomi/mimo-v2.5` | 0.12 / 0.24 | ~44-58 tok/s | not found (retires 21 Oct 2026) |
 
 Most of the delay is reasoning time before the first answer token, not typing speed: use `REASONING=low`.
-A z.ai model missing from the price table in `lib/llm/zai.py` shows $0 cost.

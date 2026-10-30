@@ -9,7 +9,6 @@ from lib import app, config
 from lib.context import Ctx
 from lib.llm.openrouter import OpenRouterBackend
 from lib.llm.xai import XaiBackend
-from lib.llm.zai import ZaiBackend
 from lib.mcp.server import MCPServer
 
 from .conftest import FakeBot
@@ -24,8 +23,6 @@ def test_backend_follows_the_key(env):
     assert isinstance(app.build_backend(config.load(env)), OpenRouterBackend)
     xai = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
     assert isinstance(app.build_backend(xai), XaiBackend)
-    zai = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "k"})
-    assert isinstance(app.build_backend(zai), ZaiBackend)
 
 
 def test_handlers_follow_the_flags(env, store):
@@ -148,7 +145,7 @@ def test_flush_cache_cli_needs_no_keys_and_flushes_by_portfolio_and_period(monke
     from lib.store import PeriodRow, Store
 
     db = str(tmp_path / "chat_log.db")
-    for var in ("TELEGRAM_BOT_TOKEN", "OPENROUTER_API_KEY", "XAI_API_KEY", "ZAI_API_KEY"):
+    for var in ("TELEGRAM_BOT_TOKEN", "OPENROUTER_API_KEY", "XAI_API_KEY"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     s = Store(db)

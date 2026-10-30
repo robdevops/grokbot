@@ -39,8 +39,6 @@
 - **OpenRouter:** OpenRouter's `web_search` tool; when it hands a search call back, the bot runs the
   query through `SEARCH_MODEL` (default `xiaomi/mimo-v2.6-flash:online`) and returns the write-up; that call's cost is added to the answer's cost.
   Some models print a search call as text instead of making it; the bot recovers those queries too.
-- **z.ai:** z.ai ignores its own search tool when other tools are present, so the model gets a `web_search(query, recency)`
-  function and the bot runs it through z.ai's search API (5 results with site, date, snippet and link; $0.01 a search, included in the cost).
 - At most 5 searches per round; extras get a "skipped" note.
 - `SEARCH=off` turns search off (the prompt then says the model has no web search).
 - **Forced search:** movers lists, DM preset buttons and the holding-news digest *require* a

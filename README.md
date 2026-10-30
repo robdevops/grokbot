@@ -9,7 +9,7 @@ It comes preprogrammed to chat about stocks and investing, but it can be easily 
 - Live data from MCP servers (Yahoo Finance, Sharesight) and web search.
 - Draws charts from that data when asked: two y axes, several series on each, either axis inverted.
 - Reads images posted in the chat, if the model supports images.
-- Runs on **xAI (Grok)**, **OpenRouter** or **z.ai**, chosen by which API key you set.
+- Runs on **xAI (Grok)** or **OpenRouter**, chosen by which API key you set.
 
 ## Quick start
 1. Create a bot with @BotFather. Run `/setprivacy` and choose **Disable**, so the bot sees every
@@ -18,7 +18,7 @@ It comes preprogrammed to chat about stocks and investing, but it can be easily 
    - **IMPORTANT:** if the bot has access to Sharesight, enable "Restrict bot usage" in BotFather (this
      enables user whitelisting).
 2. Python 3.13.5: `pip install -r requirements.txt` (plus Node.js for npx-based MCP servers such as Yahoo Finance).
-3. Export `TELEGRAM_BOT_TOKEN` and **exactly one** of `XAI_API_KEY`, `OPENROUTER_API_KEY` or `ZAI_API_KEY`.
+3. Export `TELEGRAM_BOT_TOKEN` and **exactly one** of `XAI_API_KEY` or `OPENROUTER_API_KEY`.
 4. `python bot.py`
 
 To keep it running, see [Running under systemd](docs/running.md#running-under-systemd).
