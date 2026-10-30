@@ -151,8 +151,8 @@ def fit(body: str, limit: int) -> str:
     return chunks[0] + ("\u2026" if len(chunks) > 1 else "")
 
 
-async def summarise(ctx: Ctx, kind: Kind, ticker: str, section: str, limit: int, chat_id: int, on_text=None) -> str | None:
-    """The model's version of a section, to fit `limit` characters, streamed to `on_text`. The model calls the tool
+async def summarise(ctx: Ctx, kind: Kind, ticker: str, section: str, limit: int, chat_id: int) -> str | None:
+    """The model's version of a section, to fit `limit` characters. The model calls the tool
     itself, so a reply that runs out of tokens while thinking over the result is retried by the tool loop. None if
     there is no data source or the model fails."""
     server = next((s for s in ctx.registry.up() if kind.tool in s.fn_names.values()), None)
@@ -162,18 +162,18 @@ async def summarise(ctx: Ctx, kind: Kind, ticker: str, section: str, limit: int,
     prompt = FILING_PROMPT.format(tool=kind.tool, ticker=ticker, section=section, limit=limit, order=order)
     try:
         answer = await ask(ctx, [{"type": "text", "text": prompt}], Route([server], False), kind="filing", chat_id=chat_id,
-                           on_text=on_text, max_tokens=config.FILING_MAX_TOKENS)
+                           max_tokens=config.FILING_MAX_TOKENS)
     except Exception as e:
         log.warning("The model couldn't write the %s %s for %s: %s", kind.noun, section, ticker, e)
         return None
     return md_to_html(answer.text.strip())
 
 
-async def build(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int, on_text) -> tuple[str | None, bool]:
+async def build(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int) -> tuple[str | None, bool]:
     """The section as one message of Telegram HTML (None if there is none), and whether it is worth keeping: the
     start of the text that stands in for a model that failed is not. Narrative goes to the model at once; events are
     fetched and shown as they are unless too long for one message, when the model shortens them."""
-    if kind.via_model and (short := await summarise(ctx, kind, ticker, section, LIMIT, chat_id, on_text)):
+    if kind.via_model and (short := await summarise(ctx, kind, ticker, section, LIMIT, chat_id)):
         return fit(short, LIMIT), True
     text = await fetch(ctx, kind, ticker, section)
     if not text:
@@ -182,18 +182,18 @@ async def build(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int, o
     body, room = to_html(oldest_first(text) if kind.oldest_first else text), LIMIT - len(note)
     keep = len(body) <= room
     if not keep and not kind.via_model:
-        short = await summarise(ctx, kind, ticker, section, room, chat_id, on_text)
+        short = await summarise(ctx, kind, ticker, section, room, chat_id)
         body, keep = short or body, bool(short)
     return fit(body, room) + note, keep
 
 
-async def message_for(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int, on_text=None) -> str | None:
+async def message_for(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int) -> str | None:
     """The section as one message of Telegram HTML, or None if there is none: from the cache if it is under a day
-    old, else built (`on_text` gets the model's text as it streams in) and cached."""
+    old, else built and cached."""
     key = f"filing:{kind.code}:{ticker}:{section}"
     if hit := await asyncio.to_thread(ctx.store.cache_get, key, config.FILING_CACHE_SECONDS):
         return hit
-    text, keep = await build(ctx, kind, ticker, section, chat_id, on_text)
+    text, keep = await build(ctx, kind, ticker, section, chat_id)
     if text and keep:
         await asyncio.to_thread(ctx.store.cache_put, key, text, config.FILING_CACHE_SECONDS)
     return text

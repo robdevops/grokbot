@@ -242,36 +242,6 @@ async def test_events_are_shown_oldest_first_and_narrative_is_left_as_the_model_
     assert text.index("2026-04-22") < text.index("Jul 23, 2026") < text.index("October 22, 2026")
 
 
-async def test_what_the_model_writes_streams_into_the_message_and_ends_as_html(env, store, monkeypatch):
-    import asyncio
-
-    from lib.telegram.live import LiveMessage
-    monkeypatch.setattr(LiveMessage, "INTERVAL", 0.01)
-
-    async def streaming_ask(ctx, parts, route, *, on_text, **kw):
-        on_text("**Tesla** sells <b>cars")  # half-written: shown as plain text
-        await asyncio.sleep(0.15)
-        on_text("**Tesla** sells cars.")
-        await asyncio.sleep(0.15)
-        return N(text="**Tesla** sells cars.")
-
-    monkeypatch.setattr(filings, "ask", streaming_ask)
-    ctx = make(env, store, Scout())
-    m = user_msg(ctx.bot, "/narrative tsla", chat_id=-100)
-    sent, plain_reply = [], m.reply_text
-
-    async def reply_text(text, **kw):
-        sent.append(await plain_reply(text, **kw))
-        return sent[-1]
-
-    m.reply_text = reply_text
-    await commands.narrative(ctx, update_for(m), N(args=["tsla"]))
-    [first] = m.replies  # written once while it streamed: plain text, with the buttons already there
-    assert first["text"] == "**Tesla** sells cars" and "parse_mode" not in first and first["reply_markup"] is not None
-    [final] = sent[0].edits[-1:]  # the end is an edit of that message, as HTML
-    assert final["text"] == "<b>Tesla</b> sells cars." and final["parse_mode"] == "HTML"
-
-
 async def test_a_message_is_cached_for_24_hours(env, store, monkeypatch):
     import time as real_time
     scout = Scout()

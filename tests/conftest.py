@@ -65,13 +65,6 @@ class FakeBot:
         m = make_msg(self._next, text, sender=self.first_name, chat_id=chat_id, username=self.username,
                      is_bot=True)
         m.from_user.id = self.id
-        m.edits = []
-
-        async def edit_text(text, **kw):
-            m.edits.append({"text": text, **kw})
-            return m
-
-        m.edit_text = edit_text
         return m
 
     async def send_message(self, chat_id, text, **kw):

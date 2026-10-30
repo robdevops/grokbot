@@ -8,7 +8,8 @@ import logging
 import time
 
 from telegram import Update
-from telegram.error import TelegramError
+from telegram.constants import ParseMode
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from ..context import Ctx
@@ -16,10 +17,10 @@ from ..features import filings
 from ..features.periods import backfill
 from ..features.periods.windows import describe_scope, flush_scope
 from ..store import is_dm
+from ..textfmt import is_parse_error, plain_text
 from .access import is_admin
 from .draft import start_typing
-from .live import LiveMessage
-from .send import reply_chunks
+from .send import NO_PREVIEW, reply_chunks, reply_html
 
 log = logging.getLogger("bot")
 
@@ -88,33 +89,46 @@ async def flush_cache(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TY
                  + (" Refilling in the background." if ctx.st.period_backfill else ""))
 
 
+async def edit_in_place(query, text: str, markup) -> None:
+    """Replace the text of the message a button sits under, as HTML first and plain text if Telegram rejects it."""
+    for html_ok in (True, False):
+        try:
+            await query.edit_message_text(
+                text if html_ok else plain_text(text), parse_mode=ParseMode.HTML if html_ok else None,
+                reply_markup=markup, link_preview_options=NO_PREVIEW)
+            return
+        except BadRequest as e:
+            if "not modified" in str(e).lower():
+                return
+            if not html_ok or not is_parse_error(e):
+                raise
+
+
 async def show_filing(ctx: Ctx, msg, kind: filings.Kind, ticker: str, index: int | None, section: str,
                       query=None) -> None:
     """One section of a ticker's narrative or events as one message, with a button for each section: a reply to the
-    command, or, from a button (`query`), the message the button sits under, edited. What the model writes streams in."""
-    live = LiveMessage(msg, query=query, markup=filings.keyboard(kind, ticker, index), quote=not is_dm(msg.chat_id))
+    command, or, from a button (`query`), the message the button sits under, edited."""
     typing = await start_typing(ctx.bot, msg.chat_id)
-    live.start()
     try:
-        text = await filings.message_for(ctx, kind, ticker, section, msg.chat_id, on_text=live.update)
-        if text:
-            sent = await live.finish(text)
-            if sent:
-                await asyncio.to_thread(ctx.store.save, sent)
-            if query:
-                await query.answer()
-        elif query and not live.started:
+        text = await filings.message_for(ctx, kind, ticker, section, msg.chat_id)
+    finally:
+        typing.cancel()
+    markup = filings.keyboard(kind, ticker, index)
+    try:
+        if query and text:
+            await edit_in_place(query, text, markup)
+            await query.answer()
+        elif query:
             await query.answer(f"No {kind.noun} found for {ticker}.", show_alert=True)
+        elif text:
+            sent = await reply_html(msg, text, quote=not is_dm(msg.chat_id), reply_markup=markup)
+            await asyncio.to_thread(ctx.store.save, sent)
         else:
-            live.markup = None
-            await live.finish(f"No {kind.noun} found for {html.escape(ticker)}.")
+            await reply_chunks(msg, f"No {kind.noun} found for {html.escape(ticker)}.", ctx.store, quote=False)
     except TelegramError as e:
         log.warning("Couldn't show %s %s for %s: %s", kind.noun, section, ticker, e)
         if query:
             await query.answer("Couldn't show that section.")
-    finally:
-        typing.cancel()
-        await live.stop()
 
 
 async def _filing_command(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE, kind: filings.Kind) -> None:
