@@ -13,9 +13,9 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from telegram import Update
+from telegram import BotCommand, BotCommandScopeAllChatAdministrators, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
-from telegram.error import NetworkError
+from telegram.error import NetworkError, TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -131,6 +131,18 @@ async def log_tool_size(ctx: Ctx) -> None:
     log.info("MCP tool schemas: ~%d tokens (re-sent every round they're offered)", len(schema) // 4)
 
 
+async def register_menu(ctx: Ctx) -> None:
+    """Put /tokens in the command menu of the people who can use it (the menu shows to everyone otherwise):
+    administrators of every group, and the users in ADMIN_CHAT_IDS in their own chat with the bot."""
+    menu = [BotCommand("tokens", "Provider balance, token use and cost")]
+    try:
+        await ctx.bot.set_my_commands(menu, scope=BotCommandScopeAllChatAdministrators())
+        for chat_id in ctx.st.admin_chats:
+            await ctx.bot.set_my_commands(menu, scope=BotCommandScopeChat(chat_id))
+    except TelegramError as e:
+        log.warning("Couldn't register the command menu: %s", e)
+
+
 def build_ctx(st: config.Settings) -> Ctx:
     ctx = Ctx(st, Store(st.db_path), build_backend(st), Registry([]))
 
@@ -150,6 +162,7 @@ def build_app(ctx: Ctx) -> Application:
     async def post_init(app: Application) -> None:
         ctx.bot = app.bot
         ctx.store.bot_id = app.bot.id
+        await register_menu(ctx)
         ctx.registry.start()  # connects in the background; requests see whichever servers are up
         background.append(asyncio.create_task(log_tool_size(ctx)))
         if st.holding_news:
@@ -180,7 +193,7 @@ def build_app(ctx: Ctx) -> Application:
         return wrapper
 
     # Commands first: the first matching handler wins, and the catch-all would swallow them.
-    app.add_handler(CommandHandler(["credits", "usage"], command(commands.credits)))
+    app.add_handler(CommandHandler(["tokens", "usage", "credits"], command(commands.credits)))
     app.add_handler(CommandHandler("flushcache", command(commands.flush_cache)))
     app.add_handler(MessageHandler(
         (filters.ChatType.GROUPS | filters.ChatType.PRIVATE)

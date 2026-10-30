@@ -52,5 +52,5 @@ Each answer's log line shows the cached percentage.
   symbol, tags and Yahoo URLs dropped), lines cut to 240 characters and the bot's own to 160.
 - **Smaller prompts:** the system prompt is about half its previous size, the repeated instruction
   tail lives in the (cached) system prompt, images go at low detail.
-- **Measure it:** every request is recorded in the `usage` table (`/credits`), and
+- **Measure it:** every request is recorded in the `usage` table (`/tokens`), and
   `make prompt-report` prints where a typical request's tokens go.

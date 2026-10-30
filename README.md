@@ -26,7 +26,7 @@ To keep it running, see [Running under systemd](docs/running.md#running-under-sy
 ## More
 - [Configuration](docs/configuration.md): providers, every environment variable, choosing a model.
 - [How it works](docs/how-it-works.md): how it answers, search, MCP data tools (`mcp_servers.json`), formatting.
-- [Features and commands](docs/features.md): charts, holding-news DM, movers replies, DM buttons, `/credits`.
+- [Features and commands](docs/features.md): charts, holding-news DM, movers replies, DM buttons, `/tokens`.
 - [Caching and token saving](docs/caching.md): the Sharesight history cache and the token-saving heuristics.
 - [Running the bot](docs/running.md): systemd, several instances, logs.
 - [Troubleshooting](docs/troubleshooting.md): startup errors, silent bots, MCP servers down.

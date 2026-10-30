@@ -86,7 +86,7 @@ for its definition.
 |---|---|---|
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
-| `/credits` (or `/usage`) | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI and z.ai have none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days |
+| `/tokens` (or `/usage`, `/credits`) | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI and z.ai have none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days |
 | `/flushcache [portfolio_id] [year or month or day]` | an admin | Forget cached Sharesight period returns: all, or of one portfolio, or those overlapping a year (`2024`), month (`2024-05`) or day (`2024-05-17`), e.g. `/flushcache 684141 2024`; see [Caching Sharesight history](caching.md#caching-sharesight-history) |
 
 **Admins** are the user IDs in `ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with

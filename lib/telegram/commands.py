@@ -1,4 +1,4 @@
-"""Admin command: /credits, also /usage (provider balance, where there is one, and the token ledger)."""
+"""Admin command: /tokens, also /usage and /credits (provider balance, where there is one, and the token ledger)."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def usage_text(rows: list[tuple], label: str) -> str:
 
 
 async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/credits - admins only: the provider balance (OpenRouter has one), then tokens and cost per
+    """/tokens - admins only: the provider balance (OpenRouter has one), then tokens and cost per
     model for the last 24 hours and 7 days."""
     if not await _gate(ctx, update):
         return

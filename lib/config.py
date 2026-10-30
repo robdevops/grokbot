@@ -23,7 +23,7 @@ ENV_VARS: dict[str, str] = {
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
     "SEARCH": "on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on.",
     # Advanced and optional
-    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
+    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /tokens; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",

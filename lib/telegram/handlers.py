@@ -131,7 +131,7 @@ class Handlers:
         return Trigger(text, private, is_movers, reply_target, replied_to_bot, nocontext)
 
     async def _command(self, msg: Message, trig: Trigger) -> bool:
-        """Private-chat commands handled here (/credits has its own handler)."""
+        """Private-chat commands handled here (/tokens has its own handler)."""
         if not trig.private or not trig.text.startswith("/"):
             return False
         command = trig.text.split()[0].split("@")[0].lower()

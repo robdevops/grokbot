@@ -42,7 +42,7 @@ def test_handlers_follow_the_flags(env, store):
     assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler",
                      "CallbackQueryHandler", "CallbackQueryHandler"]
     assert "callback_query" in app.allowed_updates(st)
-    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits", "usage", "flushcache"}
+    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"tokens", "usage", "credits", "flushcache"}
     assert any(isinstance(h, MessageHandler) for h in full.handlers[0])
     locked, st = build(ADMIN_ONLY="on")  # remembers the groups it is in, to know who their admins are
     assert "ChatMemberHandler" in handler_kinds(locked) and "my_chat_member" in app.allowed_updates(st)
@@ -181,9 +181,25 @@ async def test_backfill_task_starts_unless_period_backfill_is_off(env, store, mo
         st = config.load({**env, **extra})
         ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
         built = app.build_app(ctx)
-        await built.post_init(SimpleNamespace(bot=SimpleNamespace(id=1)))
+        await built.post_init(SimpleNamespace(bot=SimpleNamespace(id=1, set_my_commands=_no_menu)))
         await asyncio.sleep(0)
         assert len(started) == expected
+
+
+async def _no_menu(commands, scope=None):
+    return True
+
+
+async def test_tokens_is_put_in_the_menu_of_admins_only(env, store):
+    calls = []
+
+    async def set_my_commands(commands, scope=None):
+        calls.append(([c.command for c in commands], type(scope).__name__, getattr(scope, "chat_id", None)))
+
+    ctx = Ctx(config.load({**env, "ADMIN_CHAT_IDS": "5"}), store, ScriptedBackend([]), registry(), FakeBot())
+    ctx.bot = SimpleNamespace(set_my_commands=set_my_commands)
+    await app.register_menu(ctx)
+    assert calls == [(["tokens"], "BotCommandScopeAllChatAdministrators", None), (["tokens"], "BotCommandScopeChat", 5)]
 
 
 def test_the_mcp_librarys_unlabelled_protocol_and_ping_lines_are_dropped(monkeypatch):
