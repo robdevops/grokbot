@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import logging
@@ -27,8 +28,6 @@ DATE = re.compile(r"\b(?:(\d{4})-(\d{2})-(\d{2})|([A-Z][a-z]{2,8})\.? (\d{1,2}),
 UNIT_START = re.compile(r"^(?:#{2,6}\s|\s*(?:[-*\u2022]\s+)?(?:\*\*)?(?:\d{4}-\d{2}-\d{2}|[A-Z][a-z]{2,8}\.? \d{1,2}, \d{4}))")
 ROW = 3  # buttons per row
 LIMIT = config.MAX_TG_MESSAGE  # one section is one message, so that a button can edit it in place
-_shortened: dict[tuple, str] = {}  # (kind, ticker, section, length of the text) -> the model's short version
-_SHORTENED_MAX = 64
 
 
 @dataclass(frozen=True)
@@ -152,13 +151,10 @@ def fit(body: str, limit: int) -> str:
     return chunks[0] + ("\u2026" if len(chunks) > 1 else "")
 
 
-async def summarise(ctx: Ctx, kind: Kind, ticker: str, section: str, limit: int, chat_id: int) -> str | None:
-    """The model's version of a section, to fit `limit` characters. The model calls the tool itself, so a reply that
-    runs out of tokens while thinking over the result is retried by the tool loop. Remembered, so a repeat tap costs
-    nothing. None if there is no data source or the model fails."""
-    key = (kind.code, ticker, section)
-    if key in _shortened:
-        return _shortened[key]
+async def summarise(ctx: Ctx, kind: Kind, ticker: str, section: str, limit: int, chat_id: int, on_text=None) -> str | None:
+    """The model's version of a section, to fit `limit` characters, streamed to `on_text`. The model calls the tool
+    itself, so a reply that runs out of tokens while thinking over the result is retried by the tool loop. None if
+    there is no data source or the model fails."""
     server = next((s for s in ctx.registry.up() if kind.tool in s.fn_names.values()), None)
     if server is None:
         return None
@@ -166,27 +162,38 @@ async def summarise(ctx: Ctx, kind: Kind, ticker: str, section: str, limit: int,
     prompt = FILING_PROMPT.format(tool=kind.tool, ticker=ticker, section=section, limit=limit, order=order)
     try:
         answer = await ask(ctx, [{"type": "text", "text": prompt}], Route([server], False), kind="filing", chat_id=chat_id,
-                          max_tokens=config.FILING_MAX_TOKENS)
+                           on_text=on_text, max_tokens=config.FILING_MAX_TOKENS)
     except Exception as e:
         log.warning("The model couldn't write the %s %s for %s: %s", kind.noun, section, ticker, e)
         return None
-    if len(_shortened) >= _SHORTENED_MAX:
-        _shortened.clear()
-    _shortened[key] = md_to_html(answer.text.strip())
-    return _shortened[key]
+    return md_to_html(answer.text.strip())
 
 
-async def message_for(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int) -> str | None:
-    """The section as one message of Telegram HTML, or None if there is none. Narrative goes to the model at once;
-    events are fetched and shown as they are unless too long for one message, when the model shortens them. Where
-    the model fails, the start of the text is shown."""
-    if kind.via_model and (short := await summarise(ctx, kind, ticker, section, LIMIT, chat_id)):
-        return fit(short, LIMIT)
+async def build(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int, on_text) -> tuple[str | None, bool]:
+    """The section as one message of Telegram HTML (None if there is none), and whether it is worth keeping: the
+    start of the text that stands in for a model that failed is not. Narrative goes to the model at once; events are
+    fetched and shown as they are unless too long for one message, when the model shortens them."""
+    if kind.via_model and (short := await summarise(ctx, kind, ticker, section, LIMIT, chat_id, on_text)):
+        return fit(short, LIMIT), True
     text = await fetch(ctx, kind, ticker, section)
     if not text:
-        return None
+        return None, False
     text, note = cut_note(text)
     body, room = to_html(oldest_first(text) if kind.oldest_first else text), LIMIT - len(note)
-    if len(body) > room and not kind.via_model:
-        body = await summarise(ctx, kind, ticker, section, room, chat_id) or body
-    return fit(body, room) + note
+    keep = len(body) <= room
+    if not keep and not kind.via_model:
+        short = await summarise(ctx, kind, ticker, section, room, chat_id, on_text)
+        body, keep = short or body, bool(short)
+    return fit(body, room) + note, keep
+
+
+async def message_for(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int, on_text=None) -> str | None:
+    """The section as one message of Telegram HTML, or None if there is none: from the cache if it is under a day
+    old, else built (`on_text` gets the model's text as it streams in) and cached."""
+    key = f"filing:{kind.code}:{ticker}:{section}"
+    if hit := await asyncio.to_thread(ctx.store.cache_get, key, config.FILING_CACHE_SECONDS):
+        return hit
+    text, keep = await build(ctx, kind, ticker, section, chat_id, on_text)
+    if text and keep:
+        await asyncio.to_thread(ctx.store.cache_put, key, text, config.FILING_CACHE_SECONDS)
+    return text

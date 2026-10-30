@@ -104,7 +104,6 @@ LONG = "# Tesla (TSLA) — Business\n\n" + "Long paragraph of detail. " * 400
 
 
 async def test_narrative_goes_straight_to_the_model_which_calls_the_tool_itself(env, store):
-    filings._shortened.clear()
     scout = Scout("# Tesla (TSLA) — Business\n\nA long text.")
     ctx, backend, _ = make_ctx(env, store, [step(calls=tool_call("get_narrative", "TSLA", "business"), finish="tool_calls"),
                                             step("**Tesla** sells cars and energy.")], servers=(scout,))
@@ -117,7 +116,6 @@ async def test_narrative_goes_straight_to_the_model_which_calls_the_tool_itself(
 
 
 async def test_a_narrative_section_is_remembered_so_a_second_tap_asks_nothing(env, store):
-    filings._shortened.clear()
     scout = Scout()
     ctx, backend, _ = make_ctx(env, store, [step(calls=tool_call("get_narrative", "TSLA", "legal"), finish="tool_calls"),
                                             step("A case.")], servers=(scout,))
@@ -130,7 +128,6 @@ async def test_a_narrative_section_is_remembered_so_a_second_tap_asks_nothing(en
 
 
 async def test_when_the_model_fails_a_narrative_shows_the_start_of_the_text(env, store):
-    filings._shortened.clear()
     scout = Scout("# Tesla (TSLA) — Business\n\n" + "Line of detail.\n" * 600)
     ctx, backend, _ = make_ctx(env, store, [], servers=(scout,))  # nothing scripted: the model call fails
     q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:0")
@@ -150,7 +147,6 @@ async def test_an_events_section_that_fits_is_shown_as_it_is_with_no_model(env, 
 
 
 async def test_an_events_section_too_long_for_one_message_is_shortened_by_the_model(env, store):
-    filings._shortened.clear()
     scout = Scout("# Tesla (TSLA) — Earnings\n\n" + "Long paragraph of detail. " * 400)
     ctx, backend, _ = make_ctx(env, store, [step(calls=tool_call("get_events", "TSLA", "earnings"), finish="tool_calls"),
                                             step("Short earnings.")], servers=(scout,))
@@ -244,3 +240,59 @@ async def test_events_are_shown_oldest_first_and_narrative_is_left_as_the_model_
     await commands.events(ctx, update_for(m), N(args=["tsla"]))
     text = m.replies[0]["text"]
     assert text.index("2026-04-22") < text.index("Jul 23, 2026") < text.index("October 22, 2026")
+
+
+async def test_what_the_model_writes_streams_into_the_message_and_ends_as_html(env, store, monkeypatch):
+    import asyncio
+
+    from lib.telegram.live import LiveMessage
+    monkeypatch.setattr(LiveMessage, "INTERVAL", 0.01)
+
+    async def streaming_ask(ctx, parts, route, *, on_text, **kw):
+        on_text("**Tesla** sells <b>cars")  # half-written: shown as plain text
+        await asyncio.sleep(0.15)
+        on_text("**Tesla** sells cars.")
+        await asyncio.sleep(0.15)
+        return N(text="**Tesla** sells cars.")
+
+    monkeypatch.setattr(filings, "ask", streaming_ask)
+    ctx = make(env, store, Scout())
+    m = user_msg(ctx.bot, "/narrative tsla", chat_id=-100)
+    sent, plain_reply = [], m.reply_text
+
+    async def reply_text(text, **kw):
+        sent.append(await plain_reply(text, **kw))
+        return sent[-1]
+
+    m.reply_text = reply_text
+    await commands.narrative(ctx, update_for(m), N(args=["tsla"]))
+    [first] = m.replies  # written once while it streamed: plain text, with the buttons already there
+    assert first["text"] == "**Tesla** sells cars" and "parse_mode" not in first and first["reply_markup"] is not None
+    [final] = sent[0].edits[-1:]  # the end is an edit of that message, as HTML
+    assert final["text"] == "<b>Tesla</b> sells cars." and final["parse_mode"] == "HTML"
+
+
+async def test_a_message_is_cached_for_24_hours(env, store, monkeypatch):
+    import time as real_time
+    scout = Scout()
+    ctx = make(env, store, scout)
+    for _ in range(2):
+        m = user_msg(ctx.bot, "/events tsla", chat_id=-100)
+        await commands.events(ctx, update_for(m), N(args=["tsla"]))
+        assert m.replies[0]["text"].startswith("<b>Tesla (TSLA) — Earnings</b>")
+    assert len(scout.calls) == 1  # the second came from the cache
+    now = real_time.time()
+    monkeypatch.setattr("lib.store.time.time", lambda: now + 24 * 3600 + 60)
+    m = user_msg(ctx.bot, "/events tsla", chat_id=-100)
+    await commands.events(ctx, update_for(m), N(args=["tsla"]))
+    assert len(scout.calls) == 2  # a day later it is fetched again
+
+
+async def test_a_stand_in_for_a_failed_model_is_not_cached(env, store):
+    scout = Scout("# Tesla (TSLA) — Business\n\n" + "Line of detail.\n" * 600)
+    ctx, backend, _ = make_ctx(env, store, [], servers=(scout,))  # the model fails each time
+    for _ in range(2):
+        q = tap(user_msg(ctx.bot, "earlier reply", chat_id=-100), "fl:n:TSLA:0")
+        await commands.on_filing_button(ctx, N(callback_query=q), None)
+        assert q.edits[0]["text"].endswith("…")
+    assert len(scout.calls) == 2  # fetched again: nothing was kept
