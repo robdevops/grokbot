@@ -18,7 +18,7 @@ from .render import KINDS, Chart, Series
 
 log = logging.getLogger("bot")
 
-CHART_WORDS = re.compile(r"\b(charts?|charting|graphs?|plot|plots|plotting|visuali[sz]e)\b", re.I)
+CHART_WORDS = re.compile(r"\b(charts?|charting|graphs?|plot|plots|plotting|pies?|donuts?|visuali[sz]e)\b", re.I)
 PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max")
 # Yahoo's server returns at most ~90 rows in one call, so each period gets an interval that fits.
 DEFAULT_INTERVAL = {"1d": "5m", "5d": "30m", "1mo": "1d", "3mo": "1d", "6mo": "1wk", "1y": "1wk",
@@ -34,8 +34,10 @@ TOOL = ToolDef(
     "Draw a chart, sent as a photo with your reply; use it when asked for a chart, graph or plot. Series go on the "
     "left or right y axis (different scales on different axes); invert an axis when asked or to show an inverse "
     "relationship. A series is a ticker (any Yahoo symbol: NVDA, CBA.AX, ^GSPC, AUDUSD=X, GC=F, BTC-USD), whose "
-    "price history is fetched for you, or x/y values from tool results or the chat, never invented. Then comment "
-    "on what it shows; don't describe the chart.",
+    "price history is fetched for you, or x/y values from tool results or the chat, never invented. For a share-of-"
+    "total breakdown (revenue by segment or region) use kind pie: one series per chart, x the slice names and y their "
+    "values, parts of one whole only (never a subtotal beside its parts); call it once per breakdown and the charts "
+    "go out together as an album. Then comment on what it shows; don't describe the chart.",
     {"type": "object", "required": ["title", "series"], "properties": {
         "title": {"type": "string"},
         "series": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {
@@ -209,6 +211,10 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
         raise ChartError("give a title and at least one series")
     if len(specs) > MAX_SERIES:
         raise ChartError(f"at most {MAX_SERIES} series per chart")
+    if any(isinstance(sp, dict) and sp.get("kind") == "pie" for sp in specs) and (
+            len(specs) != 1 or specs[0].get("ticker")):
+        raise ChartError("a pie chart is one series of x (slice names) and y (values), not a ticker: "
+                         "make one chart for each breakdown")
     moment = now(ctx.st.tz)
     today = moment.date()
     fetches, series, notes = [], [], [""] * len(specs)
@@ -231,9 +237,14 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
             if len(x) > MAX_POINTS:
                 raise ChartError(f"{spec['name']}: at most {MAX_POINTS} points")
             series[i].x, series[i].y = list(x), as_y(y)
+    pie = any(s.kind == "pie" for s in series)
     for (i, _), got in zip(fetches, await asyncio.gather(*(f for _, f in fetches)), strict=True):
         series[i].x, series[i].y, notes[i] = got[0], as_y(got[1]), got[2]
-    labels = unify_x(series)
+    if pie:
+        series[0].x = [str(v) for v in series[0].x]  # names, even when they look like years
+        if not render.pie_slices(series[0]):
+            raise ChartError("a pie chart needs at least one value above zero")
+    labels = [] if pie else unify_x(series)
     for s, spec in zip(series, specs, strict=True):
         if spec.get("percent_change"):
             s.y = percent_change(s.y)
@@ -244,8 +255,10 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
     for side in ("left", "right"):  # an axis of nothing but % changes labels its ticks with %
         on_side = [spec for s, spec in zip(series, specs, strict=True) if s.axis == side]
         setattr(chart, f"{side}_percent", bool(on_side) and all(spec.get("percent_change") for spec in on_side))
-    chart.subtitle = subtitle_for(specs, series, chart.left_percent and not any(s.axis == "right" for s in series))
-    return chart, [summary(s, specs[i].get("percent_change"), notes[i]) for i, s in enumerate(series)]
+    chart.subtitle = "Share of total" if pie else subtitle_for(
+        specs, series, chart.left_percent and not any(s.axis == "right" for s in series))
+    return chart, [pie_summary(s) if pie else summary(s, specs[i].get("percent_change"), notes[i])
+                   for i, s in enumerate(series)]
 
 
 def _fmt(v: float) -> str:
@@ -254,6 +267,14 @@ def _fmt(v: float) -> str:
 
 def _x(v) -> str:
     return v.strftime("%Y-%m-%d %H:%M").removesuffix(" 00:00") if isinstance(v, datetime) else str(v)
+
+
+def pie_summary(s: Series) -> str:
+    """Each slice's share, for the model to comment on."""
+    slices = render.pie_slices(s)
+    whole = sum(y for _, y in slices)
+    return f"{s.name} (pie, {len(slices)} slices, total {_fmt(whole)}): " + ", ".join(
+        f"{name} {render.share(y, whole)}" for name, y in slices)
 
 
 def summary(s: Series, pct: bool, note: str) -> str:

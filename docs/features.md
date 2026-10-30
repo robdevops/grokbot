@@ -43,6 +43,12 @@ when the message asks for one (chart, graph, plot, visualise), so other requests
 - **Line labels:** with lines on one axis, each line ends in a small square and a label with its name and total
   ("NVDA  -5.7%"), nudged apart where they would overlap, and there is no legend. Two axes, bars or points keep
   a legend, with the totals in it.
+- **Pie charts:** for a share-of-total breakdown (revenue by segment, platform or region) the model draws a donut
+  with `kind: pie`: one series per chart, slice names and values, with each slice's % of the total in a legend
+  beside it and the total in the middle. Past 8 slices the smallest are added up as "Other". A request for
+  several breakdowns makes several pies (up to 3), sent as one album. Like other charts of values the model passes,
+  pies get no period buttons. The model is told to use parts of one whole only, never a subtotal beside its parts.
+  This pairs with any MCP source that returns breakdowns, such as a company-segments tool.
 - **Period buttons:** a single chart whose series are all tickers comes with buttons: 1D, 1M, 1Y, 5Y and 🔄 (reload); the period shown is shaded.
   A tap fetches the prices again and redraws the chart in place, without asking the model. Another period gets a
   plain title, repeated as the caption; the chart's own period brings back the model's caption.

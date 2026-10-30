@@ -544,3 +544,57 @@ async def test_a_total_that_is_not_a_figure_is_dropped_and_computed_ones_win(env
         {"name": "Fund", "x": ["2026-01-01", "2026-01-02"], "y": [5, 6], "total": "Fund"},
         {"name": "Fund 2", "x": ["2026-01-01", "2026-01-02"], "y": [5, 6], "total": "+12.4%"}]})
     assert [s.total for s in chart.series] == ["+20.0%", "+20.0%", "", "+12.4%"]
+
+
+def pie(name, labels, values, **kw):
+    return {"name": name, "kind": "pie", "x": labels, "y": values, **kw}
+
+
+def test_pie_slices_are_biggest_first_with_gaps_dropped_and_the_smallest_added_up():
+    s = Series("p", ["a", "b", "c", "d"], [1.0, 3.0, math.nan, -2.0], kind="pie")
+    assert render.pie_slices(s) == [("b", 3.0), ("a", 1.0)]
+    many = Series("p", [str(i) for i in range(12)], [float(i + 1) for i in range(12)], kind="pie")
+    slices = render.pie_slices(many)
+    assert len(slices) == render.PIE_SLICES
+    assert slices[0] == ("11", 12.0) and slices[-1][0] == "Other" and sum(y for _, y in slices) == sum(range(1, 13))
+    assert [render.share(p, 100.0) for p in (62.43, 0.01, 100.0)] == ["62.4%", "<0.1%", "100.0%"]
+
+
+def test_a_pie_is_a_donut_with_a_legend_of_shares_and_the_total_in_the_middle():
+    chart = Chart("Revenue", [Series("p", ["US", "Taiwan"], [75.0, 25.0], kind="pie", total="$100B")],
+                  subtitle="Share of total")
+    fig = render.figure(chart)
+    assert len(fig.axes[0].patches) == 2 and [t.get_text() for t in fig.axes[0].texts if t.get_text()] == ["$100B"]
+    assert [t.get_text() for t in fig.legends[0].get_texts()] == ["US  75.0%", "Taiwan  25.0%"]
+    assert render.png(chart).startswith(b"\x89PNG")
+    assert render.png(replace(chart, dark=True)).startswith(b"\x89PNG")
+
+
+async def test_a_pie_call_takes_slices_names_and_shares_for_the_model(env, store):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "t", "series": [pie("Revenue", ["Compute", "Graphics"], [88299, 7922])]})
+    assert out.startswith("Chart 1 is ready") and "Revenue (pie, 2 slices, total 96,221): Compute 91.8%, Graphics 8.2%" in out
+    chart, _ = await charts.build(make(env, store), {"title": "t", "series": [pie("R", [2024, 2025], [1, 3])]})
+    assert chart.series[0].x == ["2024", "2025"] and chart.subtitle == "Share of total" and not chart.labels
+
+
+@pytest.mark.parametrize("series, error", [
+    ([pie("a", ["x"], [1]), pie("b", ["y"], [1])], "a pie chart is one series"),
+    ([{"name": "a", "kind": "pie", "ticker": "NVDA"}], "a pie chart is one series"),
+    ([pie("a", ["x", "y"], [0, -1])], "at least one value above zero"),
+])
+async def test_a_pie_is_one_series_of_values_above_zero(env, store, series, error):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "t", "series": series})
+    assert out.startswith("Error: ") and error in out
+
+
+async def test_three_pies_go_as_one_album_and_pie_words_offer_the_tool(env, store):
+    calls = [("1", "make_chart", json.dumps({"title": f"By {n}", "series": [pie(n, ["a", "b"], [3, 1])]}))
+             for n in ("segment", "platform", "region")]
+    ctx, backend, h = make_ctx(env, store, [step(calls=calls, finish="tool_calls"), step("Mostly a.")])
+    m = user_msg(ctx.bot, "@stockbot show NVDA revenue as pies")
+    await run(h, m)
+    assert backend.seen[0]["tools"] == ["make_chart"]
+    [reply] = m.replies
+    assert len(reply["album"]) == 3 and [c for _, c in reply["album"]] == ["Mostly a.", None, None]

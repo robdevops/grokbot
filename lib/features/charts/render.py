@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import math
 import os
+import textwrap
 import threading
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -12,7 +13,8 @@ from pathlib import Path
 
 from ... import config
 
-KINDS = ("line", "bar", "scatter")
+KINDS = ("line", "bar", "scatter", "pie")
+PIE_SLICES = 8  # more than this and the smallest are added up as "Other"
 SIZE_IN, DPI = (7.2, 4.2), 170  # 1224 x 714 px, with type big enough to read on a phone
 LEGEND_COLUMNS = 6
 RULE_WIDTH = 0.8  # every horizontal rule, the one at zero included
@@ -166,6 +168,43 @@ def spread(fracs: list[float], gap: float = END_LABEL_GAP) -> list[float]:
     return out
 
 
+def pie_slices(s: Series) -> list[tuple[str, float]]:
+    """The slices of a pie, biggest first: gaps and values of zero or below dropped, and past PIE_SLICES the
+    smallest are added up as "Other"."""
+    slices = sorted(((str(x), y) for x, y in zip(s.x, s.y, strict=True) if not math.isnan(y) and y > 0),
+                    key=lambda item: -item[1])
+    if len(slices) > PIE_SLICES:
+        slices = slices[:PIE_SLICES - 1] + [("Other", sum(y for _, y in slices[PIE_SLICES - 1:]))]
+    return slices
+
+
+def share(part: float, whole: float) -> str:
+    pct = part / whole * 100
+    return "<0.1%" if 0 < pct < 0.05 else f"{pct:.1f}%"
+
+
+def pie_figure(chart: Chart, th: Theme, canvas, Figure):
+    """A donut for the one series of a pie chart, a legend with each slice's share beside it, the total in the
+    middle if the series has one."""
+    fig = Figure(figsize=SIZE_IN, dpi=DPI, facecolor=th.bg)
+    canvas(fig)
+    slices = pie_slices(chart.series[0])
+    whole = sum(y for _, y in slices) or 1.0
+    colors = [th.text if name == "Other" else th.palette[i % len(th.palette)] for i, (name, _) in enumerate(slices)]
+    ax = fig.add_axes((0.03, 0.04, 0.48, 0.76))
+    wedges, _ = ax.pie([y for _, y in slices], colors=colors, startangle=90, counterclock=False,
+                       wedgeprops={"width": 0.42, "edgecolor": th.bg, "linewidth": 2.5})
+    if chart.series[0].total:
+        ax.text(0, 0, chart.series[0].total, ha="center", va="center", fontsize=17, fontweight="bold", color=th.ink)
+    labels = [textwrap.fill(name, 26) + f"  {share(y, whole)}" for name, y in slices]
+    fig.legend(wedges, labels, loc="center left", bbox_to_anchor=(0.54, 0.42), frameon=False, fontsize=11,
+               labelspacing=0.9, handlelength=1.0, handleheight=1.0, labelcolor=th.ink)
+    fig.text(0.03, 0.95, chart.title, ha="left", va="top", fontsize=14, fontweight="bold", color=th.ink)
+    if chart.subtitle:
+        fig.text(0.03, 0.875, chart.subtitle, ha="left", va="top", fontsize=10, color=th.text)
+    return fig
+
+
 def _single_axis(chart: Chart) -> Chart:
     """A chart whose series are all on the right axis is drawn on the left one, with the right axis's settings."""
     if not chart.series or any(s.axis == "left" for s in chart.series):
@@ -199,6 +238,8 @@ def figure(chart: Chart):
     chart = _single_axis(chart)
     th = THEMES["dark" if chart.dark else "light"]
     dates, canvas, Figure, Formatter, MaxNLocator = _matplotlib()
+    if any(s.kind == "pie" for s in chart.series):
+        return pie_figure(chart, th, canvas, Figure)
     fig = Figure(figsize=SIZE_IN, dpi=DPI, layout="constrained", facecolor=th.bg)
     canvas(fig)
     left = fig.subplots()
