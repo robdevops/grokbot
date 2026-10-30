@@ -70,27 +70,27 @@ async def test_anything_unusable_is_left_to_the_model(env, store, servers):
     assert len(backend.seen) == 1 and m.replies[0]["text"] == "from the model"
 
 
-async def test_revenuepie_command_replies_with_the_pies_and_logs_the_message(env, store):
+async def test_segments_command_replies_with_the_pies_and_logs_the_message(env, store):
     from types import SimpleNamespace as N
 
     from .test_handlers import update_for
     ctx, backend, h = make_ctx(env, store, [], servers=(scout(),))
-    m = user_msg(ctx.bot, "/revenuepie $nvda", chat_id=-100, mid=3)
-    await h.revenuepie(update_for(m), N(args=["$nvda"]))
+    m = user_msg(ctx.bot, "/segments $nvda", chat_id=-100, mid=3)
+    await h.segments(update_for(m), N(args=["$nvda"]))
     assert backend.seen == []
     [reply] = m.replies
     assert reply["caption"].startswith("<b>NVDA</b> Q2 FY2027 revenue $96.2B") and reply["photo"].startswith(b"\x89PNG")
-    assert store.history(-100, 20)[0].text == "/revenuepie $nvda"
+    assert store.history(-100, 20)[0].text == "/segments $nvda"
 
 
-@pytest.mark.parametrize("args, said", [([], "Usage: /revenuepie TICKER"), (["zzzz"], "No revenue breakdown found for ZZZZ.")])
-async def test_revenuepie_without_a_ticker_or_data_says_so(env, store, args, said):
+@pytest.mark.parametrize("args, said", [([], "Usage: /segments TICKER"), (["zzzz"], "No revenue breakdown found for ZZZZ.")])
+async def test_segments_without_a_ticker_or_data_says_so(env, store, args, said):
     from types import SimpleNamespace as N
 
     from .test_handlers import update_for
     ctx, backend, h = make_ctx(env, store, [], servers=(scout(json.dumps({"error": "unknown"})),))
-    m = user_msg(ctx.bot, "/revenuepie " + " ".join(args))
-    await h.revenuepie(update_for(m), N(args=args))
+    m = user_msg(ctx.bot, "/segments " + " ".join(args))
+    await h.segments(update_for(m), N(args=args))
     assert m.replies[0]["text"] == said
 
 

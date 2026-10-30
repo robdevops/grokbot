@@ -131,10 +131,10 @@ async def log_tool_size(ctx: Ctx) -> None:
 
 
 async def register_menu(ctx: Ctx) -> None:
-    """The command menu: /revenuepie for everyone, and /tokens too for the people who can use it (a scoped menu
+    """The command menu: /segments for everyone, and /tokens too for the people who can use it (a scoped menu
     replaces the default one, so it lists both): administrators of every group, and the users in ADMIN_CHAT_IDS
     in their own chat with the bot."""
-    everyone = [BotCommand("revenuepie", "Revenue breakdown pies: /revenuepie TICKER")]
+    everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER")]
     admins = everyone + [BotCommand("tokens", "Provider balance, token use and cost")]
     try:
         await ctx.bot.set_my_commands(everyone)
@@ -197,7 +197,7 @@ def build_app(ctx: Ctx) -> Application:
     # Commands first: the first matching handler wins, and the catch-all would swallow them.
     app.add_handler(CommandHandler(["tokens", "usage", "credits"], command(commands.credits)))
     app.add_handler(CommandHandler("flushcache", command(commands.flush_cache)))
-    app.add_handler(CommandHandler("revenuepie", handlers.revenuepie))
+    app.add_handler(CommandHandler("segments", handlers.segments))
     app.add_handler(MessageHandler(
         (filters.ChatType.GROUPS | filters.ChatType.PRIVATE)
         & (filters.UpdateType.MESSAGE | filters.UpdateType.EDITED_MESSAGE)

@@ -253,8 +253,8 @@ class Handlers:
         elif sent and call:
             await chart_buttons.remember(ctx, sent, call)
 
-    async def revenuepie(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """/revenuepie TICKER: the revenue breakdown pies of the latest quarter, drawn without the model."""
+    async def segments(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/segments TICKER: the revenue breakdown pies of the latest quarter, drawn without the model."""
         msg, ctx = update.effective_message, self.ctx
         await asyncio.to_thread(ctx.store.save, msg)
         ticker = (context.args[0] if context and context.args else "").lstrip("$")
@@ -263,7 +263,7 @@ class Handlers:
         private = is_dm(msg.chat_id)
         if not caption:
             text = (f"No revenue breakdown found for {html.escape(ticker.upper())}." if ticker
-                    else "Usage: /revenuepie TICKER")
+                    else "Usage: /segments TICKER")
             await reply_chunks(msg, text, ctx.store, quote=not private)
             return
         await self._send_charts(msg, charts, caption, quote=not private)
