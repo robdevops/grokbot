@@ -19,6 +19,7 @@ from . import ChartError, build, render
 log = logging.getLogger("bot")
 
 PREFIX = "cp:"  # callback data: cp:<index of the chart>
+ROW = 3  # buttons per row: five charts make a row of three and a row of two
 LABEL_MAX = 13  # a button in a row of three shows about this much
 _tasks: set[asyncio.Task] = set()  # uploads running; held so they aren't garbage-collected
 
@@ -47,9 +48,9 @@ def labels_for(titles: list[str]) -> list[str]:
 
 def keyboard(labels: list[str], current: int) -> InlineKeyboardMarkup:
     """One button per chart, the one shown shaded (Telegram's "primary" style, sent through api_kwargs)."""
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton(label, callback_data=f"{PREFIX}{i}", api_kwargs={"style": "primary"} if i == current else None)
-        for i, label in enumerate(labels)]])
+    buttons = [InlineKeyboardButton(label, callback_data=f"{PREFIX}{i}", api_kwargs={"style": "primary"} if i == current else None)
+               for i, label in enumerate(labels)]
+    return InlineKeyboardMarkup([buttons[i:i + ROW] for i in range(0, len(buttons), ROW)])
 
 
 async def remember(ctx: Ctx, sent: Message, calls: list[dict], images: list[bytes], labels: list[str]) -> None:

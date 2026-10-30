@@ -240,14 +240,14 @@ async def test_missing_price_server_or_a_tool_error_is_reported(env, store):
     assert await make_chart(args) == "Error: ZZZZ: No historical data available for ZZZZ"
 
 
-async def test_at_most_three_charts_per_reply(env, store):
+async def test_at_most_five_charts_per_reply(env, store):
     made = charts.Charts()
     _, make_chart = charts.tool(make(env, store), made)
     args = {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}
-    for _ in range(3):
+    for _ in range(5):
         assert (await make_chart(args)).startswith("Chart ")
-    assert await make_chart(args) == "Error: at most 3 charts per reply."
-    assert len(made.photos) == 3 and made.photos[0][1] == "t"
+    assert await make_chart(args) == "Error: at most 5 charts per reply."
+    assert len(made.photos) == 5 and made.photos[0][1] == "t"
 
 
 CHART_CALL = [("1", "make_chart", json.dumps({"title": "NVDA, 1 year", "series": [{"name": "NVDA", "ticker": "NVDA"}]}))]
@@ -734,8 +734,8 @@ async def test_a_failed_chart_gives_up_its_place_and_its_number(env, store):
     bad = {"title": "t", "series": [{"name": "a", "x": [1], "y": [1, 2]}]}
     good = {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}
     assert (await make_chart(bad)).startswith("Error: ")
-    assert [(await make_chart(good)).split(" is ready")[0] for _ in range(3)] == ["Chart 1", "Chart 2", "Chart 3"]
-    assert (await make_chart(good)) == "Error: at most 3 charts per reply."
+    assert [(await make_chart(good)).split(" is ready")[0] for _ in range(5)] == [f"Chart {i}" for i in range(1, 6)]
+    assert (await make_chart(good)) == "Error: at most 5 charts per reply."
 
 
 def test_a_breakdown_of_names_and_values_drawn_as_the_default_line_becomes_a_pie():
@@ -822,3 +822,9 @@ async def test_a_pie_asks_for_a_one_line_caption(env, store):
     out = await make_chart({"title": "Split ($B)", "series": [{"name": "S", "kind": "pie", "x": ["A", "B"], "y": [1, 2]}]})
     assert "one line under 120 characters" in out
     assert "one line under 120 characters" in charts.chart_hint("TSLA revenue breakdown")
+
+
+def test_five_chart_buttons_make_two_rows():
+    from lib.features.charts import pages
+    rows = pages.keyboard(["A", "B", "C", "D", "E"], 0).inline_keyboard
+    assert [len(r) for r in rows] == [3, 2]

@@ -32,7 +32,7 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 
 ## Charts
 Ask for a chart, graph or plot ("chart NVDA against AMD over a year, AMD on the right axis, inverted") and the bot
-replies once: the chart as a photo with its answer as the caption. Two or three charts come as one image with a
+replies once: the chart as a photo with its answer as the caption. Two to five charts come as one image with a
 button for each (see below), not an album. An answer too
 long for a caption (about 1,000 characters) continues in a text message. The model gets the `make_chart` tool only
 when the message asks for one (chart, graph, plot, pie, visualise, breakdown, segments), so other requests don't pay
@@ -48,7 +48,7 @@ for its definition.
 - **Pie charts:** for a share-of-total breakdown (revenue by segment, platform or region) the model draws a donut
   with `kind: pie`: one series per chart, slice names and values, with each slice's % of the total in a legend
   beside it and the total in the middle. Past 8 slices the smallest are added up as "Other". A request for
-  several breakdowns makes several pies (up to 3), sent as one image with a button for each. Like other charts of
+  several breakdowns makes several pies (up to 5), sent as one image with a button for each. Like other charts of
   values the model passes, pies get no period buttons. The model is told to use parts of one whole only, never a subtotal beside its parts.
   This pairs with any MCP source that returns breakdowns, such as a company-segments tool.
 - **Several charts, one image:** when a reply has 2 or 3 charts (for example a breakdown by segment, platform and

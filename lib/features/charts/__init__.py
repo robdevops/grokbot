@@ -24,7 +24,7 @@ PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max
 # Yahoo's server returns at most ~90 rows in one call, so each period gets an interval that fits.
 DEFAULT_INTERVAL = {"1d": "5m", "5d": "30m", "1mo": "1d", "3mo": "1d", "6mo": "1wk", "1y": "1wk",
                     "2y": "1mo", "5y": "1mo", "10y": "3mo", "max": "3mo"}
-MAX_CHARTS, MAX_SERIES, MAX_POINTS = 3, 8, 2000
+MAX_CHARTS, MAX_SERIES, MAX_POINTS = 5, 8, 2000
 NIGHT_FROM, NIGHT_TO = 21, 7  # the dark theme from 9 pm to 7 am (BOT_TZ), when the chart is drawn
 TOTAL_MAX = 24  # characters of a legend total
 CAPTION_HINT = 900  # Telegram captions hold 1024 characters; a longer reply continues in a text message
