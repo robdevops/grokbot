@@ -120,13 +120,10 @@ def scaled(slices: list[tuple[str, float]]) -> tuple[list[tuple[str, float]], st
     return [(n, v / divisor) for n, v in slices], suffix
 
 
-def caption(ticker: str, period: str, label: str, slices: list[tuple[str, float]], symbol: str) -> str:
-    """One line: the period's total and the biggest slice of the first pie."""
-    values, suffix = scaled(slices)
-    whole = sum(v for _, v in values)
-    top_name, top = max(values, key=lambda s: s[1])
-    return (f"<b>{html.escape(ticker)}</b> {html.escape(period)} revenue {symbol}{whole:,.1f}{suffix}: "
-            f"{html.escape(top_name)} is {top / whole * 100:.0f}% of the {label} split.")
+def caption(ticker: str, period: str, labels: list[str]) -> str:
+    """One line that is true of every pie, as the caption stays when a button swaps the picture: the company, the
+    period and what the pies split revenue by. The total and the shares are in the picture."""
+    return f"<b>{html.escape(ticker)}</b> {html.escape(period)} revenue by {html.escape(', '.join(labels))}"
 
 
 def read_units(payload: dict, default: float) -> float:
@@ -200,17 +197,17 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
     found = groupings(period, factor)
     found += await more_groupings(server, ticker, name, payload, found, factor)
     _, make = tool(ctx, charts)
-    first = None
+    drawn = []
     for label, slices in found[:MAX_CHARTS]:
         values, suffix = scaled(slices)
         args = {"title": f"{ticker} {name} revenue by {label} ({symbol}{suffix})",
                 "series": [{"name": f"Revenue by {label}", "kind": "pie",
                             "x": [n for n, _ in values], "y": [round(v, 3) for _, v in values]}]}
-        if (await make(args)).startswith("Chart ") and first is None:
-            first = (label, slices)
-    if first is None:
+        if (await make(args)).startswith("Chart "):
+            drawn.append(label)
+    if not drawn:
         log.warning("Fast breakdown for %s: no pie could be drawn from the period: %s", ticker,
                     json.dumps(period, separators=(",", ":"))[:600])
         return None
     log.info("Fast path: %d revenue pies for %s without the model", len(charts.photos), ticker)
-    return caption(ticker, name, *first, symbol)
+    return caption(ticker, name, drawn)

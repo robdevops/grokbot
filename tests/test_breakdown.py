@@ -47,7 +47,7 @@ async def test_fast_path_draws_every_pie_and_gives_a_one_line_caption(env, store
     assert [title for _, title in made.photos] == [
         "NVDA Q2 FY2027 revenue by segment ($B)", "NVDA Q2 FY2027 revenue by market platform ($B)",
         "NVDA Q2 FY2027 revenue by customer headquarters ($B)"]
-    assert caption == "<b>NVDA</b> Q2 FY2027 revenue $96.2B: Compute & Networking is 92% of the segment split.".replace("&", "&amp;")
+    assert caption == "<b>NVDA</b> Q2 FY2027 revenue by segment, market platform, customer headquarters"
     assert [a["breakdown"] for _, a in ctx.registry.servers["ticker-scout"].calls] == [
         "all", "revenue_by_product", "revenue_by_geography"]  # `showing` lists two the data has under other names
 
@@ -58,7 +58,7 @@ async def test_the_handler_answers_without_calling_the_model(env, store):
     await run(h, m)
     assert backend.seen == []
     [reply] = m.replies
-    assert reply["photo"].startswith(b"\x89PNG") and reply["caption"].startswith("<b>NVDA</b> Q2 FY2027 revenue $96.2B")
+    assert reply["photo"].startswith(b"\x89PNG") and reply["caption"].startswith("<b>NVDA</b> Q2 FY2027 revenue by segment")
     assert [b.text for row in reply["reply_markup"].inline_keyboard for b in row] == ["Segment", "Platform", "Headquarters"]
 
 
@@ -79,7 +79,7 @@ async def test_segments_command_replies_with_the_pies_and_logs_the_message(env, 
     await h.segments(update_for(m), N(args=["$nvda"]))
     assert backend.seen == []
     [reply] = m.replies
-    assert reply["caption"].startswith("<b>NVDA</b> Q2 FY2027 revenue $96.2B") and reply["photo"].startswith(b"\x89PNG")
+    assert reply["caption"].startswith("<b>NVDA</b> Q2 FY2027 revenue by segment") and reply["photo"].startswith(b"\x89PNG")
     assert store.history(-100, 20)[0].text == "/segments $nvda"
 
 
@@ -99,7 +99,7 @@ async def test_figures_in_millions_are_scaled_and_a_result_that_cannot_be_used_i
         "Automotive sales": 20094, "Services & other": 4605, "Energy generation & storage": 2881}}]}
     made = charts.Charts()
     caption = await breakdown.fast(make(env, store, scout(json.dumps(tesla))), "TSLA revenue breakdown", made)
-    assert caption.startswith("<b>TSLA</b> Q3 FY2026 revenue $27.6B") and [t for _, t in made.photos] == [
+    assert caption == "<b>TSLA</b> Q3 FY2026 revenue by product" and [t for _, t in made.photos] == [
         "TSLA Q3 FY2026 revenue by product ($B)"]
     odd = {**tesla, "units": "furlongs"}
     with caplog.at_level("WARNING", logger="bot"):
@@ -183,7 +183,7 @@ async def test_when_the_segments_tool_has_no_breakdowns_the_income_statement_is_
     assert [t for _, t in made.photos] == ["TSLA Q3 FY2026 revenue by segment ($B)",
                                            "TSLA Q3 FY2026 revenue by product line ($B)",
                                            "TSLA Q3 FY2026 revenue by region ($B)"]
-    assert caption.startswith("<b>TSLA</b> Q3 FY2026 revenue $23.9B: Automotive is 88% of the segment split.")
+    assert caption == "<b>TSLA</b> Q3 FY2026 revenue by segment, product line, region"
     assert [c for c, _ in server.calls] == ["get_segments", "get_segments", "get_statements"] and not caplog.records
 
 
@@ -200,7 +200,7 @@ async def test_alphabet_has_revenue_by_type_and_segments_with_totals_and_subtota
                                    "GOOGL revenue breakdown", made)
     assert [t for _, t in made.photos] == ["GOOGL Q3 FY2026 revenue by segment ($B)",
                                            "GOOGL Q3 FY2026 revenue by type ($B)"]
-    assert caption == "<b>GOOGL</b> Q3 FY2026 revenue $127.6B: Google services is 75% of the segment split."
+    assert caption == "<b>GOOGL</b> Q3 FY2026 revenue by segment, type"
     period = json.loads(googl)["periods"][0]
     by_type = dict(breakdown.groupings(period))["type"]
     assert [n for n, _ in by_type] == ["Google search and other", "Youtube ads", "Google network",
