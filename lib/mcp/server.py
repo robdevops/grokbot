@@ -43,7 +43,7 @@ class MCPServer:
     entered and exited in the same task."""
 
     def __init__(self, label: str, cfg: dict, *, timeout: float, max_output: int,
-                 on_down: Callable[[MCPServer], Awaitable[None]] | None = None, log_width: int = 95):
+                 on_down: Callable[[MCPServer], Awaitable[None]] | None = None, log_width: int = 80):
         self.label = re.sub(r"[^A-Za-z0-9_-]", "_", label)
         self.cfg = cfg
         self.description = cfg.get("description", "")
@@ -289,7 +289,7 @@ class Registry:
 
     @classmethod
     def load(cls, path: str, *, timeout: float, max_output: int,
-             on_down: Callable[[MCPServer], Awaitable[None]] | None = None, log_width: int = 95) -> Registry:
+             on_down: Callable[[MCPServer], Awaitable[None]] | None = None, log_width: int = 80) -> Registry:
         """Servers from a JSON file ({"mcpServers": {...}} or Claude Desktop style); a missing
         file means no servers."""
         try:
@@ -330,7 +330,7 @@ class Registry:
         return None
 
 
-def log_names(head: str, names: list[str], width: int = 95) -> None:
+def log_names(head: str, names: list[str], width: int = 80) -> None:
     """Log a list of tool names on one line of at most `width` characters (0 = no limit). A list that
     doesn't fit is cut at a whole name and ends in "…" (one character)."""
     line = f"{head} {', '.join(names)}"

@@ -69,11 +69,11 @@ def test_holding_news_and_movers_switch_on_by_listing_names(env):
     assert not config.load({**env, "MOVERS_BOTS": ","}).movers_explain
 
 
-def test_log_width_defaults_to_95(env):
-    assert config.load(env).log_width == 95
+def test_log_width_defaults_to_80(env):
+    assert config.load(env).log_width == 80
     assert config.load({**env, "LOG_WIDTH": "120"}).log_width == 120
     assert config.load({**env, "LOG_WIDTH": "0"}).log_width == 0  # 0 = no limit
-    assert config.load({**env, "LOG_WIDTH": ""}).log_width == 95
+    assert config.load({**env, "LOG_WIDTH": ""}).log_width == 80
 
 
 def test_token_limits():
