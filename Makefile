@@ -6,7 +6,7 @@ lint:
 	ruff check lib tools tests bot.py
 
 test:
-	python -m pytest
+	python -m pytest -n auto
 
 prompt-report:
 	python -m tools.report

@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    - cron: "17 3 * * 1"  # weekly, Mondays 03:17 UTC: catches new Python, Node or library releases breaking the code
+    - cron: "17 3 * * 1"  # weekly, Mondays 03:17 UTC: catches new Python or library releases breaking the code
   workflow_dispatch:  # the "Run workflow" button on the Actions tab
 
 concurrency:
@@ -20,12 +20,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"  # the latest stable Python: an early warning for the next upgrade (production runs 3.13.5)
-          cache: pip
-          cache-dependency-path: requirements*.txt
-      - uses: actions/setup-node@v5
-        with:
-          node-version: latest  # the latest Node.js, for the npx-based MCP servers (e.g. Yahoo Finance)
-      - run: pip install -r requirements-dev.txt
+      # uv installs the packages about five times faster than pip, and the tests run on every core. Node.js isn't
+      # installed: the tests use fakes and never start an MCP server.
+      - run: pip install -q uv && uv pip install -q --system -r requirements-dev.txt
       - run: make check
       - name: Tell Telegram the check failed
         # Not for pull requests (every red push would ping): scheduled runs, manual runs and pushes to main.

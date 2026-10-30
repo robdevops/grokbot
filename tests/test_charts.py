@@ -17,10 +17,14 @@ from .conftest import FakeBot, user_msg
 from .fakes import FakeMcp, ScriptedBackend, registry, step
 from .test_handlers import make_ctx, run
 
+REAL_PNG = render.png  # the real renderer, for the few tests that look at the picture
+
 
 @pytest.fixture(autouse=True)
-def matplotlib_cache(tmp_path, monkeypatch):
-    monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / "mpl"))
+def fast_png(monkeypatch):
+    """Most tests need a picture to exist, not to be drawn: a PNG header stands in (drawing takes ~0.15 s each, and
+    the suite makes dozens). The tests that check drawing call REAL_PNG, and the figure tests build real figures."""
+    monkeypatch.setattr(render, "png", lambda chart: b"\x89PNG\r\n\x1a\nfake")
 
 
 def history_json(closes, start=1, truncated=False):
@@ -56,7 +60,7 @@ def test_one_axis_bars_and_labels():
     fig = render.figure(chart)
     assert len(fig.axes) == 1 and len(fig.axes[0].patches) == 4
     assert [t.get_text() for t in fig.axes[0].get_xticklabels()] == ["Jan", "Feb"]
-    assert render.png(chart).startswith(b"\x89PNG\r\n\x1a\n")
+    assert REAL_PNG(chart).startswith(b"\x89PNG\r\n\x1a\n") and len(REAL_PNG(chart)) > 5000
 
 
 def test_tick_labels_share_their_decimals_and_shorten_big_numbers():
@@ -566,8 +570,8 @@ def test_a_pie_is_a_donut_with_a_legend_of_shares_and_the_total_in_the_middle():
     fig = render.figure(chart)
     assert len(fig.axes[0].patches) == 2 and [t.get_text() for t in fig.axes[0].texts if t.get_text()] == ["$100B"]
     assert [t.get_text() for t in fig.legends[0].get_texts()] == ["US  75.0%", "Taiwan  25.0%"]
-    assert render.png(chart).startswith(b"\x89PNG")
-    assert render.png(replace(chart, dark=True)).startswith(b"\x89PNG")
+    assert REAL_PNG(chart).startswith(b"\x89PNG")
+    assert REAL_PNG(replace(chart, dark=True)).startswith(b"\x89PNG")
 
 
 async def test_a_pie_call_takes_slices_names_and_shares_for_the_model(env, store):

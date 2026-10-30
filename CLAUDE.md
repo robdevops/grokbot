@@ -5,7 +5,7 @@ MCP data tools and web search. User-facing docs are in `README.md` (quick start)
 
 ## Commands
 - `make check`: ruff + pytest (no network, a few seconds). Run it before every commit, on Python 3.13.5 (production;
-  `uv venv --python 3.13.5`). GitHub CI runs the latest stable Python and Node.js instead, to catch breakage from the next upgrade early.
+  `uv venv --python 3.13.5`). GitHub CI runs the latest stable Python instead, to catch breakage from the next upgrade early (about 20 s: uv installs, tests run on every core, charts are drawn as a stub in most tests).
 - `make prompt-report`: token breakdown of a sample request. `python bot.py [label]` runs the bot.
 - Pull requests: right after pushing a `claude/*` branch, open its PR if it has none, so Claude Code shows the PR/CI
   button. Never merge it unless asked.
