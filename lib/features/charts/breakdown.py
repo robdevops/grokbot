@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import logging
@@ -53,6 +54,16 @@ def revenue_of(value) -> float | None:
     return None
 
 
+def pretty(name: str) -> str:
+    """A snake_case key as a slice name: automotive_segment is "Automotive", energy_generation_and_storage_segment
+    is "Energy generation and storage". Names that are already words are left alone."""
+    if "_" not in name or " " in name:
+        return name
+    words = name.replace("_", " ").strip()
+    words = re.sub(r"\s+(?:segment|revenues?)$", "", words, flags=re.IGNORECASE) or words
+    return words[:1].upper() + words[1:]
+
+
 def slices_of(group) -> list[tuple[str, float]]:
     """(name, value) of a grouping: {name: value}, {name: {"revenue": value, ...}} or [{"name": ..., "revenue": ...}].
     Where the entries are objects, a bare number beside them (a total operating income) is no slice."""
@@ -62,7 +73,7 @@ def slices_of(group) -> list[tuple[str, float]]:
     else:
         nested = any(isinstance(v, dict) for v in group.values())
         items = [(str(n), revenue_of(v)) for n, v in group.items() if isinstance(v, dict) or not nested]
-    out = [(n, v) for n, v in items if n and v]
+    out = [(pretty(n), v) for n, v in items if n and v]
     while (overlap := subtotal_in(out)):  # a subtotal beside its parts would be counted twice
         out = [(n, v) for n, v in out if n != overlap[0]]
     return out
@@ -115,6 +126,27 @@ def caption(ticker: str, period: str, label: str, slices: list[tuple[str, float]
             f"{html.escape(top_name)} is {top / whole * 100:.0f}% of the {label} split.")
 
 
+async def more_groupings(server, ticker: str, name: str, payload: dict, have: list, factor: float) -> list:
+    """Some tickers' "all" holds only the segments although `showing` lists revenue_by_product and the like: ask for
+    each of those that gave no pie, all at once, and keep the pies that aren't one already drawn."""
+    labels = {label for label, _ in have}
+    missing = [k for k in payload.get("showing") or [] if isinstance(k, str) and k.startswith("revenue_by_")
+               and label_of([k]) not in labels]
+    outs = await asyncio.gather(*(server.call(TOOL, {"ticker": ticker, "breakdown": k, "period": name}) for k in missing),
+                                return_exceptions=True)
+    extra = []
+    for key, out in zip(missing, outs, strict=True):
+        try:
+            period = json.loads(out)["periods"][0]
+        except (TypeError, ValueError, KeyError, IndexError):
+            log.warning("Fast breakdown for %s: couldn't read %s: %s", ticker, key, " ".join(str(out).split())[:200])
+            continue
+        for label, slices in groupings(period, factor):
+            if all(slices != other for _, other in have + extra):
+                extra.append((label, slices))
+    return extra
+
+
 async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
     """The caption for a plain revenue-breakdown request, its pies added to `charts`; None when this isn't one,
     the data source is missing or down, or nothing could be drawn (the model then answers as usual)."""
@@ -136,9 +168,11 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
                     payload.get("reporting_currency"), payload.get("units"))
         return None
     name = str(period.get("period") or "latest quarter")
+    found = groupings(period, factor)
+    found += await more_groupings(server, ticker, name, payload, found, factor)
     _, make = tool(ctx, charts)
     first = None
-    for label, slices in groupings(period, factor):
+    for label, slices in found[:MAX_CHARTS]:
         values, suffix = scaled(slices)
         args = {"title": f"{ticker} {name} revenue by {label} ({symbol}{suffix})",
                 "series": [{"name": f"Revenue by {label}", "kind": "pie",

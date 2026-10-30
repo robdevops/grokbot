@@ -48,8 +48,8 @@ async def test_fast_path_draws_every_pie_and_gives_a_one_line_caption(env, store
         "NVDA Q2 FY2027 revenue by segment ($B)", "NVDA Q2 FY2027 revenue by market platform ($B)",
         "NVDA Q2 FY2027 revenue by customer headquarters ($B)"]
     assert caption == "<b>NVDA</b> Q2 FY2027 revenue $96.2B: Compute & Networking is 92% of the segment split.".replace("&", "&amp;")
-    assert ctx.registry.servers["ticker-scout"].calls == [
-        ("get_segments", {"ticker": "NVDA", "breakdown": "all", "period": "latest quarter"})]
+    assert [a["breakdown"] for _, a in ctx.registry.servers["ticker-scout"].calls] == [
+        "all", "revenue_by_product", "revenue_by_geography"]  # `showing` lists two the data has under other names
 
 
 async def test_the_handler_answers_without_calling_the_model(env, store):
@@ -118,3 +118,39 @@ async def test_figures_in_millions_are_scaled_and_a_result_that_cannot_be_used_i
 def test_groupings_are_found_wherever_the_source_nests_them(detail, labels):
     period = {"period": "Q3 FY2026", "fiscal_year": 2026, "fiscal_quarter": 3, "months": 3, "segment_detail": detail}
     assert [label for label, _ in breakdown.groupings(period, 1e6)] == labels
+
+
+async def test_breakdowns_listed_in_showing_but_missing_from_all_are_fetched_one_by_one(env, store):
+    def result(**kw):
+        return {"units": "USD millions", "reporting_currency": "USD", "periods": [{"period": "Q3 FY2026", **kw}]}
+
+    answers = {
+        "all": result(segment_detail={"segments": {"Automotive": {"revenue": 21000}, "Energy": {"revenue": 2881}}},
+                      ) | {"showing": ["segments", "revenue_by_product", "revenue_by_geography"]},
+        "revenue_by_product": result(revenue_by_product={"Automotive sales": 20094, "Services & other": 4605}),
+        "revenue_by_geography": result(revenue_by_geography={"United States": 12495, "China": 5209}),
+    }
+
+    class Scout(FakeMcp):
+        async def call(self, tool, args):
+            self.calls.append((tool, args))
+            return json.dumps(answers[args["breakdown"]])
+
+    server = Scout("ticker-scout", tools=("get_segments",))
+    made = charts.Charts()
+    await breakdown.fast(make(env, store, server), "TSLA revenue breakdown", made)
+    assert [t for _, t in made.photos] == ["TSLA Q3 FY2026 revenue by segment ($B)",
+                                           "TSLA Q3 FY2026 revenue by product ($B)",
+                                           "TSLA Q3 FY2026 revenue by geography ($B)"]
+    assert [a["breakdown"] for _, a in server.calls] == ["all", "revenue_by_product", "revenue_by_geography"]
+
+
+@pytest.mark.parametrize("key, name", [
+    ("automotive_segment", "Automotive"),
+    ("energy_generation_and_storage_segment", "Energy generation and storage"),
+    ("services_and_other", "Services and other"),
+    ("Compute & Networking", "Compute & Networking"),
+    ("Data Center - Hyperscale", "Data Center - Hyperscale"),
+])
+def test_snake_case_keys_become_slice_names(key, name):
+    assert breakdown.pretty(key) == name
