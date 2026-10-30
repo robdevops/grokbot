@@ -60,11 +60,12 @@ def pick(kind: Kind, words: list[str]) -> tuple[int | None, str]:
     return None, " ".join(words)
 
 
-def keyboard(kind: Kind, ticker: str, current: int | None) -> InlineKeyboardMarkup | None:
-    """A button for each section but the one shown."""
-    buttons = [InlineKeyboardButton(label, callback_data=f"{PREFIX}{kind.code}:{ticker}:{i}")
-               for i, (label, _) in enumerate(kind.sections) if i != current]
-    return InlineKeyboardMarkup([buttons[i:i + ROW] for i in range(0, len(buttons), ROW)]) if buttons else None
+def keyboard(kind: Kind, ticker: str, current: int | None) -> InlineKeyboardMarkup:
+    """A button for each section, the one shown shaded (Telegram's "primary" style, sent through api_kwargs)."""
+    buttons = [InlineKeyboardButton(label, callback_data=f"{PREFIX}{kind.code}:{ticker}:{i}",
+                                    api_kwargs={"style": "primary"} if i == current else None)
+               for i, (label, _) in enumerate(kind.sections)]
+    return InlineKeyboardMarkup([buttons[i:i + ROW] for i in range(0, len(buttons), ROW)])
 
 
 async def fetch(ctx: Ctx, kind: Kind, ticker: str, section: str) -> str | None:

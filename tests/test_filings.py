@@ -42,14 +42,20 @@ def test_events_default_to_earnings_and_match_a_name_prefix():
     assert filings.pick(kind, ["m&a"]) == (4, "m&a")
 
 
-def test_buttons_are_the_other_sections_in_rows_of_three():
+def shaded(markup):
+    return [b["callback_data"] for row in markup.to_dict()["inline_keyboard"] for b in row if b.get("style") == "primary"]
+
+
+def test_every_section_has_a_button_in_rows_of_three_and_the_one_shown_is_shaded():
     markup = filings.keyboard(filings.KINDS["e"], "TSLA", 0)
-    assert [len(r) for r in rows(markup)] == [3, 3, 1]
-    assert rows(markup)[0] == [("Management", "fl:e:TSLA:1"), ("Capital returns", "fl:e:TSLA:2"),
-                               ("Debt & financing", "fl:e:TSLA:3")]
-    assert "Earnings" not in [t for row in rows(markup) for t, _ in row]
-    narrative = rows(filings.keyboard(filings.KINDS["n"], "TSLA", 0))
-    assert [t for row in narrative for t, _ in row] == ["Risk factors", "MD&A", "Current quarter", "Subsequent events", "Legal"]
+    assert [len(r) for r in rows(markup)] == [3, 3, 2]
+    assert rows(markup)[0] == [("Earnings", "fl:e:TSLA:0"), ("Management", "fl:e:TSLA:1"),
+                               ("Capital returns", "fl:e:TSLA:2")]
+    assert shaded(markup) == ["fl:e:TSLA:0"]
+    narrative = filings.keyboard(filings.KINDS["n"], "TSLA", 2)
+    assert [t for row in rows(narrative) for t, _ in row] == [
+        "Business", "Risk factors", "MD&A", "Current quarter", "Subsequent events", "Legal"]
+    assert shaded(narrative) == ["fl:n:TSLA:2"] and shaded(filings.keyboard(filings.KINDS["n"], "TSLA", None)) == []
 
 
 def test_markdown_becomes_telegram_html_and_a_cut_is_explained():
@@ -70,7 +76,8 @@ async def test_events_command_replies_with_the_default_section_and_buttons_for_t
     assert scout.calls == [("get_events", {"ticker": "TSLA", "section": "earnings"})]
     [reply] = m.replies
     assert reply["text"].startswith("<b>Tesla (TSLA) — Earnings</b>")
-    assert rows(reply["reply_markup"])[0][0] == ("Management", "fl:e:TSLA:1")
+    assert rows(reply["reply_markup"])[0][:2] == [("Earnings", "fl:e:TSLA:0"), ("Management", "fl:e:TSLA:1")]
+    assert shaded(reply["reply_markup"]) == ["fl:e:TSLA:0"]
     assert store.history(-100, 20)[0].text == "/events tsla"
 
 
@@ -107,7 +114,7 @@ async def test_a_button_edits_the_message_and_posts_nothing_more(env, store):
     assert sent.replies == [] and q.answered == [None]
     [edit] = q.edits
     assert edit["text"].startswith("<b>Tesla (TSLA) — Legal</b>") and edit["parse_mode"] == "HTML"
-    assert "Legal" not in [t for row in rows(edit["reply_markup"]) for t, _ in row]
+    assert shaded(edit["reply_markup"]) == ["fl:n:TSLA:5"]  # the section now shown
 
 
 async def test_a_section_too_long_for_one_message_is_shortened_by_the_model_and_remembered(env, store):
