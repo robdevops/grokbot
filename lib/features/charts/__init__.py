@@ -331,29 +331,45 @@ def summary(s: Series, pct: bool, note: str) -> str:
 
 
 class Charts:
-    """The photos made while answering one message; the handler sends them in one reply, the text as caption."""
+    """The charts made while answering one message; the handler sends them in one reply, the text as caption. The
+    model's calls run at the same time, so each takes its place when it starts: the order is the order asked for,
+    not the order the drawings finish in."""
 
     def __init__(self):
-        self.photos: list[tuple[bytes, str]] = []
-        self.calls: list[dict] = []  # the make_chart arguments behind each photo, to redraw it from
+        self.slots: list[dict] = []  # state: pending | done | failed
+
+    @property
+    def photos(self) -> list[tuple[bytes, str]]:
+        return [(s["image"], s["title"]) for s in self.slots if s["state"] == "done"]
+
+    @property
+    def calls(self) -> list[dict]:  # the make_chart arguments behind each photo, to redraw it from
+        return [s["args"] for s in self.slots if s["state"] == "done"]
+
+    def active(self) -> int:
+        return sum(1 for s in self.slots if s["state"] != "failed")
 
 
 def tool(ctx: Ctx, charts: Charts):
     """(definition, function) of make_chart, collecting the PNGs into `charts`."""
 
     async def make(args: dict) -> str:
-        if len(charts.photos) >= MAX_CHARTS:
+        if charts.active() >= MAX_CHARTS:
             return f"Error: at most {MAX_CHARTS} charts per reply."
+        slot = {"state": "pending"}  # taken before the first await, so in the order the calls were made
+        charts.slots.append(slot)
         began = time.monotonic()
         try:
             chart, lines = await build(ctx, args)
             image = await asyncio.to_thread(render.png, chart)
         except ChartError as e:
+            slot["state"] = "failed"
             return f"Error: {e}"
-        charts.photos.append((image, chart.title))
-        charts.calls.append(args)
+        slot.update(image=image, title=chart.title, args=args, state="done")
         log.debug("Chart %r: %d series in %.1f s", chart.title, len(chart.series), time.monotonic() - began)
-        return (f"Chart {len(charts.photos)} is ready. Your reply becomes its caption, so keep the reply under "
+        position = next(i for i, other in enumerate(charts.slots) if other is slot)  # not index(): equal charts match
+        number = sum(1 for other in charts.slots[:position + 1] if other["state"] != "failed")
+        return (f"Chart {number} is ready. Your reply becomes its caption, so keep the reply under "
                 f"{CAPTION_HINT} characters, and don't describe the chart or say you made one: say what it shows.\n"
                 + "\n".join(lines))
 

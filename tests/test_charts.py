@@ -707,3 +707,31 @@ async def test_buttons_for_charts_that_are_gone_say_so(env, store):
     q = callback(sent, "cp:1")
     await pages.on_page(ctx, N(callback_query=q), None)
     assert q.answers == ["These charts can't be shown any more."] and q.edits == []
+
+
+async def test_charts_keep_the_order_they_were_asked_for_whichever_finishes_drawing_first(env, store, monkeypatch):
+    drawn = []
+
+    def slow_first(chart):  # the first chart takes the longest to draw
+        import time
+        time.sleep(0.15 if chart.title == "first" else 0.0)
+        drawn.append(chart.title)
+        return b"\x89PNG fake"
+
+    monkeypatch.setattr(render, "png", slow_first)
+    made = charts.Charts()
+    _, make_chart = charts.tool(make(env, store), made)
+    one = lambda t: {"title": t, "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}  # noqa: E731
+    results = await asyncio.gather(make_chart(one("first")), make_chart(one("second")), make_chart(one("third")))
+    assert drawn[0] != "first" and [t for _, t in made.photos] == ["first", "second", "third"]
+    assert [r.split(" is ready")[0] for r in results] == ["Chart 1", "Chart 2", "Chart 3"]
+
+
+async def test_a_failed_chart_gives_up_its_place_and_its_number(env, store):
+    made = charts.Charts()
+    _, make_chart = charts.tool(make(env, store), made)
+    bad = {"title": "t", "series": [{"name": "a", "x": [1], "y": [1, 2]}]}
+    good = {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}
+    assert (await make_chart(bad)).startswith("Error: ")
+    assert [(await make_chart(good)).split(" is ready")[0] for _ in range(3)] == ["Chart 1", "Chart 2", "Chart 3"]
+    assert (await make_chart(good)) == "Error: at most 3 charts per reply."
