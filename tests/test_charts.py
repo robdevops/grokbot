@@ -606,3 +606,14 @@ def test_breakdown_and_segment_requests_offer_the_chart_tool_too():
         assert charts.wants_chart(text), text
     for text in ("how is NVDA doing?", "what does NVDA make", "any news on AMD"):
         assert not charts.wants_chart(text), text
+
+
+async def test_a_chart_request_ends_with_a_line_telling_the_model_to_draw_it(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("ok"), step("ok"), step("ok")],
+                               servers=(FakeMcp("yahoo", tools=("get_stock_quote",)),))
+    for mid, text in enumerate(("@stockbot NVDA revenue breakdown", "@stockbot chart NVDA", "@stockbot how is NVDA?"), 1):
+        await run(h, user_msg(ctx.bot, text, mid=mid))
+    pies, plain, none = (seen["prompt"] for seen in backend.seen)
+    assert "call make_chart with kind pie once for each grouping" in pies
+    assert "call make_chart rather than describing the numbers" in plain and "pie" not in plain.split("Group chat")[-1][-200:]
+    assert "make_chart" not in none

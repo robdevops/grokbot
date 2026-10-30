@@ -17,7 +17,7 @@ from ..ask import ask
 from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers, periods, post
 from ..features.charts import TOOL as CHART_TOOL
-from ..features.charts import Charts, wants_chart
+from ..features.charts import Charts, chart_hint, wants_chart
 from ..features.charts import buttons as chart_buttons
 from ..features.charts import tool as chart_tool
 from ..history import compact, format_rows
@@ -290,12 +290,14 @@ class Handlers:
                 extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
+            hint = ""
             if charts is not None and wants_chart(trig.text):
+                hint = chart_hint(trig.text)
                 extra.append(chart_tool(ctx, charts))
                 if chosen.simple:
                     chosen = Route([], False)
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)
-            parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]
+            parts = [{"type": "text", "text": await self._chat_text(msg, trig, middle=hint, fresh=fresh)}]
             parts += await self._images(msg, trig)
             answer = await ask(ctx, parts, chosen,
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,

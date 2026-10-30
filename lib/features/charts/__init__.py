@@ -95,6 +95,17 @@ def subtitle_for(specs: list[dict], series: list[Series], pct: bool) -> str:
     return ", ".join(filter(None, (head, date_range(min(times), max(times)) if times else "")))
 
 
+PIE_WORDS = re.compile(r"\b(pies?|donuts?|breakdowns?|break down|segments?)\b", re.I)
+
+
+def chart_hint(text: str) -> str:
+    """A line for the end of the prompt: offering make_chart isn't enough, some models answer in text anyway."""
+    if PIE_WORDS.search(text):
+        return ("\n\nThey want this drawn, not described: fetch the data (every grouping the source has: segments, "
+                "products or platforms, regions), then call make_chart with kind pie once for each grouping.")
+    return "\n\nThey want a chart: call make_chart rather than describing the numbers."
+
+
 def wants_chart(text: str) -> bool:
     """Does this message ask for a chart? Only then is the tool offered."""
     return bool(CHART_WORDS.search(text))
