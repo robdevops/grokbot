@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from telegram import InputMediaPhoto, LinkPreviewOptions, Message
+from telegram import LinkPreviewOptions, Message
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, TelegramError
 
@@ -42,6 +42,7 @@ async def reply_html(msg: Message, text: str, *, quote: bool = True, reply_marku
         if not is_parse_error(e):
             raise
         log.warning("Bad HTML from the model, sending as plain text: %s", e)
+        log.debug("The text that failed: %r", text[:600])
         return await msg.reply_text(
             plain_text(text), do_quote=quote, disable_notification=True,
             link_preview_options=NO_PREVIEW, reply_markup=reply_markup)
@@ -58,39 +59,34 @@ async def reply_chunks(msg: Message, html_text: str, store: Store, *, quote: boo
         await asyncio.to_thread(store.save, sent)
 
 
-async def reply_with_photos(msg: Message, photos: list[bytes], html_text: str, store: Store, *, quote: bool = True,
-                            markup=None, photo_markup=None) -> list:
-    """An answer with charts as one reply: the photo (an album for several) with the answer as its caption. Text
-    too long for a caption continues in text messages; if Telegram refuses the photos, the text goes alone.
-    `photo_markup` (buttons for a single photo) takes the photo's place for `markup`. Returns the photo messages."""
+async def reply_with_photo(msg: Message, photo: bytes, html_text: str, store: Store, *, quote: bool = True,
+                           markup=None, photo_markup=None) -> Message | None:
+    """An answer with a chart as one reply: the photo with the answer as its caption. Text too long for a caption
+    continues in text messages; if Telegram refuses the photo, the text goes alone. `photo_markup` (the chart's
+    buttons) takes the place of `markup` on the photo. Returns the photo message."""
     chunks = split_html(html_text, CAPTION_MAX) if html_text else [""]
     rest = "\n".join(chunks[1:])  # split_html cuts at newlines where it can
     try:
-        sent = await _send_photos(msg, photos, chunks[0], quote, photo_markup or (None if rest else markup))
+        sent = await _send_photo(msg, photo, chunks[0], quote, photo_markup or (None if rest else markup))
     except TelegramError as e:
         log.warning("Couldn't send the chart, replying with text only: %s", e)
         await reply_chunks(msg, html_text, store, quote=quote, last_markup=markup)
-        return []
-    for m in sent:
-        await asyncio.to_thread(store.save, m)
+        return None
+    await asyncio.to_thread(store.save, sent)
     if rest:
         await reply_chunks(msg, rest, store, quote=quote, last_markup=markup)
     return sent
 
 
-async def _send_photos(msg: Message, photos: list[bytes], caption: str, quote: bool, markup) -> list:
-    kw = {"do_quote": quote, "disable_notification": True}
+async def _send_photo(msg: Message, photo: bytes, caption: str, quote: bool, markup) -> Message:
+    kw = {"do_quote": quote, "disable_notification": True, "reply_markup": markup}
     for html_ok in (True, False):  # Telegram HTML, then plain text if it is rejected
         text = (caption if html_ok else plain_text(caption)) or None
-        mode = ParseMode.HTML if html_ok and text else None
         try:
-            if len(photos) == 1:
-                return [await msg.reply_photo(photos[0], caption=text, parse_mode=mode, reply_markup=markup, **kw)]
-            media = [InputMediaPhoto(p, caption=text, parse_mode=mode) if i == 0 else InputMediaPhoto(p)
-                     for i, p in enumerate(photos)]
-            return list(await msg.reply_media_group(media, **kw))  # an album can't carry a keyboard
+            return await msg.reply_photo(photo, caption=text, parse_mode=ParseMode.HTML if html_ok and text else None, **kw)
         except BadRequest as e:
             if not html_ok or not is_parse_error(e):
                 raise
             log.warning("Bad HTML from the model, sending the caption as plain text: %s", e)
-    return []
+            log.debug("The caption that failed: %r", text[:600])
+    raise RuntimeError("unreachable")

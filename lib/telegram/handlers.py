@@ -16,20 +16,22 @@ from .. import config
 from ..ask import ask
 from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers, periods, post
-from ..features.charts import Charts, wants_chart
+from ..features.charts import TOOL as CHART_TOOL
+from ..features.charts import Charts, asks_pie, chart_hint, wants_chart
 from ..features.charts import buttons as chart_buttons
+from ..features.charts import pages as chart_pages
 from ..features.charts import tool as chart_tool
 from ..history import compact, format_rows
 from ..llm.base import BUSY_REPLY, is_busy
-from ..llm.gate import Route, is_portfolio_question, route
+from ..llm.gate import Route, asks_tools, is_portfolio_question, route
 from ..msgtext import describe, sender_name
-from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, chat_prompt, down_note
+from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, capabilities_note, chat_prompt, down_note
 from ..store import is_dm
 from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
 from .access import is_admin
 from .draft import Draft, start_typing
-from .send import reply_chunks, reply_html, reply_with_photos
+from .send import reply_chunks, reply_html, reply_with_photo
 
 log = logging.getLogger("bot")
 NO_RESPONSE = "(no response)"
@@ -230,15 +232,33 @@ class Handlers:
                 typing.cancel()
         markup = dm_buttons.keyboard() if trig.private and st.dm_buttons else None
         if charts.photos:  # one reply: the chart with the answer as its caption
-            call = charts.calls[0] if len(charts.calls) == 1 and chart_buttons.redrawable(charts.calls[0]) else None
-            sent = await reply_with_photos(
-                msg, [image for image, _ in charts.photos], "" if html_text == NO_RESPONSE else html_text,
-                ctx.store, quote=not trig.private, markup=markup,
-                photo_markup=chart_buttons.keyboard(chart_buttons.period_of(call)) if call else None)
-            if call and sent:
-                await chart_buttons.remember(ctx, sent[0], call)
+            several = len(charts.photos) > 1  # one image with a button for each chart, not an album
+            call = charts.calls[0] if not several and chart_buttons.redrawable(charts.calls[0]) else None
+            labels = chart_pages.labels_for([title for _, title in charts.photos]) if several else []
+            photo_markup = (chart_pages.keyboard(labels, 0) if several
+                            else chart_buttons.keyboard(chart_buttons.period_of(call)) if call else None)
+            sent = await reply_with_photo(
+                msg, charts.photos[0][0], "" if html_text == NO_RESPONSE else html_text,
+                ctx.store, quote=not trig.private, markup=markup, photo_markup=photo_markup)
+            if sent and several:
+                await chart_pages.remember(ctx, sent, charts.calls, [image for image, _ in charts.photos], labels)
+            elif sent and call:
+                await chart_buttons.remember(ctx, sent, call)
         else:
             await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
+
+    async def _answer_tools(self, msg: Message, trig: Trigger, admin: bool, draft: Draft | None) -> str:
+        """"What tools do you have?": the prompt carries the full list of what this person may use, and no tool is
+        offered, so the model reports its tools instead of guessing at them."""
+        ctx, st = self.ctx, self.ctx.st
+        servers = [s for s in ctx.registry.up() if admin or s.cfg.get("gate") != "portfolio"]
+        extras = ([periods.TOOL] if admin and any(s.cfg.get("gate") == "portfolio" for s in servers) else [])
+        extras += [CHART_TOOL] + ([post.TOOL] if st.post_to_groups else [])
+        note = capabilities_note(servers, extras, ctx.backend.search_what if st.search else None)
+        parts = [{"type": "text", "text": await self._chat_text(msg, trig, middle=note)}]
+        answer = await ask(ctx, parts, Route([], st.search), cache_key=f"chat-{msg.chat_id}",
+                           on_text=draft.update if draft else None, chat_id=msg.chat_id, admin=admin)
+        return format_answer(answer.text, movers_bots=st.movers_bots, summary=False)
 
     async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None, charts: Charts | None = None) -> str:
         ctx, st = self.ctx, self.ctx.st
@@ -267,6 +287,8 @@ class Handlers:
             if not admin and is_portfolio_question(context, st) and any(
                     s.cfg.get("gate") == "portfolio" for s in ctx.registry.up()):
                 return PORTFOLIO_ADMINS_ONLY
+            if asks_tools(trig.text):  # answered from the list of tools, with none offered
+                return await self._answer_tools(msg, trig, admin, draft)
             extra = []
             if admin and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers):
                 extra.append(periods.tool(ctx))
@@ -274,12 +296,15 @@ class Handlers:
                 extra = [post.tool(ctx, msg.from_user.id, msg.from_user.full_name or "")]
                 if chosen.simple:  # the model must not be told it has no tools
                     chosen = Route([], False)
+            hint = ""
             if charts is not None and wants_chart(trig.text):
+                hint = chart_hint(trig.text)
+                charts.prefer_pie = asks_pie(trig.text)
                 extra.append(chart_tool(ctx, charts))
                 if chosen.simple:
                     chosen = Route([], False)
             fresh = is_portfolio_question(context, st) and any(s.cfg.get("gate") == "portfolio" for s in chosen.servers)
-            parts = [{"type": "text", "text": await self._chat_text(msg, trig, fresh=fresh)}]
+            parts = [{"type": "text", "text": await self._chat_text(msg, trig, middle=hint, fresh=fresh)}]
             parts += await self._images(msg, trig)
             answer = await ask(ctx, parts, chosen,
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,

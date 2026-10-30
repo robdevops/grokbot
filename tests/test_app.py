@@ -34,11 +34,13 @@ def test_handlers_follow_the_flags(env, store):
         return app.build_app(Ctx(st, store, ScriptedBackend([]), registry())), st
 
     plain, st = build()
-    assert handler_kinds(plain) == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler"]
+    assert handler_kinds(plain) == ["CommandHandler", "CommandHandler", "MessageHandler",
+                                    "CallbackQueryHandler", "CallbackQueryHandler"]  # chart periods and charts
     assert app.allowed_updates(st) == ["message", "edited_message", "callback_query"]  # chart buttons
     full, st = build(ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
     kinds = handler_kinds(full)
-    assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler", "CallbackQueryHandler"]
+    assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler",
+                     "CallbackQueryHandler", "CallbackQueryHandler"]
     assert "callback_query" in app.allowed_updates(st)
     assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits", "flushcache"}
     assert any(isinstance(h, MessageHandler) for h in full.handlers[0])

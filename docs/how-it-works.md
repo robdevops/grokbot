@@ -25,6 +25,10 @@
   model to read it (read, text, chart, table, screenshot...).
 - **Charts:** asked for a chart, graph or plot, the model can draw one and it is sent as a photo with the reply
   (see [Charts](features.md#charts)).
+- **"What tools do you have?":** a message like "what tools do you have", "list your capabilities" or "what can you
+  do" is answered from the actual tool list (about 400 tokens in the prompt, no tool offered): the data sources and
+  their tools, web search, charts, and the other local tools. Tools the asker may not use (Sharesight for a
+  non-admin, posting to groups when it is off) are left out.
 - **Time:** the current date and time (in `BOT_TZ`) is included in every prompt.
 - **Replies are final:** the prompt tells the model never to say it will "check later"; it makes its
   tool calls first (several at once) and answers in one go.

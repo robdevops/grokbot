@@ -30,6 +30,7 @@ from . import config
 from .context import Ctx
 from .features import dm_buttons, holding_news, post
 from .features.charts import buttons as chart_buttons
+from .features.charts import pages as chart_pages
 from .features.periods import backfill
 from .features.periods.windows import describe_scope, flush_scope
 from .llm.base import Backend
@@ -186,6 +187,7 @@ def build_app(ctx: Ctx) -> Application:
         & (filters.UpdateType.MESSAGE | filters.UpdateType.EDITED_MESSAGE)
         & ~filters.StatusUpdate.ALL, handlers.on_message))
     app.add_handler(CallbackQueryHandler(command(chart_buttons.on_button), pattern=r"^ch:"))  # chart periods
+    app.add_handler(CallbackQueryHandler(command(chart_pages.on_page), pattern=r"^cp:"))  # which of several charts
     if st.holding_news:  # the Unsubscribe / Undo buttons on holding-news messages
         app.add_handler(CallbackQueryHandler(command(holding_news.on_button), pattern=r"^hn:"))
     if st.post_to_groups or st.admin_only:  # keeps the list of groups the bot is in

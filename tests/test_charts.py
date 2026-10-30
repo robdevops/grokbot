@@ -10,17 +10,21 @@ import pytest
 from lib import config
 from lib.context import Ctx
 from lib.features import charts
-from lib.features.charts import buttons, render
+from lib.features.charts import buttons, pages, render
 from lib.features.charts.render import Chart, Series
 
 from .conftest import FakeBot, user_msg
 from .fakes import FakeMcp, ScriptedBackend, registry, step
 from .test_handlers import make_ctx, run
 
+REAL_PNG = render.png  # the real renderer, for the few tests that look at the picture
+
 
 @pytest.fixture(autouse=True)
-def matplotlib_cache(tmp_path, monkeypatch):
-    monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / "mpl"))
+def fast_png(monkeypatch):
+    """Most tests need a picture to exist, not to be drawn: a PNG header stands in (drawing takes ~0.15 s each, and
+    the suite makes dozens). The tests that check drawing call REAL_PNG, and the figure tests build real figures."""
+    monkeypatch.setattr(render, "png", lambda chart: b"\x89PNG\r\n\x1a\nfake")
 
 
 def history_json(closes, start=1, truncated=False):
@@ -56,7 +60,7 @@ def test_one_axis_bars_and_labels():
     fig = render.figure(chart)
     assert len(fig.axes) == 1 and len(fig.axes[0].patches) == 4
     assert [t.get_text() for t in fig.axes[0].get_xticklabels()] == ["Jan", "Feb"]
-    assert render.png(chart).startswith(b"\x89PNG\r\n\x1a\n")
+    assert REAL_PNG(chart).startswith(b"\x89PNG\r\n\x1a\n") and len(REAL_PNG(chart)) > 5000
 
 
 def test_tick_labels_share_their_decimals_and_shorten_big_numbers():
@@ -214,7 +218,7 @@ async def test_percent_change_rebases_and_puts_percent_on_the_ticks(env, store):
 
 
 @pytest.mark.parametrize("args, error", [
-    ({"series": [{"name": "a", "x": [1], "y": [1]}]}, "give a title"),
+    ({"series": [{"name": "a", "x": [1], "y": [1]}]}, "give the chart a title"),
     ({"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1]}]}, "x and y lists of the same length"),
     ({"title": "t", "series": [{"name": "a", "x": [1], "y": ["high"]}]}, "y values must be numbers"),
     ({"title": "t", "series": [{"name": "a", "x": [1], "y": [1], "axis": "top"}]}, "axis is left or right"),
@@ -261,17 +265,6 @@ async def test_a_chart_request_gets_one_reply_the_photo_with_the_answer_as_capti
     assert reply["photo"].startswith(b"\x89PNG") and reply["caption"] == "Up <b>20%</b>."
     assert reply["parse_mode"] == "HTML" and reply["do_quote"] is True
     assert store.history(-100, 20)[-1].text == "[photo] Up <b>20%</b>."
-
-
-async def test_several_charts_go_as_one_album_captioned_once(env, store):
-    call = [("1", "make_chart", json.dumps({"title": "a", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]})),
-            ("2", "make_chart", json.dumps({"title": "b", "series": [{"name": "b", "x": [1, 2], "y": [2, 1]}]}))]
-    ctx, _, h = make_ctx(env, store, [step(calls=call, finish="tool_calls"), step("Both.")])
-    m = user_msg(ctx.bot, "@stockbot plot a and b")
-    await run(h, m)
-    [reply] = m.replies
-    assert [caption for _, caption in reply["album"]] == ["Both.", None] and reply["do_quote"] is True
-    assert [r.text for r in store.history(-100, 20)][-2:] == ["[photo] Both.", "[photo]"]
 
 
 async def test_an_answer_too_long_for_a_caption_continues_in_a_text_message(env, store):
@@ -326,7 +319,7 @@ async def test_a_chart_that_telegram_rejects_still_lets_the_text_through(env, st
     assert [r["text"] for r in m.replies] == ["Here."]
 
 
-def callback(sent, data):
+def callback(sent, data, edited_photo=None):
     """A tap on a button under `sent`, recording the answer and the edit."""
     from types import SimpleNamespace as N
     q = N(message=sent, data=data, answers=[], edits=[])
@@ -336,6 +329,9 @@ def callback(sent, data):
 
     async def edit_message_media(media, **kw):
         q.edits.append({"media": media, **kw})
+        if edited_photo:
+            from .conftest import make_msg
+            return make_msg(1, None, photo=[N(file_id=edited_photo)])
 
     q.answer, q.edit_message_media = answer, edit_message_media
     return q
@@ -544,3 +540,278 @@ async def test_a_total_that_is_not_a_figure_is_dropped_and_computed_ones_win(env
         {"name": "Fund", "x": ["2026-01-01", "2026-01-02"], "y": [5, 6], "total": "Fund"},
         {"name": "Fund 2", "x": ["2026-01-01", "2026-01-02"], "y": [5, 6], "total": "+12.4%"}]})
     assert [s.total for s in chart.series] == ["+20.0%", "+20.0%", "", "+12.4%"]
+
+
+def pie(name, labels, values, **kw):
+    return {"name": name, "kind": "pie", "x": labels, "y": values, **kw}
+
+
+def test_pie_slices_are_biggest_first_with_gaps_dropped_and_the_smallest_added_up():
+    s = Series("p", ["a", "b", "c", "d"], [1.0, 3.0, math.nan, -2.0], kind="pie")
+    assert render.pie_slices(s) == [("b", 3.0), ("a", 1.0)]
+    many = Series("p", [str(i) for i in range(12)], [float(i + 1) for i in range(12)], kind="pie")
+    slices = render.pie_slices(many)
+    assert len(slices) == render.PIE_SLICES
+    assert slices[0] == ("11", 12.0) and slices[-1][0] == "Other" and sum(y for _, y in slices) == sum(range(1, 13))
+    assert [render.share(p, 100.0) for p in (62.43, 0.01, 100.0)] == ["62.4%", "<0.1%", "100.0%"]
+
+
+def test_a_pie_is_a_donut_with_a_legend_of_shares_and_the_total_in_the_middle():
+    chart = Chart("Revenue", [Series("p", ["US", "Taiwan"], [75.0, 25.0], kind="pie", total="$100B")],
+                  subtitle="Share of total")
+    fig = render.figure(chart)
+    assert len(fig.axes[0].patches) == 2 and [t.get_text() for t in fig.axes[0].texts if t.get_text()] == ["$100B"]
+    assert [t.get_text() for t in fig.legends[0].get_texts()] == ["US  75.0%", "Taiwan  25.0%"]
+    assert REAL_PNG(chart).startswith(b"\x89PNG")
+    assert REAL_PNG(replace(chart, dark=True)).startswith(b"\x89PNG")
+
+
+async def test_a_pie_call_takes_slices_names_and_shares_for_the_model(env, store):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "t", "series": [pie("Revenue", ["Compute", "Graphics"], [88299, 7922])]})
+    assert out.startswith("Chart 1 is ready") and "Revenue (pie, 2 slices, total 96,221): Compute 91.8%, Graphics 8.2%" in out
+    chart, _ = await charts.build(make(env, store), {"title": "t", "series": [pie("R", [2024, 2025], [1, 3])]})
+    assert chart.series[0].x == ["2024", "2025"] and chart.subtitle == "Share of total" and not chart.labels
+
+
+@pytest.mark.parametrize("series, error", [
+    ([pie("a", ["x"], [1]), pie("b", ["y"], [1])], "a pie chart is one series"),
+    ([{"name": "a", "kind": "pie", "ticker": "NVDA"}], "a pie chart is one series"),
+    ([pie("a", ["x", "y"], [0, -1])], "at least one value above zero"),
+])
+async def test_a_pie_is_one_series_of_values_above_zero(env, store, series, error):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "t", "series": series})
+    assert out.startswith("Error: ") and error in out
+
+
+def test_breakdown_and_segment_requests_offer_the_chart_tool_too():
+    for text in ("segment breakdown NVDA", "NVDA revenue segments", "break down NVDA revenue", "show a pie of it",
+                 "plot this", "give me the breakdown by region"):
+        assert charts.wants_chart(text), text
+    for text in ("how is NVDA doing?", "what does NVDA make", "any news on AMD"):
+        assert not charts.wants_chart(text), text
+
+
+async def test_a_chart_request_ends_with_a_line_telling_the_model_to_draw_it(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("ok"), step("ok"), step("ok")],
+                               servers=(FakeMcp("yahoo", tools=("get_stock_quote",)),))
+    for mid, text in enumerate(("@stockbot NVDA revenue breakdown", "@stockbot chart NVDA", "@stockbot how is NVDA?"), 1):
+        await run(h, user_msg(ctx.bot, text, mid=mid))
+    pies, plain, none = (seen["prompt"] for seen in backend.seen)
+    assert "call make_chart with kind pie once for each grouping" in pies
+    assert "call make_chart rather than describing the numbers" in plain and "pie" not in plain.split("Group chat")[-1][-200:]
+    assert "make_chart" not in none
+
+
+def test_the_model_is_told_to_use_the_finest_split_of_a_pie():
+    assert "use the sub-lines, the finest split, not the subtotal" in charts.TOOL.description
+    assert "finest split with no overlaps" in charts.chart_hint("NVDA revenue breakdown")
+
+
+def test_a_subtotal_drawn_beside_its_parts_is_found_by_its_sum_and_its_name():
+    both = [("Data Center", 89023.0), ("Data Center - Hyperscale", 48710.0),
+            ("Data Center - AI Clouds, Industrial, & Enterprise", 40313.0), ("Edge Computing", 7198.0)]
+    assert charts.subtotal_in(both) == ("Data Center", ["Data Center - Hyperscale",
+                                                         "Data Center - AI Clouds, Industrial, & Enterprise"])
+    assert charts.subtotal_in(both[1:]) is None  # the sub-lines and Edge
+    assert charts.subtotal_in([both[0], both[3]]) is None  # the subtotal and Edge
+    assert charts.subtotal_in([("A", 20.0), ("B", 10.0), ("C", 10.0)]) is None  # a coincidence: no name in common
+    assert charts.subtotal_in([(f"s{i}", 1.0) for i in range(20)]) is None  # too many to search
+
+
+async def test_a_pie_with_a_subtotal_and_its_parts_is_refused_with_the_fix(env, store):
+    names = ["Data Center", "Data Center - Hyperscale", "Data Center - AI Clouds", "Edge Computing"]
+    made = charts.Charts()
+    _, make_chart = charts.tool(make(env, store), made)
+    out = await make_chart({"title": "t", "series": [pie("p", names, [89.023, 48.710, 40.313, 7.198])]})
+    assert out.startswith("Error: Data Center is a subtotal of Data Center - Hyperscale + Data Center - AI Clouds")
+    assert "Draw the sub-lines without Data Center" in out and made.photos == []
+    ok = await make_chart({"title": "t", "series": [pie("p", names[1:], [48.710, 40.313, 7.198])]})
+    assert ok.startswith("Chart 1 is ready") and "Edge Computing 7.5%" in ok
+
+
+def test_button_labels_are_the_key_word_of_what_differs_in_each_title():
+    labels = pages.labels_for
+    assert labels(["NVDA Q2 FY2027 Revenue by Reportable Segments", "NVDA Q2 FY2027 Revenue by Market Platform (finest)",
+                   "NVDA Q2 FY2027 Revenue by Customer Headquarters"]) == ["Segments", "Platform", "Headquarters"]
+    assert labels(["NVDA price", "AMD price"]) == ["NVDA", "AMD"]
+    assert labels(["Sales by US state", "Sales by EU state"]) == ["US", "EU"]  # the words they share are dropped
+    assert labels(["Same", "Same"]) == ["Chart 1", "Chart 2"]  # nothing differs
+    assert labels(["A", "A B"]) == ["Chart 1", "Chart 2"]  # one title is the other's prefix
+    assert labels(["Revenue by Intergovernmental", "Revenue by Segment"]) == ["Intergovernm…", "Segment"]
+
+
+PIE_CALLS = [("1", "make_chart", json.dumps({"title": f"NVDA revenue by {n}", "series": [pie(n, ["a", "b"], [3, 1])]}))
+             for n in ("segment", "platform", "region")]
+
+
+async def test_several_charts_are_one_image_with_a_button_for_each_not_an_album(env, store):
+    ctx, backend, h = make_ctx({**env, **PRELOAD}, store, [step(calls=PIE_CALLS, finish="tool_calls"), step("Mostly a.")])
+    m = user_msg(ctx.bot, "@stockbot show NVDA revenue as pies")
+    await run(h, m)
+    await settle_pages()
+    assert backend.seen[0]["tools"] == ["make_chart"]
+    [reply] = m.replies
+    assert reply["photo"].startswith(b"\x89PNG") and reply["caption"] == "Mostly a." and "album" not in reply
+    assert [(b.text, b.callback_data) for b in reply["reply_markup"].inline_keyboard[0]] == [
+        ("Segment", "cp:0"), ("Platform", "cp:1"), ("Region", "cp:2")]
+    assert shaded(reply["reply_markup"]) == ["cp:0"]
+    assert store.history(-100, 20)[-1].text == "[photo] Mostly a."
+    assert [p["caption"] for p in ctx.bot.photos] == ["Platform", "Region"] and ctx.bot.photos[0]["chat_id"] == -900
+
+
+async def settle_pages():
+    for _ in range(50):
+        await asyncio.sleep(0)
+    await asyncio.gather(*list(pages._tasks))
+
+
+async def test_a_button_shows_that_chart_in_place_from_its_upload_or_drawn_once_and_remembered(env, store):
+    ctx, _, h = make_ctx({**env, **PRELOAD}, store, [step(calls=PIE_CALLS, finish="tool_calls"), step("Mostly a.")])
+    await run(h, user_msg(ctx.bot, "@stockbot show NVDA revenue as pies"))
+    await settle_pages()
+    sent = ctx.bot._msg(-100, None)
+    sent.message_id = 1001
+    q = callback(sent, "cp:1")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    [edit] = q.edits
+    assert edit["media"].media == "file-1" and edit["media"].caption == "Mostly a."  # the upload, the answer kept
+    assert shaded(edit["reply_markup"]) == ["cp:1"] and store.chart_get(-100, 1001)[2] == "#1"
+    q = callback(sent, "cp:1")  # already shown
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.edits == [] and q.answers == [None]
+    q = callback(sent, "cp:0")  # the picture first sent
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.edits[0]["media"].media == "sent"
+
+
+async def test_without_the_preload_chat_a_chart_is_drawn_on_the_first_tap_then_reused(env, store):
+    ctx, _, h = make_ctx(env, store, [step(calls=PIE_CALLS, finish="tool_calls"), step("Mostly a.")])
+    await run(h, user_msg(ctx.bot, "@stockbot show NVDA revenue as pies"))
+    assert ctx.bot.photos == []
+    sent = ctx.bot._msg(-100, None)
+    sent.message_id = 1001
+    q = callback(sent, "cp:2", edited_photo="edited-2")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.edits[0]["media"].media.input_file_content.startswith(b"\x89PNG")  # drawn from its call
+    q = callback(sent, "cp:0")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    q = callback(sent, "cp:2")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.edits[0]["media"].media == "edited-2"  # now an upload
+
+
+async def test_buttons_for_charts_that_are_gone_say_so(env, store):
+    ctx, _, _ = make_ctx(env, store, [])
+    sent = ctx.bot._msg(-100, None)
+    q = callback(sent, "cp:1")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.answers == ["These charts can't be shown any more."] and q.edits == []
+
+
+async def test_charts_keep_the_order_they_were_asked_for_whichever_finishes_drawing_first(env, store, monkeypatch):
+    drawn = []
+
+    def slow_first(chart):  # the first chart takes the longest to draw
+        import time
+        time.sleep(0.15 if chart.title == "first" else 0.0)
+        drawn.append(chart.title)
+        return b"\x89PNG fake"
+
+    monkeypatch.setattr(render, "png", slow_first)
+    made = charts.Charts()
+    _, make_chart = charts.tool(make(env, store), made)
+    one = lambda t: {"title": t, "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}  # noqa: E731
+    results = await asyncio.gather(make_chart(one("first")), make_chart(one("second")), make_chart(one("third")))
+    assert drawn[0] != "first" and [t for _, t in made.photos] == ["first", "second", "third"]
+    assert [r.split(" is ready")[0] for r in results] == ["Chart 1", "Chart 2", "Chart 3"]
+
+
+async def test_a_failed_chart_gives_up_its_place_and_its_number(env, store):
+    made = charts.Charts()
+    _, make_chart = charts.tool(make(env, store), made)
+    bad = {"title": "t", "series": [{"name": "a", "x": [1], "y": [1, 2]}]}
+    good = {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}
+    assert (await make_chart(bad)).startswith("Error: ")
+    assert [(await make_chart(good)).split(" is ready")[0] for _ in range(3)] == ["Chart 1", "Chart 2", "Chart 3"]
+    assert (await make_chart(good)) == "Error: at most 3 charts per reply."
+
+
+def test_a_breakdown_of_names_and_values_drawn_as_the_default_line_becomes_a_pie():
+    line = {"title": "t", "series": [{"name": "p", "x": ["Compute", "Graphics"], "y": [88, 8]}]}
+    pie_of = lambda args, prefer=True: charts.pie_default(args, prefer)["series"][0].get("kind")  # noqa: E731
+    assert pie_of(line) == "pie"
+    assert pie_of(line, prefer=False) is None  # not asked for a breakdown
+    assert pie_of({**line, "series": [{**line["series"][0], "kind": "line"}]}) == "pie"
+    assert pie_of({**line, "series": [{**line["series"][0], "kind": "bar"}]}) == "bar"  # the model's own choice
+    assert pie_of({**line, "series": [{**line["series"][0], "x": ["2024-01-01", "2024-02-01"]}]}) is None  # dates
+    assert pie_of({**line, "series": [{**line["series"][0], "x": [2024, 2025]}]}) is None  # numbers
+    assert pie_of({**line, "series": [{"name": "p", "ticker": "NVDA"}]}) is None
+    two = {**line, "series": line["series"] * 2}
+    assert charts.pie_default(two, True) is two
+
+
+async def test_asked_for_a_breakdown_a_line_of_names_and_values_is_drawn_as_a_donut(env, store):
+    call = {"title": "By platform", "series": [{"name": "Platform", "x": ["Hyperscale", "AI Clouds", "Edge"],
+                                                "y": [48.7, 40.3, 7.2]}]}
+    ctx, backend, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(call))], finish="tool_calls"),
+                                           step("ok")])
+    await run(h, user_msg(ctx.bot, "@stockbot NVDA revenue breakdown"))
+    assert "(pie, 3 slices" in backend.results_log[0][0]  # drawn as a pie, though the model left the kind out
+    ctx, backend, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(call))], finish="tool_calls"),
+                                           step("ok")])
+    await run(h, user_msg(ctx.bot, "@stockbot chart NVDA revenue", mid=2))
+    assert "(pie" not in backend.results_log[0][0]  # not a breakdown request: the model's line stays
+
+
+def test_a_breakdown_drawn_as_one_series_per_slice_is_one_pie():
+    dots = {"title": "NVDA revenue by segment", "series": [
+        {"name": "Compute & Networking", "x": ["Compute & Networking"], "y": [88.3]},
+        {"name": "Graphics", "x": ["Graphics"], "y": [7.9], "kind": "pie"}]}
+    [merged] = charts.pie_default(dots, True)["series"]
+    assert merged["kind"] == "pie" and merged["x"] == ["Compute & Networking", "Graphics"] and merged["y"] == [88.3, 7.9]
+    assert charts.pie_default(dots, False) is dots  # not a breakdown request
+    many = {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}, {"name": "b", "x": [1, 2], "y": [1, 2]}]}
+    assert charts.pie_default(many, True) is many  # series of several points are lines
+    bars = {"title": "t", "series": [{"name": "a", "x": ["q"], "y": [1], "kind": "bar"}, {"name": "b", "x": ["q"], "y": [2]}]}
+    assert charts.pie_default(bars, True) is bars  # a kind the model chose
+
+
+async def test_asked_for_a_breakdown_dots_named_at_their_ends_become_a_donut(env, store):
+    call = {"title": "By segment", "series": [{"name": "Compute", "x": ["Compute"], "y": [88.3]},
+                                              {"name": "Graphics", "x": ["Graphics"], "y": [7.9]}]}
+    ctx, backend, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(call))], finish="tool_calls"),
+                                           step("ok")])
+    await run(h, user_msg(ctx.bot, "@stockbot NVDA revenue breakdown"))
+    assert "(pie, 2 slices, total 96.2): Compute 91.8%, Graphics 8.2%" in backend.results_log[0][0]
+
+
+async def test_series_sent_as_a_json_string_is_read(env, store):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "Split", "series": '[{"name": "S", "kind": "pie", "x": ["A", "B"], "y": [1, 2]}]'})
+    assert out.startswith("Chart 1 is ready")
+
+
+async def test_series_that_is_not_a_list_of_objects_says_how_it_should_look(env, store):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "Split", "series": "not json at all"})
+    assert out.startswith("Error: series must be a list of objects")
+
+
+async def test_one_series_object_with_x_values_and_y_values_is_a_pie(env, store):
+    _, make_chart = charts.tool(make(env, store), charts.Charts())
+    out = await make_chart({"title": "Split", "series": {"name": "S", "kind": "pie", "x_values": ["A", "B"],
+                                                         "y_values": [1, 2], "x_values2": None}})
+    assert out.startswith("Chart 1 is ready")
+
+
+@pytest.mark.parametrize("title, expected", [
+    ("Tesla revenue by product line ($B)", "$28.1B"),
+    ("Revenue (€ million)", "€28.1M"),
+    ("Revenue by segment", ""),
+])
+async def test_a_pie_shows_its_sum_in_the_middle_in_the_titles_unit(env, store, title, expected):
+    spec = {"name": "S", "kind": "pie", "x": ["A", "B"], "y": [20.094, 8.0]}
+    chart, _ = await charts.build(make(env, store), {"title": title, "series": [spec]})
+    assert chart.series[0].total == expected

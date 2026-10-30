@@ -4,6 +4,7 @@ Series are values the model passes, or a ticker whose price history the bot fetc
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import logging
 import math
@@ -18,7 +19,7 @@ from .render import KINDS, Chart, Series
 
 log = logging.getLogger("bot")
 
-CHART_WORDS = re.compile(r"\b(charts?|charting|graphs?|plot|plots|plotting|visuali[sz]e)\b", re.I)
+CHART_WORDS = re.compile(r"\b(charts?|charting|graphs?|plot|plots|plotting|pies?|donuts?|visuali[sz]e|breakdowns?|break down|segments?)\b", re.I)
 PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max")
 # Yahoo's server returns at most ~90 rows in one call, so each period gets an interval that fits.
 DEFAULT_INTERVAL = {"1d": "5m", "5d": "30m", "1mo": "1d", "3mo": "1d", "6mo": "1wk", "1y": "1wk",
@@ -31,11 +32,15 @@ HISTORY_TOOL = "get_historical_prices"
 
 TOOL = ToolDef(
     "make_chart",
-    "Draw a chart, sent as a photo with your reply; use it when asked for a chart, graph or plot. Series go on the "
+    "Draw a chart, sent as a photo with your reply; use it when asked for a chart, graph, plot, breakdown or segments. Series go on the "
     "left or right y axis (different scales on different axes); invert an axis when asked or to show an inverse "
     "relationship. A series is a ticker (any Yahoo symbol: NVDA, CBA.AX, ^GSPC, AUDUSD=X, GC=F, BTC-USD), whose "
-    "price history is fetched for you, or x/y values from tool results or the chat, never invented. Then comment "
-    "on what it shows; don't describe the chart.",
+    "price history is fetched for you, or x/y values from tool results or the chat, never invented. For a share-of-"
+    "total breakdown (revenue by segment or region; also whenever a breakdown or the segments are asked for) use kind pie: one series per chart, x the slice names and y their "
+    "values, parts of one whole only: never a subtotal beside its parts, and where a line is split into sub-lines "
+    "(Data Center into Hyperscale and AI Clouds) use the sub-lines, the finest split, not the subtotal. A source that returns several groupings "
+    "(segments, products or platforms, regions) gets one pie for every grouping, not just the first: ask it for all "
+    "of them, call this once per grouping, and the charts go out as one image with a button for each. Then comment on what it shows; don't describe the chart.",
     {"type": "object", "required": ["title", "series"], "properties": {
         "title": {"type": "string"},
         "series": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {
@@ -90,6 +95,78 @@ def subtitle_for(specs: list[dict], series: list[Series], pct: bool) -> str:
         head = "% change"
     times = [x for s in series for x in s.x if isinstance(x, datetime)]
     return ", ".join(filter(None, (head, date_range(min(times), max(times)) if times else "")))
+
+
+PIE_WORDS = re.compile(r"\b(pies?|donuts?|breakdowns?|break down|segments?)\b", re.I)
+
+
+def asks_pie(text: str) -> bool:
+    return bool(PIE_WORDS.search(text))
+
+
+ALIASES = {"x_values": "x", "labels": "x", "names": "x", "categories": "x",
+           "y_values": "y", "values": "y", "data": "y"}  # what models call a series' x and y when they forget
+
+
+def unquote_series(args: dict) -> dict:
+    """Weaker models send `series` as a string holding the JSON, or as one object instead of a list, and
+    name x and y something else: read all of those."""
+    specs = args.get("series")
+    if isinstance(specs, str):
+        try:
+            specs = json.loads(specs)
+        except ValueError:
+            return args
+    if isinstance(specs, dict):
+        specs = [specs]
+    if not isinstance(specs, list):
+        return args
+    fixed = []
+    for spec in specs:
+        if isinstance(spec, dict):
+            spec = {ALIASES.get(k, k): v for k, v in spec.items() if v is not None}
+        fixed.append(spec)
+    return {**args, "series": fixed}
+
+
+def pie_default(args: dict, prefer_pie: bool) -> dict:
+    """A breakdown was asked for, and the model drew one series of names and values as the default line chart: that
+    is a pie. A kind it chose itself (bar, scatter, pie) stays."""
+    specs = args.get("series")
+    if not (prefer_pie and isinstance(specs, list) and specs and all(isinstance(s, dict) for s in specs)):
+        return args
+    if len(specs) > 1:
+        return one_slice_per_series(args, specs)
+    spec = specs[0]
+    x = spec.get("x")
+    if (spec.get("kind") in (None, "", "line") and not spec.get("ticker") and isinstance(x, list) and x
+            and all(as_date(v) is None and as_number(v) is None for v in x)):
+        return {**args, "series": [{**spec, "kind": "pie"}]}
+    return args
+
+
+def one_slice_per_series(args: dict, specs: list[dict]) -> dict:
+    """The model drew each slice as a series of its own, one point each (a line chart of dots, named at their ends):
+    several series that each hold one value, with no kind but line or pie, are the slices of one pie."""
+    points = []
+    for spec in specs:
+        x, y = spec.get("x"), spec.get("y")
+        if (spec.get("kind") not in (None, "", "line", "pie") or spec.get("ticker") or not isinstance(x, list)
+                or not isinstance(y, list) or len(x) != 1 or len(y) != 1 or as_number(y[0]) is None):
+            return args
+        points.append((str(spec.get("name") or x[0]).strip(), y[0]))
+    return {**args, "series": [{"name": "Share", "kind": "pie", "x": [n for n, _ in points],
+                                "y": [v for _, v in points]}]}
+
+
+def chart_hint(text: str) -> str:
+    """A line for the end of the prompt: offering make_chart isn't enough, some models answer in text anyway."""
+    if PIE_WORDS.search(text):
+        return ("\n\nThey want this drawn, not described: fetch the data (every grouping the source has: segments, "
+                "products or platforms, regions), then call make_chart with kind pie once for each grouping, using the "
+                "finest split with no overlaps (a line's sub-lines, not their subtotal). Each pie is one series whose x are "
+                "the slice names and y their values, not a series per slice.")
+    return "\n\nThey want a chart: call make_chart rather than describing the numbers."
 
 
 def wants_chart(text: str) -> bool:
@@ -158,6 +235,23 @@ def unify_x(series: list[Series]) -> list[str]:
     return labels
 
 
+UNIT_RE = re.compile(r"\(\s*(A\$|US\$|[$€£¥])?\s*(trillion|billion|million|thousand|[KMBT]n?|bn|mn)?\s*\)", re.IGNORECASE)
+
+
+def pie_total(s: Series, title: str) -> str:
+    """The sum of a pie's slices for its middle, in the unit the title gives in brackets ("($B)", "(€ million)");
+    nothing if the title names none, as a bare number could be anything."""
+    found = UNIT_RE.search(title)
+    if not found or not (found.group(1) or found.group(2)):
+        return ""
+    whole = sum(y for _, y in render.pie_slices(s))
+    short = {"trillion": "T", "billion": "B", "million": "M", "thousand": "K", "bn": "B", "mn": "M"}
+    unit = found.group(2) or ""
+    unit = short.get(unit.lower(), unit)
+    digits = f"{whole:,.0f}" if whole >= 1000 else f"{whole:,.1f}"
+    return f"{found.group(1) or ''}{digits}{unit}"
+
+
 def total(s: Series, spec: dict) -> str:
     """The figure next to a series' name: the change over the chart when the bot knows the values (a % change, or a
     ticker's prices), else the model's own, if it is a figure (it has a digit: models sometimes repeat the name);
@@ -201,14 +295,25 @@ async def price_history(ctx: Ctx, ticker: str, period: str, interval: str) -> tu
     return [r.get("Date") or r.get("Datetime") or "" for r in rows], [r["Close"] for r in rows], note
 
 
+def check_shape(title: str, specs) -> None:
+    if not title:
+        raise ChartError("give the chart a title")
+    if not isinstance(specs, list) or not specs or not all(isinstance(sp, dict) for sp in specs):
+        raise ChartError("series must be a list of objects like {\"name\": ..., \"x\": [...], \"y\": [...]} "
+                         "(or {\"name\", \"ticker\"}); send valid JSON and don't repeat the call as it was")
+
+
 async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
     """The chart a make_chart call asks for, and a line per series for the model."""
     title = str(args.get("title") or "").strip()
     specs = args.get("series")
-    if not title or not isinstance(specs, list) or not specs:
-        raise ChartError("give a title and at least one series")
+    check_shape(title, specs)
     if len(specs) > MAX_SERIES:
         raise ChartError(f"at most {MAX_SERIES} series per chart")
+    if any(isinstance(sp, dict) and sp.get("kind") == "pie" for sp in specs) and (
+            len(specs) != 1 or specs[0].get("ticker")):
+        raise ChartError("a pie chart is one series of x (slice names) and y (values), not a ticker: "
+                         "make one chart for each breakdown")
     moment = now(ctx.st.tz)
     today = moment.date()
     fetches, series, notes = [], [], [""] * len(specs)
@@ -231,21 +336,35 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
             if len(x) > MAX_POINTS:
                 raise ChartError(f"{spec['name']}: at most {MAX_POINTS} points")
             series[i].x, series[i].y = list(x), as_y(y)
+    pie = any(s.kind == "pie" for s in series)
     for (i, _), got in zip(fetches, await asyncio.gather(*(f for _, f in fetches)), strict=True):
         series[i].x, series[i].y, notes[i] = got[0], as_y(got[1]), got[2]
-    labels = unify_x(series)
+    if pie:
+        series[0].x = [str(v) for v in series[0].x]  # names, even when they look like years
+        if not render.pie_slices(series[0]):
+            raise ChartError("a pie chart needs at least one value above zero")
+        overlap = subtotal_in(render.pie_slices(series[0]))
+        if overlap:
+            parent, parts = overlap
+            raise ChartError(f"{parent} is a subtotal of {' + '.join(parts)} (it equals their sum), so a pie with all of "
+                             f"them counts it twice. Draw the sub-lines without {parent}, or {parent} without them.")
+    labels = [] if pie else unify_x(series)
     for s, spec in zip(series, specs, strict=True):
         if spec.get("percent_change"):
             s.y = percent_change(s.y)
         s.total = total(s, spec)
+    if pie and not series[0].total:
+        series[0].total = pie_total(series[0], title)
     chart = Chart(title, series, str(args.get("left_label") or ""), str(args.get("right_label") or ""),
                   bool(args.get("invert_left")), bool(args.get("invert_right")), labels,
                   dark=is_night(moment.hour))
     for side in ("left", "right"):  # an axis of nothing but % changes labels its ticks with %
         on_side = [spec for s, spec in zip(series, specs, strict=True) if s.axis == side]
         setattr(chart, f"{side}_percent", bool(on_side) and all(spec.get("percent_change") for spec in on_side))
-    chart.subtitle = subtitle_for(specs, series, chart.left_percent and not any(s.axis == "right" for s in series))
-    return chart, [summary(s, specs[i].get("percent_change"), notes[i]) for i, s in enumerate(series)]
+    chart.subtitle = "Share of total" if pie else subtitle_for(
+        specs, series, chart.left_percent and not any(s.axis == "right" for s in series))
+    return chart, [pie_summary(s) if pie else summary(s, specs[i].get("percent_change"), notes[i])
+                   for i, s in enumerate(series)]
 
 
 def _fmt(v: float) -> str:
@@ -254,6 +373,34 @@ def _fmt(v: float) -> str:
 
 def _x(v) -> str:
     return v.strftime("%Y-%m-%d %H:%M").removesuffix(" 00:00") if isinstance(v, datetime) else str(v)
+
+
+SUBTOTAL_TOLERANCE = 0.001  # relative: how close a sum must be to count as equal
+SUBTOTAL_MAX_SLICES = 12  # more than this isn't searched (2^11 subsets of the others)
+
+
+def subtotal_in(slices: list[tuple[str, float]]) -> tuple[str, list[str]] | None:
+    """A slice that is the sum of two or more of the others and whose name is part of theirs (Data Center next to Data
+    Center - Hyperscale and Data Center - AI Clouds): a subtotal drawn beside its parts, which counts it twice. The
+    name test keeps coincidences (a region of 20 beside two of 10) from being refused."""
+    if not 3 <= len(slices) <= SUBTOTAL_MAX_SLICES:
+        return None
+    for name, value in slices:
+        others = [(n, v) for n, v in slices if n != name]
+        for size in range(2, len(others) + 1):
+            for combo in itertools.combinations(others, size):
+                if abs(sum(v for _, v in combo) - value) <= value * SUBTOTAL_TOLERANCE and any(
+                        name.lower() in n.lower() for n, _ in combo):
+                    return name, [n for n, _ in combo]
+    return None
+
+
+def pie_summary(s: Series) -> str:
+    """Each slice's share, for the model to comment on."""
+    slices = render.pie_slices(s)
+    whole = sum(y for _, y in slices)
+    return f"{s.name} (pie, {len(slices)} slices, total {_fmt(whole)}): " + ", ".join(
+        f"{name} {render.share(y, whole)}" for name, y in slices)
 
 
 def summary(s: Series, pct: bool, note: str) -> str:
@@ -270,29 +417,47 @@ def summary(s: Series, pct: bool, note: str) -> str:
 
 
 class Charts:
-    """The photos made while answering one message; the handler sends them in one reply, the text as caption."""
+    """The charts made while answering one message; the handler sends them in one reply, the text as caption. The
+    model's calls run at the same time, so each takes its place when it starts: the order is the order asked for,
+    not the order the drawings finish in."""
 
     def __init__(self):
-        self.photos: list[tuple[bytes, str]] = []
-        self.calls: list[dict] = []  # the make_chart arguments behind each photo, to redraw it from
+        self.slots: list[dict] = []  # state: pending | done | failed
+        self.prefer_pie = False  # the message asked for a breakdown: one series of names and values is a pie
+
+    @property
+    def photos(self) -> list[tuple[bytes, str]]:
+        return [(s["image"], s["title"]) for s in self.slots if s["state"] == "done"]
+
+    @property
+    def calls(self) -> list[dict]:  # the make_chart arguments behind each photo, to redraw it from
+        return [s["args"] for s in self.slots if s["state"] == "done"]
+
+    def active(self) -> int:
+        return sum(1 for s in self.slots if s["state"] != "failed")
 
 
 def tool(ctx: Ctx, charts: Charts):
     """(definition, function) of make_chart, collecting the PNGs into `charts`."""
 
     async def make(args: dict) -> str:
-        if len(charts.photos) >= MAX_CHARTS:
+        if charts.active() >= MAX_CHARTS:
             return f"Error: at most {MAX_CHARTS} charts per reply."
+        args = pie_default(unquote_series(args), charts.prefer_pie)
+        slot = {"state": "pending"}  # taken before the first await, so in the order the calls were made
+        charts.slots.append(slot)
         began = time.monotonic()
         try:
             chart, lines = await build(ctx, args)
             image = await asyncio.to_thread(render.png, chart)
         except ChartError as e:
+            slot["state"] = "failed"
             return f"Error: {e}"
-        charts.photos.append((image, chart.title))
-        charts.calls.append(args)
+        slot.update(image=image, title=chart.title, args=args, state="done")
         log.debug("Chart %r: %d series in %.1f s", chart.title, len(chart.series), time.monotonic() - began)
-        return (f"Chart {len(charts.photos)} is ready. Your reply becomes its caption, so keep the reply under "
+        position = next(i for i, other in enumerate(charts.slots) if other is slot)  # not index(): equal charts match
+        number = sum(1 for other in charts.slots[:position + 1] if other["state"] != "failed")
+        return (f"Chart {number} is ready. Your reply becomes its caption, so keep the reply under "
                 f"{CAPTION_HINT} characters, and don't describe the chart or say you made one: say what it shows.\n"
                 + "\n".join(lines))
 

@@ -315,3 +315,41 @@ async def test_non_admin_never_gets_portfolio_tools_even_on_the_rerun(env, store
     m = user_msg(ctx.bot, "@stockbot how is NVDA looking?", user_id=9)
     await run(h, m)
     assert backend.seen[1]["tools"] == ["yahoo__get_quote"] and m.replies[0]["text"] == "done"
+
+
+def test_questions_about_the_bots_tools_are_recognised():
+    from lib.llm.gate import asks_tools
+    for text in ("what tools do you have?", "list your tools", "Which tools can you use", "show me your capabilities",
+                 "what can you do", "what are you able to do?", "tell me what data sources you have access to"):
+        assert asks_tools(text), text
+    for text in ("how is NVDA doing?", "which tools does NVDA use for AI", "show me your portfolio",
+                 "what do you think of the features of the new iPhone", "what is the best tool for charting"):
+        assert not asks_tools(text), text
+
+
+async def test_asked_what_tools_it_has_the_bot_lists_them_from_its_own_list_and_offers_none(env, store):
+    yahoo = FakeMcp("yahoo", tools=("get_stock_quote", "compare_stocks"), description="Yahoo Finance market data. More.")
+    sharesight = FakeMcp("sharesight", tools=("list_portfolios",), gate="portfolio", description="Sharesight portfolios.")
+    ctx, backend, h = make_ctx(env, store, [step("I have these.")], servers=(yahoo, sharesight),
+                               POST_TO_GROUPS_FROM_DM="on")
+    m = user_msg(ctx.bot, "@stockbot what tools do you have?")
+    await run(h, m)
+    seen = backend.seen[0]
+    assert seen["tools"] == [] and seen["search"] is True and "no live data tools" not in seen["system"]
+    for word in ("yahoo", "get_stock_quote", "compare_stocks", "sharesight", "list_portfolios", "period_returns",
+                 "make_chart", "send_to_group", "web search", "complete list"):
+        assert word in seen["prompt"], word
+    assert "Yahoo Finance market data" in seen["prompt"] and "More." not in seen["prompt"]  # first sentence only
+    assert m.replies[0]["text"] == "I have these."
+
+
+async def test_the_tool_list_leaves_out_what_the_asker_may_not_use(env, store):
+    yahoo = FakeMcp("yahoo", tools=("get_stock_quote",))
+    sharesight = FakeMcp("sharesight", tools=("list_portfolios",), gate="portfolio")
+    ctx, backend, h = make_ctx(env, store, [step("ok")], servers=(yahoo, sharesight), ADMIN_ONLY="on",
+                               SEARCH="off")
+    await run(h, user_msg(ctx.bot, "@stockbot what can you do?"))
+    prompt = backend.seen[0]["prompt"]
+    assert "get_stock_quote" in prompt and "make_chart" in prompt
+    assert not any(w in prompt for w in ("sharesight", "list_portfolios", "period_returns", "send_to_group", "web search"))
+    assert backend.seen[0]["search"] is False
