@@ -32,7 +32,8 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 
 ## Charts
 Ask for a chart, graph or plot ("chart NVDA against AMD over a year, AMD on the right axis, inverted") and the bot
-replies once: the chart as a photo with its answer as the caption (2 or 3 charts come as one album). An answer too
+replies once: the chart as a photo with its answer as the caption. Two or three charts come as one image with a
+button for each (see below), not an album. An answer too
 long for a caption (about 1,000 characters) continues in a text message. The model gets the `make_chart` tool only
 when the message asks for one (chart, graph, plot, pie, visualise, breakdown, segments), so other requests don't pay
 for its definition.
@@ -47,9 +48,14 @@ for its definition.
 - **Pie charts:** for a share-of-total breakdown (revenue by segment, platform or region) the model draws a donut
   with `kind: pie`: one series per chart, slice names and values, with each slice's % of the total in a legend
   beside it and the total in the middle. Past 8 slices the smallest are added up as "Other". A request for
-  several breakdowns makes several pies (up to 3), sent as one album. Like other charts of values the model passes,
-  pies get no period buttons. The model is told to use parts of one whole only, never a subtotal beside its parts.
+  several breakdowns makes several pies (up to 3), sent as one image with a button for each. Like other charts of
+  values the model passes, pies get no period buttons. The model is told to use parts of one whole only, never a subtotal beside its parts.
   This pairs with any MCP source that returns breakdowns, such as a company-segments tool.
+- **Several charts, one image:** when a reply has 2 or 3 charts (for example a breakdown by segment, platform and
+  region), the first is the image and each chart has a button under it, labelled with the part of its title that
+  differs ("Segment", "Platform", "Region"). A tap swaps the image in place and keeps the answer as the caption; the one
+  shown is shaded. With `TELEGRAM_PRELOAD_CHAT` the other charts are uploaded in the background, so even the first tap
+  is instant; without it the first tap draws the chart (about half a second) and later taps reuse it.
 - **Period buttons:** a single chart whose series are all tickers comes with buttons: 1D, 1M, 1Y, 5Y and 🔄 (reload); the period shown is shaded.
   A tap fetches the prices again and redraws the chart in place, without asking the model. Another period gets a
   plain title, repeated as the caption; the chart's own period brings back the model's caption.
@@ -57,8 +63,8 @@ for its definition.
   other periods are drawn and uploaded there in the background right after the reply; a tap then swaps in the
   uploaded picture without fetching or drawing, and so does going back to the chart's own period. A picture older
   than an hour (15 minutes for 1D) is drawn again with fresh prices, and 🔄 always is. Without the variable every tap draws.
-  Anyone in the chat can tap. Charts of values the model passed, and albums, have no buttons (Telegram can't put
-  buttons on an album). The buttons work for 90 days.
+  Anyone in the chat can tap. Charts of values the model passed, and replies with several charts, have no period
+  buttons. The buttons work for 90 days.
 - **Totals:** each series' total ("-27.1%") is the change over the chart for a ticker or a % change series,
   or a figure the model passes from the data (a portfolio's total return, say). It shows in the line label or
   the legend.

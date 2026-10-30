@@ -19,6 +19,7 @@ from ..features import dm_buttons, holding_news, movers, periods, post
 from ..features.charts import TOOL as CHART_TOOL
 from ..features.charts import Charts, chart_hint, wants_chart
 from ..features.charts import buttons as chart_buttons
+from ..features.charts import pages as chart_pages
 from ..features.charts import tool as chart_tool
 from ..history import compact, format_rows
 from ..llm.base import BUSY_REPLY, is_busy
@@ -30,7 +31,7 @@ from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
 from .access import is_admin
 from .draft import Draft, start_typing
-from .send import reply_chunks, reply_html, reply_with_photos
+from .send import reply_chunks, reply_html, reply_with_photo
 
 log = logging.getLogger("bot")
 NO_RESPONSE = "(no response)"
@@ -231,13 +232,18 @@ class Handlers:
                 typing.cancel()
         markup = dm_buttons.keyboard() if trig.private and st.dm_buttons else None
         if charts.photos:  # one reply: the chart with the answer as its caption
-            call = charts.calls[0] if len(charts.calls) == 1 and chart_buttons.redrawable(charts.calls[0]) else None
-            sent = await reply_with_photos(
-                msg, [image for image, _ in charts.photos], "" if html_text == NO_RESPONSE else html_text,
-                ctx.store, quote=not trig.private, markup=markup,
-                photo_markup=chart_buttons.keyboard(chart_buttons.period_of(call)) if call else None)
-            if call and sent:
-                await chart_buttons.remember(ctx, sent[0], call)
+            several = len(charts.photos) > 1  # one image with a button for each chart, not an album
+            call = charts.calls[0] if not several and chart_buttons.redrawable(charts.calls[0]) else None
+            labels = chart_pages.labels_for([title for _, title in charts.photos]) if several else []
+            photo_markup = (chart_pages.keyboard(labels, 0) if several
+                            else chart_buttons.keyboard(chart_buttons.period_of(call)) if call else None)
+            sent = await reply_with_photo(
+                msg, charts.photos[0][0], "" if html_text == NO_RESPONSE else html_text,
+                ctx.store, quote=not trig.private, markup=markup, photo_markup=photo_markup)
+            if sent and several:
+                await chart_pages.remember(ctx, sent, charts.calls, [image for image, _ in charts.photos], labels)
+            elif sent and call:
+                await chart_buttons.remember(ctx, sent, call)
         else:
             await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
 

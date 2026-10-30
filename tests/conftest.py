@@ -109,18 +109,8 @@ def user_msg(bot: FakeBot, text, *, chat_id=-100, mid=1, sender="Bob", user_id=5
         sent.photo, sent.caption, sent.caption_html = [N(file_id="sent")], rkw.get("caption"), rkw.get("caption")
         return sent
 
-    async def reply_media_group(media, **rkw):
-        m.replies.append({"album": [(item.media, item.caption) for item in media], **rkw})
-        out = []
-        for item in media:
-            sent = bot._msg(chat_id, None)
-            sent.photo, sent.caption, sent.caption_html = [N(file_id="sent")], item.caption, item.caption
-            out.append(sent)
-        return tuple(out)
-
     m.reply_text = reply_text
     m.reply_photo = reply_photo
-    m.reply_media_group = reply_media_group
     m.parse_entities = lambda types=None: {}
     m.parse_caption_entities = lambda types=None: {}
     return m

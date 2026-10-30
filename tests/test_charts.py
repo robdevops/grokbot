@@ -10,7 +10,7 @@ import pytest
 from lib import config
 from lib.context import Ctx
 from lib.features import charts
-from lib.features.charts import buttons, render
+from lib.features.charts import buttons, pages, render
 from lib.features.charts.render import Chart, Series
 
 from .conftest import FakeBot, user_msg
@@ -267,17 +267,6 @@ async def test_a_chart_request_gets_one_reply_the_photo_with_the_answer_as_capti
     assert store.history(-100, 20)[-1].text == "[photo] Up <b>20%</b>."
 
 
-async def test_several_charts_go_as_one_album_captioned_once(env, store):
-    call = [("1", "make_chart", json.dumps({"title": "a", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]})),
-            ("2", "make_chart", json.dumps({"title": "b", "series": [{"name": "b", "x": [1, 2], "y": [2, 1]}]}))]
-    ctx, _, h = make_ctx(env, store, [step(calls=call, finish="tool_calls"), step("Both.")])
-    m = user_msg(ctx.bot, "@stockbot plot a and b")
-    await run(h, m)
-    [reply] = m.replies
-    assert [caption for _, caption in reply["album"]] == ["Both.", None] and reply["do_quote"] is True
-    assert [r.text for r in store.history(-100, 20)][-2:] == ["[photo] Both.", "[photo]"]
-
-
 async def test_an_answer_too_long_for_a_caption_continues_in_a_text_message(env, store):
     long = "\n".join(f"Line {i}: " + "x" * 80 for i in range(20))  # about 1,800 characters
     ctx, _, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(
@@ -330,7 +319,7 @@ async def test_a_chart_that_telegram_rejects_still_lets_the_text_through(env, st
     assert [r["text"] for r in m.replies] == ["Here."]
 
 
-def callback(sent, data):
+def callback(sent, data, edited_photo=None):
     """A tap on a button under `sent`, recording the answer and the edit."""
     from types import SimpleNamespace as N
     q = N(message=sent, data=data, answers=[], edits=[])
@@ -340,6 +329,9 @@ def callback(sent, data):
 
     async def edit_message_media(media, **kw):
         q.edits.append({"media": media, **kw})
+        if edited_photo:
+            from .conftest import make_msg
+            return make_msg(1, None, photo=[N(file_id=edited_photo)])
 
     q.answer, q.edit_message_media = answer, edit_message_media
     return q
@@ -593,17 +585,6 @@ async def test_a_pie_is_one_series_of_values_above_zero(env, store, series, erro
     assert out.startswith("Error: ") and error in out
 
 
-async def test_three_pies_go_as_one_album_and_pie_words_offer_the_tool(env, store):
-    calls = [("1", "make_chart", json.dumps({"title": f"By {n}", "series": [pie(n, ["a", "b"], [3, 1])]}))
-             for n in ("segment", "platform", "region")]
-    ctx, backend, h = make_ctx(env, store, [step(calls=calls, finish="tool_calls"), step("Mostly a.")])
-    m = user_msg(ctx.bot, "@stockbot show NVDA revenue as pies")
-    await run(h, m)
-    assert backend.seen[0]["tools"] == ["make_chart"]
-    [reply] = m.replies
-    assert len(reply["album"]) == 3 and [c for _, c in reply["album"]] == ["Mostly a.", None, None]
-
-
 def test_breakdown_and_segment_requests_offer_the_chart_tool_too():
     for text in ("segment breakdown NVDA", "NVDA revenue segments", "break down NVDA revenue", "show a pie of it",
                  "plot this", "give me the breakdown by region"):
@@ -648,3 +629,81 @@ async def test_a_pie_with_a_subtotal_and_its_parts_is_refused_with_the_fix(env, 
     assert "Draw the sub-lines without Data Center" in out and made.photos == []
     ok = await make_chart({"title": "t", "series": [pie("p", names[1:], [48.710, 40.313, 7.198])]})
     assert ok.startswith("Chart 1 is ready") and "Edge Computing 7.5%" in ok
+
+
+def test_button_labels_are_the_part_of_each_title_that_differs():
+    labels = pages.labels_for
+    assert labels(["NVDA Q2 FY2027 Revenue by Reportable Segments", "NVDA Q2 FY2027 Revenue by Market Platform",
+                   "NVDA Q2 FY2027 Revenue by Customer Headquarters"]) == [
+        "Reportable Segments", "Market Platform", "Customer Headquarte…"]
+    assert labels(["NVDA price", "AMD price"]) == ["NVDA", "AMD"]
+    assert labels(["Same", "Same"]) == ["Chart 1", "Chart 2"]  # nothing differs
+    assert labels(["A", "A B"]) == ["Chart 1", "Chart 2"]  # one title is the other's prefix
+
+
+PIE_CALLS = [("1", "make_chart", json.dumps({"title": f"NVDA revenue by {n}", "series": [pie(n, ["a", "b"], [3, 1])]}))
+             for n in ("segment", "platform", "region")]
+
+
+async def test_several_charts_are_one_image_with_a_button_for_each_not_an_album(env, store):
+    ctx, backend, h = make_ctx({**env, **PRELOAD}, store, [step(calls=PIE_CALLS, finish="tool_calls"), step("Mostly a.")])
+    m = user_msg(ctx.bot, "@stockbot show NVDA revenue as pies")
+    await run(h, m)
+    await settle_pages()
+    assert backend.seen[0]["tools"] == ["make_chart"]
+    [reply] = m.replies
+    assert reply["photo"].startswith(b"\x89PNG") and reply["caption"] == "Mostly a." and "album" not in reply
+    assert [(b.text, b.callback_data) for b in reply["reply_markup"].inline_keyboard[0]] == [
+        ("Segment", "cp:0"), ("Platform", "cp:1"), ("Region", "cp:2")]
+    assert shaded(reply["reply_markup"]) == ["cp:0"]
+    assert store.history(-100, 20)[-1].text == "[photo] Mostly a."
+    assert [p["caption"] for p in ctx.bot.photos] == ["Platform", "Region"] and ctx.bot.photos[0]["chat_id"] == -900
+
+
+async def settle_pages():
+    for _ in range(50):
+        await asyncio.sleep(0)
+    await asyncio.gather(*list(pages._tasks))
+
+
+async def test_a_button_shows_that_chart_in_place_from_its_upload_or_drawn_once_and_remembered(env, store):
+    ctx, _, h = make_ctx({**env, **PRELOAD}, store, [step(calls=PIE_CALLS, finish="tool_calls"), step("Mostly a.")])
+    await run(h, user_msg(ctx.bot, "@stockbot show NVDA revenue as pies"))
+    await settle_pages()
+    sent = ctx.bot._msg(-100, None)
+    sent.message_id = 1001
+    q = callback(sent, "cp:1")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    [edit] = q.edits
+    assert edit["media"].media == "file-1" and edit["media"].caption == "Mostly a."  # the upload, the answer kept
+    assert shaded(edit["reply_markup"]) == ["cp:1"] and store.chart_get(-100, 1001)[2] == "#1"
+    q = callback(sent, "cp:1")  # already shown
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.edits == [] and q.answers == [None]
+    q = callback(sent, "cp:0")  # the picture first sent
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.edits[0]["media"].media == "sent"
+
+
+async def test_without_the_preload_chat_a_chart_is_drawn_on_the_first_tap_then_reused(env, store):
+    ctx, _, h = make_ctx(env, store, [step(calls=PIE_CALLS, finish="tool_calls"), step("Mostly a.")])
+    await run(h, user_msg(ctx.bot, "@stockbot show NVDA revenue as pies"))
+    assert ctx.bot.photos == []
+    sent = ctx.bot._msg(-100, None)
+    sent.message_id = 1001
+    q = callback(sent, "cp:2", edited_photo="edited-2")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.edits[0]["media"].media.input_file_content.startswith(b"\x89PNG")  # drawn from its call
+    q = callback(sent, "cp:0")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    q = callback(sent, "cp:2")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.edits[0]["media"].media == "edited-2"  # now an upload
+
+
+async def test_buttons_for_charts_that_are_gone_say_so(env, store):
+    ctx, _, _ = make_ctx(env, store, [])
+    sent = ctx.bot._msg(-100, None)
+    q = callback(sent, "cp:1")
+    await pages.on_page(ctx, N(callback_query=q), None)
+    assert q.answers == ["These charts can't be shown any more."] and q.edits == []

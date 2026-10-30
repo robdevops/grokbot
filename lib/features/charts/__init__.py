@@ -40,7 +40,7 @@ TOOL = ToolDef(
     "values, parts of one whole only: never a subtotal beside its parts, and where a line is split into sub-lines "
     "(Data Center into Hyperscale and AI Clouds) use the sub-lines, the finest split, not the subtotal. A source that returns several groupings "
     "(segments, products or platforms, regions) gets one pie for every grouping, not just the first: ask it for all "
-    "of them, call this once per grouping, and the charts go out together as an album. Then comment on what it shows; don't describe the chart.",
+    "of them, call this once per grouping, and the charts go out as one image with a button for each. Then comment on what it shows; don't describe the chart.",
     {"type": "object", "required": ["title", "series"], "properties": {
         "title": {"type": "string"},
         "series": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {
