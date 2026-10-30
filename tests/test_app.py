@@ -42,7 +42,7 @@ def test_handlers_follow_the_flags(env, store):
     assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler",
                      "CallbackQueryHandler", "CallbackQueryHandler"]
     assert "callback_query" in app.allowed_updates(st)
-    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits", "flushcache"}
+    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits", "usage", "flushcache"}
     assert any(isinstance(h, MessageHandler) for h in full.handlers[0])
     locked, st = build(ADMIN_ONLY="on")  # remembers the groups it is in, to know who their admins are
     assert "ChatMemberHandler" in handler_kinds(locked) and "my_chat_member" in app.allowed_updates(st)

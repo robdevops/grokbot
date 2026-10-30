@@ -1,4 +1,4 @@
-"""Admin command: /credits (provider balance, where there is one, and the token ledger)."""
+"""Admin command: /credits, also /usage (provider balance, where there is one, and the token ledger)."""
 
 from __future__ import annotations
 

@@ -180,7 +180,7 @@ def build_app(ctx: Ctx) -> Application:
         return wrapper
 
     # Commands first: the first matching handler wins, and the catch-all would swallow them.
-    app.add_handler(CommandHandler("credits", command(commands.credits)))
+    app.add_handler(CommandHandler(["credits", "usage"], command(commands.credits)))
     app.add_handler(CommandHandler("flushcache", command(commands.flush_cache)))
     app.add_handler(MessageHandler(
         (filters.ChatType.GROUPS | filters.ChatType.PRIVATE)
