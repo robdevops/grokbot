@@ -14,6 +14,8 @@ from . import MAX_CHARTS, Charts, subtotal_in, tool
 
 log = logging.getLogger("bot")
 
+STATEMENTS = "get_statements"
+MIN_PIES = 3  # fewer than this from get_segments and the income statement is searched too
 TOOL = "get_segments"  # the TickerScout tool, found by name on whichever MCP server has it
 ASKS = re.compile(r"\b(?:breakdowns?|segments?|break\s+down)\b", re.IGNORECASE)
 # What may surround the ticker in a plain request; anything else is a question for the model.
@@ -73,7 +75,7 @@ def slices_of(group) -> list[tuple[str, float]]:
     else:
         nested = any(isinstance(v, dict) for v in group.values())
         items = [(str(n), revenue_of(v)) for n, v in group.items() if isinstance(v, dict) or not nested]
-    out = [(pretty(n), v) for n, v in items if n and v]
+    out = [(pretty(n), v) for n, v in items if n and v and not re.search(r"\btotal\b", n.replace("_", " "), re.I)]
     while (overlap := subtotal_in(out)):  # a subtotal beside its parts would be counted twice
         out = [(n, v) for n, v in out if n != overlap[0]]
     return out
@@ -88,15 +90,16 @@ def label_of(path: list[str]) -> str:
 
 
 def groupings(period: dict, factor: float = 1.0) -> list[tuple[str, list[tuple[str, float]]]]:
-    """The pies of one period, as (label, slices): every group of two or more revenues found at any depth whose
-    path says it is about revenue, segments, products or regions (not income, profit or the like)."""
+    """The pies of one period (or of a whole result), as (label, slices): every group of two or more revenues found at
+    any depth whose path says it is about revenue, segments, products or regions, and whose own name is not about
+    income, profit or the like."""
     found, seen = [], []
 
     def walk(node, path: list[str]) -> None:
         if isinstance(node, (dict, list)) and path:
             joined = "/".join(path).lower()
             slices = slices_of(node)
-            if len(slices) >= 2 and any(w in joined for w in WANTED) and not any(w in joined for w in UNWANTED):
+            if len(slices) >= 2 and any(w in joined for w in WANTED) and not any(w in path[-1].lower() for w in UNWANTED):
                 if slices not in seen:
                     seen.append(slices)
                     found.append((label_of(path), [(n, v * factor) for n, v in slices]))
@@ -126,24 +129,50 @@ def caption(ticker: str, period: str, label: str, slices: list[tuple[str, float]
             f"{html.escape(top_name)} is {top / whole * 100:.0f}% of the {label} split.")
 
 
+def read_units(payload: dict, default: float) -> float:
+    """The multiplier that turns a result's figures into dollars, from its "units" text."""
+    return next((f for key, f in UNITS if key in str(payload.get("units", "")).lower()), default)
+
+
+def new_only(found: list, have: list) -> list:
+    """The groupings of `found` that no pie of `have` (or earlier in `found`) already shows."""
+    out: list = []
+    for label, slices in found:
+        if all(slices != other for _, other in have + out):
+            out.append((label, slices))
+    return out
+
+
+def parsed(ticker: str, key: str, out) -> dict | None:
+    """A result as JSON, or None (a warning says why) when it isn't, or when the company's record lacks the block."""
+    try:
+        data = json.loads(out)
+    except (TypeError, ValueError):
+        log.warning("Fast breakdown for %s: couldn't read %s: %s", ticker, key, " ".join(str(out).split())[:200])
+        return None
+    if not isinstance(data, dict) or data.get("available") is False:
+        log.debug("Fast breakdown for %s: %s isn't available: %s", ticker, key, isinstance(data, dict) and data.get("message"))
+        return None
+    return data
+
+
 async def more_groupings(server, ticker: str, name: str, payload: dict, have: list, factor: float) -> list:
-    """Some tickers' "all" holds only the segments although `showing` lists revenue_by_product and the like: ask for
-    each of those that gave no pie, all at once, and keep the pies that aren't one already drawn."""
+    """What "all" left out. Breakdowns that `showing` lists (revenue_by_product and the like) but gave no pie are
+    asked for, all at once; a company's record may not carry them ("available": false). With fewer than three pies
+    then, the income statement is searched for revenue lines split by product or region."""
     labels = {label for label, _ in have}
     missing = [k for k in payload.get("showing") or [] if isinstance(k, str) and k.startswith("revenue_by_")
                and label_of([k]) not in labels]
     outs = await asyncio.gather(*(server.call(TOOL, {"ticker": ticker, "breakdown": k, "period": name}) for k in missing),
                                 return_exceptions=True)
-    extra = []
+    extra: list = []
     for key, out in zip(missing, outs, strict=True):
-        try:
-            period = json.loads(out)["periods"][0]
-        except (TypeError, ValueError, KeyError, IndexError):
-            log.warning("Fast breakdown for %s: couldn't read %s: %s", ticker, key, " ".join(str(out).split())[:200])
-            continue
-        for label, slices in groupings(period, factor):
-            if all(slices != other for _, other in have + extra):
-                extra.append((label, slices))
+        if data := parsed(ticker, key, out):
+            extra += new_only(groupings(data, read_units(data, factor)), have + extra)
+    if len(have) + len(extra) < MIN_PIES and STATEMENTS in server.fn_names.values():
+        out = await server.call(STATEMENTS, {"ticker": ticker, "statement": "income_statement", "period": name})
+        if data := parsed(ticker, "income_statement", out):
+            extra += new_only(groupings(data, read_units(data, factor)), have + extra)
     return extra
 
 
@@ -159,7 +188,7 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
         payload = json.loads(out)
         period = payload["periods"][0]
         symbol = CURRENCIES.get(str(payload.get("reporting_currency")))
-        factor = next((f for key, f in UNITS if key in str(payload.get("units", "")).lower()), None)
+        factor = read_units(payload, 0.0)
     except (ValueError, KeyError, IndexError, TypeError):
         log.warning("Fast breakdown for %s: couldn't read the %s result (%s)", ticker, TOOL, " ".join(out.split())[:200])
         return None

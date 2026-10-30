@@ -50,8 +50,9 @@ for its definition.
   beside it and the total in the middle. Past 8 slices the smallest are added up as "Other".
   **Fast path:** a plain "NVDA revenue breakdown" (a ticker and breakdown/segments words, nothing else) skips the model:
   the bot calls the TickerScout `get_segments` tool itself (any MCP server that has a tool of that name) for the
-  latest quarter, draws a pie for the reportable segments and each revenue breakdown, drops subtotals beside their
-  parts, and replies with a one-line caption. Anything else (a period, two tickers, a question), a missing or down
+  latest quarter, draws a pie for every revenue grouping it finds (what the categories are varies by company, so it
+  searches the result at any depth, asks for the breakdowns the result lists, and, with fewer than three pies, searches
+  the income statement from `get_statements` too), drops subtotals and totals beside their parts, and replies with a one-line caption. Anything else (a period, two tickers, a question), a missing or down
   source or an unreadable result goes to the model as usual.
   A request for several breakdowns makes several pies (up to 5), sent as one image with a button for each. Like other charts of
   values the model passes, pies get no period buttons. The model is told to use parts of one whole only, never a subtotal beside its parts.

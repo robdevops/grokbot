@@ -154,3 +154,34 @@ async def test_breakdowns_listed_in_showing_but_missing_from_all_are_fetched_one
 ])
 def test_snake_case_keys_become_slice_names(key, name):
     assert breakdown.pretty(key) == name
+
+
+async def test_when_the_segments_tool_has_no_breakdowns_the_income_statement_is_searched(env, store, caplog):
+    units = {"units": "USD millions", "reporting_currency": "USD"}
+    unavailable = {"ticker": "TSLA", "available": False, "message": "TSLA's record carries no geographic breakdown."}
+    statement = {**units, "periods": [{"period": "Q3 FY2026", "income_statement": {
+        "revenue": 28000, "cost_of_revenue": 22000, "revenue_by_product_line": {
+            "automotive_sales": 20094, "services_and_other": 4605, "energy_generation_and_storage": 2881,
+            "total_revenues": 27580},
+        "revenue_by_region": {"united_states": 12495, "china": 5209, "other_international": 10342}}}]}
+    answers = {
+        ("get_segments", "all"): {**units, "showing": ["segments", "revenue_by_product"], "periods": [
+            {"period": "Q3 FY2026", "segment_detail": {"automotive_segment": {"revenue": 21000},
+                                                         "energy_generation_and_storage_segment": {"revenue": 2881}}}]},
+        ("get_segments", "revenue_by_product"): unavailable,
+        ("get_statements", None): statement}
+
+    class Scout(FakeMcp):
+        async def call(self, tool, args):
+            self.calls.append((tool, args))
+            return json.dumps(answers[(tool, args.get("breakdown"))])
+
+    server = Scout("ticker-scout", tools=("get_segments", "get_statements"))
+    made = charts.Charts()
+    with caplog.at_level("WARNING", logger="bot"):
+        caption = await breakdown.fast(make(env, store, server), "TSLA revenue breakdown", made)
+    assert [t for _, t in made.photos] == ["TSLA Q3 FY2026 revenue by segment ($B)",
+                                           "TSLA Q3 FY2026 revenue by product line ($B)",
+                                           "TSLA Q3 FY2026 revenue by region ($B)"]
+    assert caption.startswith("<b>TSLA</b> Q3 FY2026 revenue $23.9B: Automotive is 88% of the segment split.")
+    assert [c for c, _ in server.calls] == ["get_segments", "get_segments", "get_statements"] and not caplog.records
