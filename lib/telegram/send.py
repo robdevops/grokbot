@@ -42,6 +42,7 @@ async def reply_html(msg: Message, text: str, *, quote: bool = True, reply_marku
         if not is_parse_error(e):
             raise
         log.warning("Bad HTML from the model, sending as plain text: %s", e)
+        log.debug("The text that failed: %r", text[:600])
         return await msg.reply_text(
             plain_text(text), do_quote=quote, disable_notification=True,
             link_preview_options=NO_PREVIEW, reply_markup=reply_markup)
@@ -87,4 +88,5 @@ async def _send_photo(msg: Message, photo: bytes, caption: str, quote: bool, mar
             if not html_ok or not is_parse_error(e):
                 raise
             log.warning("Bad HTML from the model, sending the caption as plain text: %s", e)
+            log.debug("The caption that failed: %r", text[:600])
     raise RuntimeError("unreachable")
