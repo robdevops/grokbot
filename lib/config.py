@@ -45,6 +45,7 @@ DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash"}
 MAX_TOOL_ROUNDS = 6  # model <-> tool round trips per answer
 MCP_TIMEOUT = 60  # seconds per MCP tool call
 MAX_TOOL_OUTPUT = 12_000  # characters of one tool result sent to the model
+FILING_MAX_TOKENS = 32_000  # reply cap (incl. reasoning) for /narrative and /events, where a whole filing section goes in
 HISTORY_LINE_MAX = 240  # characters of one history line
 HISTORY_OWN_LINE_MAX = 160  # the bot's own earlier answers are the longest lines; cut them harder
 MCP_STARTUP_WAIT = 30  # seconds a request waits for MCP servers that are still connecting

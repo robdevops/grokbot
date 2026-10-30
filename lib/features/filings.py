@@ -165,7 +165,8 @@ async def summarise(ctx: Ctx, kind: Kind, ticker: str, section: str, limit: int,
     order = " List dated items in ascending date order, oldest first." if kind.oldest_first else ""
     prompt = FILING_PROMPT.format(tool=kind.tool, ticker=ticker, section=section, limit=limit, order=order)
     try:
-        answer = await ask(ctx, [{"type": "text", "text": prompt}], Route([server], False), kind="filing", chat_id=chat_id)
+        answer = await ask(ctx, [{"type": "text", "text": prompt}], Route([server], False), kind="filing", chat_id=chat_id,
+                          max_tokens=config.FILING_MAX_TOKENS)
     except Exception as e:
         log.warning("The model couldn't write the %s %s for %s: %s", kind.noun, section, ticker, e)
         return None

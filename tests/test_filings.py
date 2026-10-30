@@ -112,6 +112,7 @@ async def test_narrative_goes_straight_to_the_model_which_calls_the_tool_itself(
     await commands.narrative(ctx, update_for(m), N(args=["tsla"]))
     assert m.replies[0]["text"] == "<b>Tesla</b> sells cars and energy."
     assert len(backend.seen) == 2 and scout.calls == [("get_narrative", {"ticker": "TSLA", "section": "business"})]
+    assert {seen["max_tokens"] for seen in backend.seen} == {32_000} and ctx.st.max_tokens == 3000  # not the chat cap
     assert shaded(m.replies[0]["reply_markup"]) == ["fl:n:TSLA:0"]
 
 

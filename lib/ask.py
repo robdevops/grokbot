@@ -44,7 +44,7 @@ def _public(servers: list) -> list:
 
 async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = False,
               cache_key: str | None = None, on_text=None, kind: str = "chat",
-              chat_id: int = 0, extra_tools=(), admin: bool = True) -> Answer:
+              chat_id: int = 0, extra_tools=(), admin: bool = True, max_tokens: int | None = None) -> Answer:
     """Ask the configured provider and record the usage. `route` says which tools to offer;
     must_search forces a search (and offers nothing else). A message the gate gave fewer tools
     than exist that gets back NEEDS_TOOLS is asked again with everything on. A non-admin never
@@ -66,7 +66,7 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         cache_id=cache_id(ctx.first_name, cache_key),
         on_text=_hide_needs_tools(on_text) if (route.simple or route.partial) else on_text,
         no_tools_system=no_tools_system(ctx.first_name),
-        max_tokens=st.max_tokens,
+        max_tokens=max_tokens or st.max_tokens,
     )
     answer = await policy.ask(ctx.backend, ctx.registry, req)
     await _record(ctx, req.model, kind, chat_id, answer)
