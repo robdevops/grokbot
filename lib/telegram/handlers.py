@@ -233,20 +233,40 @@ class Handlers:
                 typing.cancel()
         markup = dm_buttons.keyboard() if trig.private and st.dm_buttons else None
         if charts.photos:  # one reply: the chart with the answer as its caption
-            several = len(charts.photos) > 1  # one image with a button for each chart, not an album
-            call = charts.calls[0] if not several and chart_buttons.redrawable(charts.calls[0]) else None
-            labels = chart_pages.labels_for([title for _, title in charts.photos]) if several else []
-            photo_markup = (chart_pages.keyboard(labels, 0) if several
-                            else chart_buttons.keyboard(chart_buttons.period_of(call)) if call else None)
-            sent = await reply_with_photo(
-                msg, charts.photos[0][0], "" if html_text == NO_RESPONSE else html_text,
-                ctx.store, quote=not trig.private, markup=markup, photo_markup=photo_markup)
-            if sent and several:
-                await chart_pages.remember(ctx, sent, charts.calls, [image for image, _ in charts.photos], labels)
-            elif sent and call:
-                await chart_buttons.remember(ctx, sent, call)
+            await self._send_charts(msg, charts, html_text, quote=not trig.private, markup=markup)
         else:
             await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
+
+    async def _send_charts(self, msg: Message, charts: Charts, html_text: str, *, quote: bool, markup=None) -> None:
+        """One reply: the first chart as the photo with the answer as its caption; several charts get a button each."""
+        ctx = self.ctx
+        several = len(charts.photos) > 1  # one image with a button for each chart, not an album
+        call = charts.calls[0] if not several and chart_buttons.redrawable(charts.calls[0]) else None
+        labels = chart_pages.labels_for([title for _, title in charts.photos]) if several else []
+        photo_markup = (chart_pages.keyboard(labels, 0) if several
+                        else chart_buttons.keyboard(chart_buttons.period_of(call)) if call else None)
+        sent = await reply_with_photo(
+            msg, charts.photos[0][0], "" if html_text == NO_RESPONSE else html_text,
+            ctx.store, quote=quote, markup=markup, photo_markup=photo_markup)
+        if sent and several:
+            await chart_pages.remember(ctx, sent, charts.calls, [image for image, _ in charts.photos], labels)
+        elif sent and call:
+            await chart_buttons.remember(ctx, sent, call)
+
+    async def revenuepie(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/revenuepie TICKER: the revenue breakdown pies of the latest quarter, drawn without the model."""
+        msg, ctx = update.effective_message, self.ctx
+        await asyncio.to_thread(ctx.store.save, msg)
+        ticker = (context.args[0] if context and context.args else "").lstrip("$")
+        charts = Charts()
+        caption = await chart_breakdown.fast(ctx, f"{ticker} revenue breakdown", charts) if ticker else None
+        private = is_dm(msg.chat_id)
+        if not caption:
+            text = (f"No revenue breakdown found for {html.escape(ticker.upper())}." if ticker
+                    else "Usage: /revenuepie TICKER")
+            await reply_chunks(msg, text, ctx.store, quote=not private)
+            return
+        await self._send_charts(msg, charts, caption, quote=not private)
 
     async def _answer_tools(self, msg: Message, trig: Trigger, admin: bool, draft: Draft | None) -> str:
         """"What tools do you have?": the prompt carries the full list of what this person may use, and no tool is

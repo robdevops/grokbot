@@ -15,8 +15,8 @@ It comes preprogrammed to chat about stocks and investing, but it can be easily 
 1. Create a bot with @BotFather. Run `/setprivacy` and choose **Disable**, so the bot sees every
    message in a group (remove and re-add it to groups it is already in). Who may use the bot is
    controlled in Telegram/BotFather; the bot itself has no allow-list.
-   - **IMPORTANT:** if the bot has access to Sharesight, enable "Restrict bot usage" in BotFather (this
-     enables user whitelisting).
+   - If the bot has access to Sharesight, enable "Restrict bot usage" in BotFather to enable user whitelisting.
+     (Sharesight access is always read-only, but still relatively private.)
 2. Python 3.13.5: `pip install -r requirements.txt` (plus Node.js for npx-based MCP servers such as Yahoo Finance).
 3. Export `TELEGRAM_BOT_TOKEN` and **exactly one** of `XAI_API_KEY` or `OPENROUTER_API_KEY`.
 4. `python bot.py`

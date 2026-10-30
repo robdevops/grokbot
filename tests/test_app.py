@@ -31,15 +31,15 @@ def test_handlers_follow_the_flags(env, store):
         return app.build_app(Ctx(st, store, ScriptedBackend([]), registry())), st
 
     plain, st = build()
-    assert handler_kinds(plain) == ["CommandHandler", "CommandHandler", "MessageHandler",
+    assert handler_kinds(plain) == ["CommandHandler", "CommandHandler", "CommandHandler", "MessageHandler",
                                     "CallbackQueryHandler", "CallbackQueryHandler"]  # chart periods and charts
     assert app.allowed_updates(st) == ["message", "edited_message", "callback_query"]  # chart buttons
     full, st = build(ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
     kinds = handler_kinds(full)
-    assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler",
+    assert kinds == ["CommandHandler", "CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler",
                      "CallbackQueryHandler", "CallbackQueryHandler"]
     assert "callback_query" in app.allowed_updates(st)
-    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"tokens", "usage", "credits", "flushcache"}
+    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"tokens", "usage", "credits", "flushcache", "revenuepie"}
     assert any(isinstance(h, MessageHandler) for h in full.handlers[0])
     locked, st = build(ADMIN_ONLY="on")  # remembers the groups it is in, to know who their admins are
     assert "ChatMemberHandler" in handler_kinds(locked) and "my_chat_member" in app.allowed_updates(st)
@@ -187,7 +187,7 @@ async def _no_menu(commands, scope=None):
     return True
 
 
-async def test_tokens_is_put_in_the_menu_of_admins_only(env, store):
+async def test_the_menu_lists_revenuepie_for_everyone_and_tokens_for_admins(env, store):
     calls = []
 
     async def set_my_commands(commands, scope=None):
@@ -196,7 +196,9 @@ async def test_tokens_is_put_in_the_menu_of_admins_only(env, store):
     ctx = Ctx(config.load({**env, "ADMIN_CHAT_IDS": "5"}), store, ScriptedBackend([]), registry(), FakeBot())
     ctx.bot = SimpleNamespace(set_my_commands=set_my_commands)
     await app.register_menu(ctx)
-    assert calls == [(["tokens"], "BotCommandScopeAllChatAdministrators", None), (["tokens"], "BotCommandScopeChat", 5)]
+    assert calls == [(["revenuepie"], "NoneType", None),
+                     (["revenuepie", "tokens"], "BotCommandScopeAllChatAdministrators", None),
+                     (["revenuepie", "tokens"], "BotCommandScopeChat", 5)]
 
 
 def test_the_mcp_librarys_unlabelled_protocol_and_ping_lines_are_dropped(monkeypatch):
