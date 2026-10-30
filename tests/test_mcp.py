@@ -118,9 +118,18 @@ def test_log_names_is_one_line_cut_at_a_whole_name(caplog):
         log_names(head, names, 5)
     short, cut, unlimited, tiny = (r.getMessage() for r in caplog.records)
     assert short == f"{head} {', '.join(names)}" and len(short) <= 95
-    assert cut == f"{head} compare_companies, get_company, ..." and len(cut) <= 60
+    assert cut == f"{head} compare_companies, get_company, …" and len(cut) <= 60
     assert unlimited == short
-    assert tiny == f"{head} compare_companies, ..."  # the first name is always shown
+    assert tiny == f"{head} compare_companies, …"  # the first name is always shown
+
+
+def test_the_ellipsis_is_one_character_so_it_costs_one_character_of_the_width(caplog):
+    import logging
+
+    from lib.mcp.server import log_names
+    with caplog.at_level(logging.INFO, logger="bot"):
+        log_names("H:", ["aaaa", "bbbb", "cccc"], 17)
+    assert caplog.records[0].getMessage() == "H: aaaa, bbbb, …"  # "..." would have room for one name only
 
 
 async def test_call_slims_and_caches_identical_concurrent_calls():

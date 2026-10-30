@@ -27,7 +27,7 @@ ENV_VARS: dict[str, str] = {
     "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
-    "LOG_WIDTH": "Longest line (characters) for the MCP tool lists in the log; longer lists end in \"...\" (default 95, 0 = no limit).",
+    "LOG_WIDTH": "Longest line (characters) for the MCP tool lists in the log; longer lists end in \"…\" (default 95, 0 = no limit).",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",

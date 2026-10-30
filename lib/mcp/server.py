@@ -332,15 +332,15 @@ class Registry:
 
 def log_names(head: str, names: list[str], width: int = 95) -> None:
     """Log a list of tool names on one line of at most `width` characters (0 = no limit). A list that
-    doesn't fit is cut at a whole name and ends in "..."."""
+    doesn't fit is cut at a whole name and ends in "…" (one character)."""
     line = f"{head} {', '.join(names)}"
     if width and len(line) > width:
         kept = f"{head} "
         for i, name in enumerate(names):
-            if len(kept) + len(name) + len(", ...") > width and i:
+            if len(kept) + len(name) + len(", …") > width and i:
                 break
             kept += f"{name}, "
-        line = kept + "..."
+        line = kept + "…"
     log.info("%s", line)
 
 
