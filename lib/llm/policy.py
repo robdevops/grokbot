@@ -17,14 +17,14 @@ log = logging.getLogger("bot")
 async def ask(backend: Backend, registry: Registry, req: Request, *, dedupe: bool = True) -> Answer:
     """Run the request. If it fails in a way the tools could cause (a provider error, an empty
     reply, a 400/422), retry once without tools. Never for 401/402/429/5xx, and never when a
-    search is required (answering a search-required request from memory would invent news).
+    search or a tool call is required (answering one from memory would invent news or data).
     If the retry fails too, the original error is the one raised."""
     try:
         return await run(backend, registry, req, dedupe=dedupe)
     except (APIStatusError, RuntimeError) as first:
         retriable = (isinstance(first, RuntimeError) and not is_busy(first)) or (
             isinstance(first, APIStatusError) and first.status_code in (400, 422))
-        if req.must_search or not retriable or not (req.search or req.tools):
+        if req.must_search or req.must_call or not retriable or not (req.search or req.tools):
             raise
         log.warning("Retrying without tools: %s", first)
         bare = dataclasses.replace(

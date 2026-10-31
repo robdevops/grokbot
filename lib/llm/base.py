@@ -71,6 +71,7 @@ class Request:
     tools: list[ToolDef] = field(default_factory=list)  # MCP tools offered
     search: bool = False  # offer the provider's web search
     must_search: bool = False  # force a search on the first round (tools is then empty)
+    must_call: bool = False  # force a tool call on the first round (a chat command: tools is its one tool)
     reasoning: str = ""
     cache_id: str | None = None  # keeps a chat's requests on the server holding its cached prompt
     on_text: Callable[[str], None] | None = None  # streaming callback, gets the text so far
