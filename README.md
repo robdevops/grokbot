@@ -2,7 +2,7 @@
 
 A Telegram bot for a group chat.
 
-It comes preprogrammed to chat about stocks and investing, but it can be easily retasked by editing `lib/prompts.py` (the prompts) and `mcp_servers.json` (the MCP servers and their tools).
+It is a general chat bot: the personality is in `lib/prompts.py` (the prompts) and what it can look up is in `mcp_servers.json` (the MCP servers and their tools). The example servers are finance data, so it answers questions about stocks and portfolios when asked, but the prompts don't steer a conversation towards them.
 
 ## Features
 - Answers @mentions, replies and DMs with an LLM, using the group's recent messages as context.
