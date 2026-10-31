@@ -414,3 +414,56 @@ async def test_a_sticker_in_a_dm_or_replied_to_is_attached_but_other_group_stick
     stray = user_msg(ctx.bot, "", chat_id=-100, mid=8)  # a sticker in the group that nobody addressed to the bot
     stray.sticker = sticker("stray").sticker
     assert h._trigger(stray) is None  # so it is never downloaded, let alone sent
+
+
+def reaction_probe(ctx, error=None):
+    """Records the clear-check calls; raises `error` if given."""
+    calls = []
+
+    async def set_message_reaction(chat_id, message_id, reaction=None, **kw):
+        calls.append((chat_id, message_id, reaction))
+        if error:
+            raise error
+
+    ctx.bot.set_message_reaction = set_message_reaction
+    return calls
+
+
+async def test_a_chat_cleared_for_the_bot_is_forgotten(env, store):
+    from telegram.error import BadRequest
+    ctx, backend, h = make_ctx(env, store, [step("first answer"), step("fresh answer")])
+    calls = reaction_probe(ctx)
+    await run(h, user_msg(ctx.bot, "remember the banana plan", chat_id=5, user_id=5, mid=1))
+    assert calls == []  # nothing before it to look at
+    reaction_probe(ctx, BadRequest("Message to react not found"))  # the chat was cleared for the bot in between
+    await run(h, user_msg(ctx.bot, "hello again", chat_id=5, user_id=5, mid=2000))
+    assert "banana plan" not in backend.seen[1]["prompt"] and "hello again" in backend.seen[1]["prompt"]
+    assert not any("banana" in r.text or "first answer" in r.text for r in store.history(5, 20))  # the old rows are gone
+
+
+async def test_a_chat_that_still_exists_keeps_its_history_and_is_checked_with_an_empty_reaction(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("first answer"), step("second answer")])
+    calls = reaction_probe(ctx)
+    await run(h, user_msg(ctx.bot, "remember the banana plan", chat_id=5, user_id=5, mid=1))
+    await run(h, user_msg(ctx.bot, "hello again", chat_id=5, user_id=5, mid=2000))
+    assert calls == [(5, 1001, None)]  # the bot's own earlier reply, with no reaction: harmless
+    assert "banana plan" in backend.seen[1]["prompt"]
+
+
+async def test_an_error_the_check_does_not_understand_keeps_the_history_and_is_logged_once(env, store, caplog):
+    from telegram.error import BadRequest
+    ctx, backend, h = make_ctx(env, store, [step("a"), step("b"), step("c")])
+    reaction_probe(ctx, BadRequest("Reaction_invalid"))
+    for mid in (1, 2000, 3000):
+        await run(h, user_msg(ctx.bot, f"message {mid}", chat_id=5, user_id=5, mid=mid))
+    assert "message 1" in backend.seen[2]["prompt"]
+    assert [r.getMessage() for r in caplog.records if "Couldn't tell whether" in r.getMessage()] == [
+        "Couldn't tell whether chat 5 was cleared: Reaction_invalid"]
+
+
+async def test_group_chats_are_never_checked(env, store):
+    ctx, backend, h = make_ctx(env, store, [step("a"), step("b")])
+    calls = reaction_probe(ctx)
+    await run(h, user_msg(ctx.bot, "@stockbot one", chat_id=-100, mid=1))
+    await run(h, user_msg(ctx.bot, "@stockbot two", chat_id=-100, mid=2000))
+    assert calls == []

@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 
 from telegram import Message, Update
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from .. import config
@@ -97,6 +98,7 @@ class Trigger:
 
 class Handlers:
     def __init__(self, ctx: Ctx):
+        self._probe_errors: set[str] = set()  # texts of unexpected clear-check errors already logged
         self.ctx = ctx
 
     def _record(self, msg: Message) -> None:
@@ -218,8 +220,31 @@ class Handlers:
             down=down_note(ctx.registry.down()), middle=middle, fresh=fresh)
 
     # -- answering ---------------------------------------------------------------------
+    async def _forget_if_cleared(self, msg: Message) -> None:
+        """Telegram sends a bot no update when a person clears a private chat with "also delete for the bot", so this
+        looks: the previous message of the chat is asked to take an empty reaction, which does nothing to a message
+        that exists and fails for one that was deleted. If it is gone, the chat was cleared and the stored history
+        of it (everything before this message) is dropped, so the model starts fresh like the person's own screen."""
+        ctx = self.ctx
+        previous = await asyncio.to_thread(ctx.store.dm_previous_id, msg.chat_id, msg.message_id)
+        if previous is None:
+            return
+        try:
+            await ctx.bot.set_message_reaction(msg.chat_id, previous, reaction=None)
+        except BadRequest as e:
+            if "not found" in str(e).lower() or "message_id_invalid" in str(e).lower():
+                n = await asyncio.to_thread(ctx.store.dm_forget, msg.chat_id, msg.message_id)
+                log.info("Chat %s was cleared (message %s is gone): forgot %d stored messages", msg.chat_id, previous, n)
+            elif str(e) not in self._probe_errors:  # an error this check doesn't understand: say so, once per text
+                self._probe_errors.add(str(e))
+                log.warning("Couldn't tell whether chat %s was cleared: %s", msg.chat_id, e)
+        except TelegramError as e:
+            log.debug("Clear check for chat %s failed: %s", msg.chat_id, e)
+
     async def _answer(self, msg: Message, trig: Trigger) -> None:
         ctx, st = self.ctx, self.ctx.st
+        if trig.private:
+            await self._forget_if_cleared(msg)
         who = f"{sender_name(msg)} {msg.from_user.id if msg.from_user else None}"
         where = "" if trig.private else f" @ {msg.chat_id}"
         preview = " ".join(trig.text.split())
