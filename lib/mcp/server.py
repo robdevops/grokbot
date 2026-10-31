@@ -145,11 +145,28 @@ class MCPServer:
                 compact_schema(t.inputSchema or {"type": "object", "properties": {}},
                                hide=frozenset(self.cfg.get("hide_params", [])))))
         self._warn_unknown_names(listed, allow | blocked | set(self._warm))
+        self._warn_command_tools(listed)
         enabled = sorted(self.fn_names.values())
         skipped = sorted(t.name for t in listed if t.name not in enabled)
         log_names(f"MCP {self.label}: {len(enabled)} tools:", enabled, self.log_width)
         if skipped:
             log_names(f"MCP {self.label}: {len(skipped)} skipped:", skipped, self.log_width)
+
+    def _warn_command_tools(self, listed) -> None:
+        """A chat command whose tool isn't enabled can't run: say why (a typo, or a tool that isn't read-only and
+        needs allowed_tools)."""
+        real = [t.name for t in listed]
+        commands = self.cfg.get("chat_commands")
+        for name, spec in (commands.items() if isinstance(commands, dict) else []):
+            tool = spec.get("tool") if isinstance(spec, dict) else None
+            if not tool or tool in self.fn_names.values():
+                continue
+            if tool in real:
+                why = "is blocked or not read-only (list it in allowed_tools)"
+            else:
+                close = difflib.get_close_matches(tool, real, n=1, cutoff=0.5)
+                why = "matches no tool" + (f" (did you mean '{close[0]}'?)" if close else "")
+            log.warning("MCP %s: chat command /%s calls %s, which %s", self.label, name, tool, why)
 
     def _warn_unknown_names(self, listed, configured: set[str]) -> None:
         """A blocked/allowed name that matches no tool does nothing; say so (and what was meant)."""

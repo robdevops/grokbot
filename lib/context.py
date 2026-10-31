@@ -20,6 +20,7 @@ class Ctx:
     registry: Registry
     bot: Any = None  # telegram.Bot, set at startup
     group_admins: dict = field(default_factory=dict)  # chat id -> (admin user IDs, expiry); see telegram/access.py
+    chat_commands: list = field(default_factory=list)  # features.chat_commands.ChatCommand, from mcp_servers.json
 
     @property
     def first_name(self) -> str:

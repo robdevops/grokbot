@@ -34,7 +34,7 @@ from telegram.ext import (
 
 from . import config
 from .context import Ctx
-from .features import dm_buttons, holding_news, post
+from .features import chat_commands, dm_buttons, holding_news, post
 from .features.charts import buttons as chart_buttons
 from .features.charts import pages as chart_pages
 from .features.periods import backfill
@@ -48,6 +48,11 @@ from .telegram import commands
 from .telegram.handlers import Handlers
 
 log = logging.getLogger("bot")
+
+
+# The bot's own commands: a chat command in mcp_servers.json can't take one of these names.
+BUILT_IN_COMMANDS = {"start", "tokens", "usage", "credits", "flushcache", "clear", "segments", "narrative", "events",
+                     "holdingnews"}
 
 
 def build_backend(st: config.Settings) -> Backend:
@@ -138,11 +143,12 @@ async def log_tool_size(ctx: Ctx) -> None:
 
 async def register_menu(ctx: Ctx) -> None:
     """The command menu. A scoped menu replaces the default one, so each lists everything for its scope: /segments,
-    /narrative and /events for everyone; /clear too in private chats; /tokens too for the people who can use it
+    /narrative, /events and the chat commands of mcp_servers.json for everyone; /clear too in private chats; /tokens too for the people who can use it
     (administrators of every group, and the users in ADMIN_CHAT_IDS in their own chat with the bot)."""
     everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER"),
                 BotCommand("narrative", "10-K/10-Q narrative: /narrative TICKER [section]"),
                 BotCommand("events", "8-K events: /events TICKER [section]")]
+    everyone += [BotCommand(c.name, c.description) for c in ctx.chat_commands]  # from mcp_servers.json
     private = everyone + [BotCommand("clear", "Forget our earlier messages")]
     tokens = BotCommand("tokens", "Provider balance, token use and cost")
     try:
@@ -164,6 +170,8 @@ def build_ctx(st: config.Settings) -> Ctx:
     ctx.registry = Registry.load(str(config.MCP_CONFIG), timeout=config.MCP_TIMEOUT,
                                  max_output=config.MAX_TOOL_OUTPUT, on_down=on_down,
                                  log_width=st.log_width)
+    ctx.chat_commands = chat_commands.load({label: s.cfg for label, s in ctx.registry.servers.items()},
+                                           BUILT_IN_COMMANDS)
     return ctx
 
 
@@ -211,6 +219,8 @@ def build_app(ctx: Ctx) -> Application:
     app.add_handler(CommandHandler("segments", handlers.segments))
     app.add_handler(CommandHandler("narrative", command(commands.narrative)))
     app.add_handler(CommandHandler("events", command(commands.events)))
+    for c in ctx.chat_commands:  # chat_commands in mcp_servers.json
+        app.add_handler(CommandHandler(c.name, handlers.chat_command(c)))
     app.add_handler(MessageHandler(
         (filters.ChatType.GROUPS | filters.ChatType.PRIVATE)
         & (filters.UpdateType.MESSAGE | filters.UpdateType.EDITED_MESSAGE)

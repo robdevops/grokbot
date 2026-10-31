@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -306,3 +307,25 @@ def test_debug_and_info_go_to_stdout_warnings_and_errors_to_stderr(monkeypatch, 
     err.close()
     lines = lambda name: [line.split(" ", 2)[2] for line in (tmp_path / name).read_text().splitlines()]  # noqa: E731
     assert lines("out") == ["DEBUG d", "INFO i"] and lines("err") == ["WARNING w", "ERROR e"]  # after the timestamp
+
+
+async def test_chat_commands_from_mcp_servers_json_are_loaded_registered_and_in_the_menu(env, store, tmp_path, monkeypatch):
+    from telegram.ext import CommandHandler
+    path = tmp_path / "mcp_servers.json"
+    path.write_text(json.dumps({"mcpServers": {"weather": {
+        "url": "https://example.com/mcp",
+        "chat_commands": {"forecast": {"tool": "get_forecast", "require_arg": True, "description": "Weather forecast"},
+                          "clear": {"tool": "x"}}}}}))  # /clear is the bot's own: skipped
+    monkeypatch.setattr(config, "MCP_CONFIG", path)
+    ctx = app.build_ctx(config.load(env))
+    assert [c.name for c in ctx.chat_commands] == ["forecast"]
+    built = app.build_app(ctx)
+    assert "forecast" in {c for h in built.handlers[0] if isinstance(h, CommandHandler) for c in h.commands}
+    calls = []
+
+    async def set_my_commands(commands, scope=None):
+        calls.append([c.command for c in commands])
+
+    ctx.bot = SimpleNamespace(set_my_commands=set_my_commands)
+    await app.register_menu(ctx)
+    assert all("forecast" in menu for menu in calls)

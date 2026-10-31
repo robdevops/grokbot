@@ -185,7 +185,7 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
     searched = 0
     while True:
         final = rounds >= config.MAX_TOOL_ROUNDS
-        choice = "none" if final else ("required" if req.must_search and rounds == 0 else None)
+        choice = "none" if final else ("required" if (req.must_search or req.must_call) and rounds == 0 else None)
         step = await _step(backend, conv, req, choice)
         rounds += 1
         total.add(step.usage)
