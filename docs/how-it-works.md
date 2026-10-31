@@ -20,12 +20,6 @@
 - **Shared database:** group history lives in `messages`, shared by every bot started with the same
   `DATA_DIR` (so two bots in one group see each other's replies). Private chats live in
   `dm_messages`, keyed by bot, because each bot's DM with a person has its own message-ID sequence.
-  **Clearing a DM:** Telegram sends a bot no update when a person clears a private chat with "also delete for the bot", so on each
-  DM message the bot asks Telegram to put an empty reaction on the chat's previous message (it changes nothing on a message that
-  exists). If Telegram says the message isn't found, the chat was cleared: the stored history before the new message is dropped
-  and the model starts fresh. If the person cleared it only for themselves, the message still exists and the history stays.
-  This relies on Telegram's error for a deleted message (matched on "not found"); any other error is logged once as
-  "Couldn't tell whether chat N was cleared" and the history is kept.
 - **Images:** photos in the mention, or in the message being replied to, are sent to the model
   (up to 2). A mid-size copy is sent at low detail, unless the text asks the
   model to read it (read, text, chart, table, screenshot...).

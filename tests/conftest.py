@@ -89,10 +89,6 @@ class FakeBot:
     async def send_chat_action(self, chat_id, action):
         self.actions.append(action)
 
-    async def set_message_reaction(self, chat_id, message_id, reaction=None, **kw):
-        """The clear check's probe: succeeds for any message unless a test replaces it."""
-        return True
-
     async def send_message_draft(self, chat_id, draft_id, text):
         self.drafts.append(text)
 
