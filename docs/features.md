@@ -83,9 +83,9 @@ for its definition.
 - **Price history:** the interval follows the period so the history fits in one Yahoo response (daily up to 3 months,
   weekly for 6 months and a year, monthly for 2 and 5 years, quarterly beyond), at most 60 points. The model is told
   each series' first and last value, change, low and high, so it can comment on a chart whose prices it never saw.
-- **Cost:** matplotlib loads on the first chart and keeps its font cache in `matplotlib/` inside `DATA_DIR`. A chart
-  takes about half a second to draw (about a second for the first), and after the first one the bot uses about 50 MB
-  more memory.
+- **Cost:** charts are laid out by the bot's own code and painted with Pillow (its built-in font); no numpy or
+  matplotlib. A chart takes about a tenth of a second to draw (well under a second for the first) and about 30 MB of
+  memory while it is drawn. A `matplotlib/` folder left in `DATA_DIR` by older versions can be deleted.
 
 ## Commands
 | Command | Who | What |

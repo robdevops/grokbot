@@ -13,14 +13,11 @@ layout, the order of work and the checks).
 - **Seams first, in Python?** Carving the feature seams in Python before the port (see "Order of work", step A) improves
   the code now and lets the oracle goldens be sliced per feature. The plan recommends it; the Go port would then
   reproduce an already-proven structure.
-- **Chart rendering:** the charts feature draws with matplotlib (line, bar, scatter and donut, light and dark themes, end labels,
-  two y axes). A single static binary needs a pure-Go renderer.
-  - Recommended: a small hand-written renderer (`internal/kit/chart`, `golang/freetype` or `fogleman/gg`, with DejaVu Sans
-    embedded) behind a one-function interface, so it can be swapped.
-  - Alternatives: `gonum.org/v1/plot` (less control of the pie/donut and the end labels), or a Python sidecar (breaks the
-    one-binary goal).
-  - Pixel parity is impossible. Goldens pin the **scene** (the list of draw operations and the text drawn), plus a few
-    reference images judged by eye.
+- **Chart rendering:** the Python bot no longer uses matplotlib: `lib/features/charts/` lays a chart out into a
+  scene (plain draw operations in pixels: `scene.py`, built by `cartesian.py` and `pie.py`, ticks in `ticks.py`) and
+  paints it with Pillow (`raster.py`, at 2x, with Pillow's built-in font). The Go port mirrors that split: port the layout
+  as is, pin its scenes with goldens from the Python version, and write a small rasteriser (`golang/freetype` or
+  `fogleman/gg`, with a font embedded, since Pillow's isn't available). Pixel parity is not a goal; scene parity is.
 - **Verification effort:** the full set is oracle goldens, end-to-end scenarios, fuzzing and a 1–2 week shadow run with
   a second bot. A lighter variant keeps the goldens and the shadow run only.
 - **Byte-identical vs semantic parity:**
@@ -376,7 +373,7 @@ A. **Carve the seams in Python first (recommended; settle the open question).** 
 - The feature contract is too thin or too wide and features work around it → port the small features first and change the contract
   while it has few users; the contract is a few hooks, and anything a feature needs twice becomes a port.
 - Modularity erodes as features grow → the import-graph test, the removal matrix, the 300-line limit and the per-PR size report fail the build.
-- Chart looks differ from matplotlib → scene goldens plus reference images judged by eye; the renderer sits behind one function so it can be swapped.
+- Chart looks differ from the Python version → scene goldens pin the layout; the rasteriser sits behind one function and is judged by eye.
 - TickerScout output keeps changing shape → fixtures per ticker in `sources/tickerscout`, so a new quirk is one adapter change with its test.
 
 ## Verification

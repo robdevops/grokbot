@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import math
 from dataclasses import replace
@@ -6,12 +7,14 @@ from datetime import date, datetime
 from types import SimpleNamespace as N
 
 import pytest
+from PIL import Image
 
 from lib import config
 from lib.context import Ctx
 from lib.features import charts
 from lib.features.charts import buttons, pages, render
 from lib.features.charts.render import Chart, Series
+from lib.features.charts.scene import PT
 
 from .conftest import FakeBot, user_msg
 from .fakes import FakeMcp, ScriptedBackend, registry, step
@@ -23,7 +26,7 @@ REAL_PNG = render.png  # the real renderer, for the few tests that look at the p
 @pytest.fixture(autouse=True)
 def fast_png(monkeypatch):
     """Most tests need a picture to exist, not to be drawn: a PNG header stands in (drawing takes ~0.15 s each, and
-    the suite makes dozens). The tests that check drawing call REAL_PNG, and the figure tests build real figures."""
+    the suite makes dozens). The tests that check drawing call REAL_PNG; the rest look at the scene."""
     monkeypatch.setattr(render, "png", lambda chart: b"\x89PNG\r\n\x1a\nfake")
 
 
@@ -44,23 +47,35 @@ def test_two_axes_each_with_several_series_and_either_inverted():
         Series("Gold", days, [1.0, 2.0, 3.0]), Series("Silver", days, [2.0, 1.0, 2.0]),
         Series("AUD", days, [0.6, 0.65, 0.7], axis="right"), Series("NZD", days, [0.5, 0.55, 0.6], axis="right")],
         left_label="USD/oz", right_label="USD", invert_left=False, invert_right=True)
-    fig = render.figure(chart)
-    left, right = fig.axes
-    assert len(left.get_lines()) == 2 and len(right.get_lines()) == 2
-    assert not left.yaxis_inverted() and right.yaxis_inverted()
-    assert left.get_ylabel() == "USD/oz" and right.get_ylabel() == "USD (inverted)"
-    assert [t.get_text() for t in left.get_legend().get_texts()] == ["Gold", "Silver", "AUD (right)", "NZD (right)"]
+    scene = render.scene(chart)
+    assert len(scene.find("line")) == 4
+    assert scene.inverted == {"left": False, "right": True}
+    assert scene.axis_titles == {"left": "USD/oz", "right": "USD (inverted)"}
+    assert scene.legend == ["Gold", "Silver", "AUD (right)", "NZD (right)"]
     chart.invert_left = True
-    assert render.figure(chart).axes[0].yaxis_inverted()
+    assert render.scene(chart).inverted["left"]
+
+
+def test_an_inverted_axis_draws_bigger_values_lower():
+    def ends(chart):
+        [line] = render.scene(chart).find("line")
+        return line.points[0][1], line.points[-1][1]  # y in pixels: down the picture
+    chart = Chart("t", [Series("a", DAYS, [1.0, 2.0])])
+    first, last = ends(chart)
+    assert last < first  # 2 is higher up than 1
+    first, last = ends(replace(chart, invert_left=True))
+    assert last > first
 
 
 def test_one_axis_bars_and_labels():
     chart = Chart("Monthly", [Series("A", ["Jan", "Feb"], [1.0, -2.0], kind="bar"),
                               Series("B", ["Jan", "Feb"], [0.5, 1.0], kind="bar")], labels=["Jan", "Feb"])
-    fig = render.figure(chart)
-    assert len(fig.axes) == 1 and len(fig.axes[0].patches) == 4
-    assert [t.get_text() for t in fig.axes[0].get_xticklabels()] == ["Jan", "Feb"]
-    assert REAL_PNG(chart).startswith(b"\x89PNG\r\n\x1a\n") and len(REAL_PNG(chart)) > 5000
+    scene = render.scene(chart)
+    assert len(scene.find("bar")) == 4 and list(scene.inverted) == ["left"]
+    assert scene.x_labels == ["Jan", "Feb"]
+    picture = Image.open(io.BytesIO(REAL_PNG(chart)))
+    assert picture.size == (1224, 714) and picture.getpixel((2, 2))[:3] == (255, 255, 255)
+    assert (0x25, 0x63, 0xeb) in {c[:3] for _, c in picture.getcolors(1224 * 714)}  # the first bar's blue
 
 
 def test_tick_labels_share_their_decimals_and_shorten_big_numbers():
@@ -76,18 +91,18 @@ DAYS = [datetime(2026, 1, d) for d in (1, 2)]
 
 
 def end_label_texts(chart):
-    return [t.get_text() for t in render.figure(chart).axes[0].texts]
+    return render.scene(chart).end_labels
 
 
 def test_lines_are_named_at_their_ends_with_their_totals_and_have_no_legend():
     chart = Chart("t", [Series("NBIS", DAYS, [0.0, -27.1], total="-27.1%"), Series("Mine", DAYS, [1.0, 2.0])])
-    assert render.figure(chart).axes[0].get_legend() is None
+    assert render.scene(chart).legend == []
     assert end_label_texts(chart) == ["NBIS  -27.1%", "Mine"]
     assert end_label_texts(Chart("t", [Series("NVDA", DAYS, [1.0, 2.0], total="+100.0%")])) == ["NVDA  +100.0%"]
 
 
 def test_two_axes_or_bars_keep_a_legend_with_the_totals():
-    legend = lambda chart: [t.get_text() for t in render.figure(chart).axes[0].get_legend().get_texts()]  # noqa: E731
+    legend = lambda chart: render.scene(chart).legend  # noqa: E731
     two = Chart("t", [Series("NBIS", DAYS, [0.0, -27.1], total="-27.1%"),
                       Series("Gold", DAYS, [1.0, 2.0], axis="right", total="+100.0%"),
                       Series("Mine", DAYS, [1.0, 2.0])])
@@ -97,17 +112,17 @@ def test_two_axes_or_bars_keep_a_legend_with_the_totals():
 
 def test_one_y_axis_has_no_title_unless_it_is_inverted_and_two_keep_theirs():
     one = Chart("t", [Series("a", DAYS, [1.0, 2.0])], left_label="Price")
-    assert render.figure(one).axes[0].get_ylabel() == ""
-    assert render.figure(replace(one, invert_left=True)).axes[0].get_ylabel() == "inverted"
+    assert render.scene(one).axis_titles == {"left": ""} and not render.scene(one).find("axis-title")
+    assert render.scene(replace(one, invert_left=True)).axis_titles == {"left": "inverted"}
     two = Chart("t", [Series("a", DAYS, [1.0, 2.0]), Series("b", DAYS, [1.0, 2.0], axis="right")],
                 left_label="Price", right_label="Rate")
-    assert [ax.get_ylabel() for ax in render.figure(two).axes] == ["Price", "Rate"]
+    assert render.scene(two).axis_titles == {"left": "Price", "right": "Rate"}
 
 
 def test_a_chart_of_right_axis_series_alone_is_drawn_on_one_axis_with_the_right_settings():
     chart = Chart("t", [Series("a", DAYS, [1.0, 2.0], axis="right")], right_label="Rate", invert_right=True)
-    fig = render.figure(chart)
-    assert len(fig.axes) == 1 and fig.axes[0].yaxis_inverted() and fig.axes[0].get_ylabel() == "inverted"
+    scene = render.scene(chart)
+    assert scene.inverted == {"left": True} and scene.axis_titles == {"left": "inverted"}
     assert end_label_texts(chart) == ["a"]
 
 
@@ -119,17 +134,19 @@ def test_end_labels_are_pushed_apart_in_order_and_kept_on_the_plot():
 
 
 def test_the_x_axis_has_strokes_above_its_labels_and_the_y_axis_none():
-    ax = render.figure(Chart("t", [Series("a", DAYS, [1.0, 2.0])])).axes[0]
-    assert ax.xaxis.get_major_ticks()[0].tick1line.get_markersize() == 5
-    assert ax.yaxis.get_major_ticks()[0].tick1line.get_markersize() == 0
+    scene = render.scene(Chart("t", [Series("a", DAYS, [1.0, 2.0])]))
+    strokes, labels = scene.find("x-tick"), scene.find("x-label")
+    assert strokes and len(strokes) == len(labels)
+    assert all(s.points[0][0] == s.points[1][0] and s.points[1][1] < label.y for s, label in zip(strokes, labels, strict=True))
+    assert scene.find("y-label") and not scene.find("y-tick")
 
 
 def test_the_dark_theme_has_a_dark_background_and_light_text():
-    light = render.figure(Chart("t", [Series("a", DAYS, [1.0, 2.0])]))
-    dark = render.figure(Chart("t", [Series("a", DAYS, [1.0, 2.0])], dark=True))
-    assert light.get_facecolor()[:3] == (1.0, 1.0, 1.0)
-    assert dark.get_facecolor()[:3] == pytest.approx((0x14 / 255, 0x1a / 255, 0x22 / 255))
-    assert dark.axes[0].get_title(loc="left") == "t" and dark.axes[0]._left_title.get_color() == render.THEMES["dark"].ink
+    light = render.scene(Chart("t", [Series("a", DAYS, [1.0, 2.0])]))
+    dark = render.scene(Chart("t", [Series("a", DAYS, [1.0, 2.0])], dark=True))
+    assert light.bg == "#ffffff" and dark.bg == "#141a22"
+    [title] = dark.find("title")
+    assert title.text == "t" and title.color == render.THEMES["dark"].ink and title.bold
 
 
 def test_charts_are_dark_from_9pm_to_7am():
@@ -162,19 +179,22 @@ def test_legend_columns_fit_the_labels_across_the_image():
     assert render.legend_columns(["x" * 200]) == 1
 
 
-def test_the_legend_reads_left_to_right():
-    assert render.legend_order(list("abcdefg"), 4) == list("aebfcgd")  # rows: a b c d / e f g
-    assert render.legend_order(list("abc"), 3) == list("abc")
+def test_the_legend_reads_left_to_right_row_by_row():
+    chart = Chart("t", [Series(n, DAYS, [1.0, 2.0], kind="bar") for n in "abcdefg"])
+    scene = render.scene(chart)
+    texts = scene.find("legend")
+    assert scene.legend == list("abcdefg")
+    rows = sorted({t.y for t in texts})
+    assert [t.text for t in texts if t.y == rows[0]] == ["a", "b", "c", "d", "e", "f"]  # six fit across
 
 
 def test_charts_have_no_frame_and_only_horizontal_rules():
     days = [datetime(2026, 1, d) for d in (1, 2, 3)]
-    fig = render.figure(Chart("t", [Series("a", days, [1.0, -1.0, 2.0]), Series("b", days, [5.0, 6.0, 7.0], axis="right")]))
-    left, right = fig.axes
-    assert not any(sp.get_visible() for ax in (left, right) for sp in ax.spines.values())
-    assert any(g.get_visible() for g in left.yaxis.get_gridlines())
-    assert not any(g.get_visible() for g in left.xaxis.get_gridlines())
-    assert [line.get_ydata()[0] for line in left.get_lines()][-1] == 0  # a zero line when the data crosses zero
+    scene = render.scene(Chart("t", [Series("a", days, [1.0, -1.0, 2.0]), Series("b", days, [5.0, 6.0, 7.0], axis="right")]))
+    rules = scene.find("rule")
+    assert rules and all(r.points[0][1] == r.points[1][1] for r in rules)  # horizontal only
+    assert not scene.find("frame")
+    assert len(scene.find("zero")) == 1  # the left axis crosses zero, the right doesn't
 
 
 def test_x_values_become_dates_numbers_or_labels():
@@ -519,17 +539,18 @@ async def test_the_subtitle_says_what_the_chart_shows_and_when(env, store):
 
 def test_the_subtitle_sits_under_the_title_and_the_date_is_not_repeated_bottom_right():
     chart = Chart("t", [Series("a", DAYS, [1.0, 2.0])], subtitle="Closing price, 1 Jan - 2 Jan 2026")
-    ax = render.figure(chart).axes[0]
-    assert [t.get_text() for t in ax.texts if "Closing" in t.get_text()] == ["Closing price, 1 Jan - 2 Jan 2026"]
-    assert not ax.xaxis.get_offset_text().get_visible()
+    scene = render.scene(chart)
+    [subtitle], [title] = scene.find("subtitle"), scene.find("title")
+    assert subtitle.text == "Closing price, 1 Jan - 2 Jan 2026" and subtitle.y > title.y
+    assert not any("2026" in label for label in scene.x_labels if len(label) > 4)
 
 
 def test_the_line_at_zero_is_as_light_as_the_other_rules():
     chart = Chart("t", [Series("a", DAYS, [-1.0, 2.0])])
-    ax = render.figure(chart).axes[0]
-    zero = [line for line in ax.get_lines() if list(line.get_ydata()) == [0, 0]]
-    assert zero and zero[0].get_linewidth() == render.RULE_WIDTH == ax.yaxis.get_gridlines()[0].get_linewidth()
-    assert zero[0].get_color() == render.THEMES["light"].rule
+    scene = render.scene(chart)
+    [zero] = scene.find("zero")
+    assert zero.width == scene.find("rule")[0].width == render.RULE_WIDTH * PT
+    assert zero.color == scene.find("rule")[0].color == render.THEMES["light"].rule
 
 
 async def test_a_total_that_is_not_a_figure_is_dropped_and_computed_ones_win(env, store):
@@ -559,11 +580,14 @@ def test_pie_slices_are_biggest_first_with_gaps_dropped_and_the_smallest_added_u
 def test_a_pie_is_a_donut_with_a_legend_of_shares_and_the_total_in_the_middle():
     chart = Chart("Revenue", [Series("p", ["US", "Taiwan"], [75.0, 25.0], kind="pie", total="$100B")],
                   subtitle="Share of total")
-    fig = render.figure(chart)
-    assert len(fig.axes[0].patches) == 2 and [t.get_text() for t in fig.axes[0].texts if t.get_text()] == ["$100B"]
-    assert [t.get_text() for t in fig.legends[0].get_texts()] == ["US  75.0%", "Taiwan  25.0%"]
-    assert REAL_PNG(chart).startswith(b"\x89PNG")
-    assert REAL_PNG(replace(chart, dark=True)).startswith(b"\x89PNG")
+    scene = render.scene(chart)
+    wedges = scene.find("wedge")
+    assert len(wedges) == 2 and wedges[0].end - wedges[0].start == pytest.approx(270)  # 75% of the way round
+    assert scene.texts("total") == ["$100B"] and scene.find("hole")
+    assert scene.legend == ["US  75.0%", "Taiwan  25.0%"]
+    for dark, bg in ((False, (255, 255, 255)), (True, (0x14, 0x1a, 0x22))):
+        picture = Image.open(io.BytesIO(REAL_PNG(replace(chart, dark=dark))))
+        assert picture.size == (1224, 714) and picture.getpixel((2, 2))[:3] == bg
 
 
 async def test_a_pie_call_takes_slices_names_and_shares_for_the_model(env, store):
@@ -828,3 +852,26 @@ def test_five_chart_buttons_make_two_rows():
     from lib.features.charts import pages
     rows = pages.keyboard(["A", "B", "C", "D", "E"], 0).inline_keyboard
     assert [len(r) for r in rows] == [3, 2]
+
+
+def test_number_ticks_are_round_steps_inside_the_range():
+    from lib.features.charts.ticks import nice_ticks
+    assert nice_ticks(-24.0, 56.0) == [-20, -10, 0, 10, 20, 30, 40, 50]
+    assert nice_ticks(44.2, 60.8) == [46, 48, 50, 52, 54, 56, 58, 60]
+    assert nice_ticks(0.62, 0.71) == [0.62, 0.64, 0.66, 0.68, 0.7]
+    assert nice_ticks(2020.9, 2025.1, integer=True) == [2021, 2022, 2023, 2024, 2025]  # years, never 2021.5
+    assert nice_ticks(0.0, 0.4, integer=True) == [0]
+    assert nice_ticks(3.0, 3.0) == [3.0]
+
+
+@pytest.mark.parametrize("start, end, labels", [
+    (datetime(2026, 10, 30, 9, 30), datetime(2026, 10, 30, 16, 0),
+     ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"]),
+    (datetime(2026, 10, 29, 18, 0), datetime(2026, 10, 30, 12, 0), ["18:00", "21:00", "30 Oct", "03:00", "06:00", "09:00", "12:00"]),
+    (datetime(2026, 1, 3), datetime(2026, 1, 31), ["8", "15", "22"]),  # not 29: too near the next month's start
+    (datetime(2025, 10, 31), datetime(2026, 10, 30), ["Nov", "2026", "Mar", "May", "Jul", "Sep"]),
+    (datetime(2021, 11, 1), datetime(2026, 10, 30), ["2022", "2023", "2024", "2025", "2026"]),
+])
+def test_date_ticks_pick_a_unit_for_the_span_and_name_the_bigger_one_at_its_boundary(start, end, labels):
+    from lib.features.charts.ticks import date_ticks
+    assert [label for _, label in date_ticks(start, end)] == labels
