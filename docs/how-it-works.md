@@ -23,6 +23,10 @@
 - **Images:** photos in the mention, or in the message being replied to, are sent to the model
   (up to 2). A mid-size copy is sent at low detail, unless the text asks the
   model to read it (read, text, chart, table, screenshot...).
+  **Stickers** count too, when they are the message the bot answers (any sticker in a DM, or one sent as a reply to the
+  bot) or the message being replied to ("@bot what does this sticker mean?"); other stickers in a group are never sent. A static
+  sticker goes as the WebP image it is, with no conversion; an animated or video one goes as its preview frame. Older
+  stickers in the history are still just their emoji.
 - **Charts:** asked for a chart, graph or plot, the model can draw one and it is sent as a photo with the reply
   (see [Charts](features.md#charts)).
 - **"What tools do you have?":** a message like "what tools do you have", "list your capabilities" or "what can you

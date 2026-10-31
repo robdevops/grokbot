@@ -50,20 +50,37 @@ def mentions(text: str, username: str | None) -> bool:
 
 
 def photo_file_id(msg: Message) -> str | None:
-    """A photo's file id: the smallest size at least 640 px wide (fewer image tokens)."""
+    """An image's file id: a photo's smallest size at least 640 px wide (fewer image tokens), an image document, or a
+    sticker. A static sticker is a WebP image, sent as it is. An animated (Lottie) or video one can't be shown, so
+    its preview frame is, if Telegram gave one."""
     if msg.photo:
         sizes = sorted(msg.photo, key=lambda p: p.width)
         return next((p for p in sizes if p.width >= 640), sizes[-1]).file_id
     doc = msg.document
     if doc and (doc.mime_type or "") in ("image/jpeg", "image/png"):
         return doc.file_id
+    sticker = getattr(msg, "sticker", None)
+    if sticker:
+        if sticker.is_animated or sticker.is_video:
+            return sticker.thumbnail.file_id if sticker.thumbnail else None
+        return sticker.file_id
     return None
+
+
+def image_mime(data: bytes) -> str:
+    """The type of a downloaded image, from its first bytes: PNG, WebP (stickers) or else JPEG."""
+    if data[:4] == b"\x89PNG":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
 
 
 async def image_part(bot, file_id: str, detail: str) -> dict:
     f = await bot.get_file(file_id)
     data = bytes(await f.download_as_bytearray())
-    mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
+    mime = image_mime(data)
+    log.debug("Image %s, %d bytes", mime, len(data))
     return {"type": "image", "url": f"data:{mime};base64,{base64.b64encode(data).decode()}",
             "detail": detail}
 
