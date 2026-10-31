@@ -147,6 +147,13 @@ class Store:
             f"WHERE {where} ORDER BY message_id DESC LIMIT ?", (*args, size))
         return [HistoryRow(*r) for r in reversed(rows)]
 
+    def dm_clear(self, chat_id: int) -> int:
+        """Delete this bot's stored history of a private chat; returns how many messages went."""
+        args = (self._own_id(), chat_id)
+        n = self._run("SELECT COUNT(*) FROM dm_messages WHERE bot_id = ? AND chat_id = ?", args)[0][0]
+        self._run("DELETE FROM dm_messages WHERE bot_id = ? AND chat_id = ?", args)
+        return n
+
     def dm_chats(self) -> list[int]:
         """Everyone this bot has a private chat with."""
         rows = self._run("SELECT DISTINCT chat_id FROM dm_messages WHERE bot_id = ?", (self._own_id(),))

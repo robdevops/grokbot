@@ -104,6 +104,20 @@ async def edit_in_place(query, text: str, markup) -> None:
                 raise
 
 
+async def clear(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/clear - in a private chat: the bot forgets its stored history of it (what a person clears on their own screen
+    stays on it). Neither this command nor the reply is stored, so the history starts empty. Not in groups, whose
+    history is shared by everyone and every bot in them."""
+    msg = update.effective_message
+    if not is_dm(msg.chat_id):
+        await reply_chunks(msg, "Use /clear in a private chat with me. A group's history is shared, so I leave it alone.",
+                           ctx.store, quote=False)
+        return
+    n = await asyncio.to_thread(ctx.store.dm_clear, msg.chat_id)
+    log.info("Cleared the stored history of chat %s (%d messages)", msg.chat_id, n)
+    await msg.reply_text("Done, I've forgotten our earlier messages.", disable_notification=True)
+
+
 async def show_filing(ctx: Ctx, msg, kind: filings.Kind, ticker: str, index: int | None, section: str,
                       query=None) -> None:
     """One section of a ticker's narrative or events as one message, with a button for each section: a reply to the

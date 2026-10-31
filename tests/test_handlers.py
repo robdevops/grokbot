@@ -414,3 +414,41 @@ async def test_a_sticker_in_a_dm_or_replied_to_is_attached_but_other_group_stick
     stray = user_msg(ctx.bot, "", chat_id=-100, mid=8)  # a sticker in the group that nobody addressed to the bot
     stray.sticker = sticker("stray").sticker
     assert h._trigger(stray) is None  # so it is never downloaded, let alone sent
+
+
+async def test_clear_makes_the_bot_forget_a_private_chat_and_stores_nothing_of_itself(env, store):
+    from types import SimpleNamespace as N
+
+    from lib.telegram import commands
+    ctx, backend, h = make_ctx(env, store, [step("first answer"), step("fresh answer")])
+    await run(h, user_msg(ctx.bot, "remember the banana plan", chat_id=5, user_id=5, mid=1))
+    assert len(store.history(5, 20)) == 2  # the message and the reply
+    clear = user_msg(ctx.bot, "/clear", chat_id=5, user_id=5, mid=2)
+    await commands.clear(ctx, N(effective_message=clear, effective_user=clear.from_user), None)
+    assert store.history(5, 20) == [] and clear.replies[0]["text"].startswith("Done")
+    await run(h, user_msg(ctx.bot, "hello again", chat_id=5, user_id=5, mid=3))
+    assert "banana plan" not in backend.seen[1]["prompt"] and "hello again" in backend.seen[1]["prompt"]
+
+
+async def test_clear_leaves_a_groups_shared_history_alone(env, store):
+    from types import SimpleNamespace as N
+
+    from lib.telegram import commands
+    ctx, _, h = make_ctx(env, store, [step("an answer")])
+    await run(h, user_msg(ctx.bot, "@stockbot the banana plan", chat_id=-100, mid=1))
+    clear = user_msg(ctx.bot, "/clear", chat_id=-100, mid=2)
+    await commands.clear(ctx, N(effective_message=clear, effective_user=clear.from_user), None)
+    assert "private chat" in clear.replies[0]["text"]
+    assert [r.text for r in store.history(-100, 20)][:2] == ["@stockbot the banana plan", "an answer"]  # nothing deleted
+
+
+async def test_clear_only_touches_this_chat_and_this_bot(env, store):
+    from types import SimpleNamespace as N
+
+    from lib.telegram import commands
+    ctx, _, h = make_ctx(env, store, [step("a"), step("b")])
+    await run(h, user_msg(ctx.bot, "mine", chat_id=5, user_id=5, mid=1))
+    await run(h, user_msg(ctx.bot, "someone else's", chat_id=6, user_id=6, mid=1))
+    clear = user_msg(ctx.bot, "/clear", chat_id=5, user_id=5, mid=2)
+    await commands.clear(ctx, N(effective_message=clear, effective_user=clear.from_user), None)
+    assert store.history(5, 20) == [] and len(store.history(6, 20)) == 2

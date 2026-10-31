@@ -13,7 +13,13 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from telegram import BotCommand, BotCommandScopeAllChatAdministrators, BotCommandScopeChat, Update
+from telegram import (
+    BotCommand,
+    BotCommandScopeAllChatAdministrators,
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeChat,
+    Update,
+)
 from telegram.constants import ParseMode
 from telegram.error import NetworkError, TelegramError
 from telegram.ext import (
@@ -131,18 +137,20 @@ async def log_tool_size(ctx: Ctx) -> None:
 
 
 async def register_menu(ctx: Ctx) -> None:
-    """The command menu: /segments, /narrative and /events for everyone, and /tokens too for the people who can use it (a scoped menu
-    replaces the default one, so it lists both): administrators of every group, and the users in ADMIN_CHAT_IDS
-    in their own chat with the bot."""
+    """The command menu. A scoped menu replaces the default one, so each lists everything for its scope: /segments,
+    /narrative and /events for everyone; /clear too in private chats; /tokens too for the people who can use it
+    (administrators of every group, and the users in ADMIN_CHAT_IDS in their own chat with the bot)."""
     everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER"),
                 BotCommand("narrative", "10-K/10-Q narrative: /narrative TICKER [section]"),
                 BotCommand("events", "8-K events: /events TICKER [section]")]
-    admins = everyone + [BotCommand("tokens", "Provider balance, token use and cost")]
+    private = everyone + [BotCommand("clear", "Forget our earlier messages")]
+    tokens = BotCommand("tokens", "Provider balance, token use and cost")
     try:
         await ctx.bot.set_my_commands(everyone)
-        await ctx.bot.set_my_commands(admins, scope=BotCommandScopeAllChatAdministrators())
+        await ctx.bot.set_my_commands(private, scope=BotCommandScopeAllPrivateChats())
+        await ctx.bot.set_my_commands(everyone + [tokens], scope=BotCommandScopeAllChatAdministrators())
         for chat_id in ctx.st.admin_chats:
-            await ctx.bot.set_my_commands(admins, scope=BotCommandScopeChat(chat_id))
+            await ctx.bot.set_my_commands(private + [tokens], scope=BotCommandScopeChat(chat_id))
     except TelegramError as e:
         log.warning("Couldn't register the command menu: %s", e)
 
@@ -199,6 +207,7 @@ def build_app(ctx: Ctx) -> Application:
     # Commands first: the first matching handler wins, and the catch-all would swallow them.
     app.add_handler(CommandHandler(["tokens", "usage", "credits"], command(commands.credits)))
     app.add_handler(CommandHandler("flushcache", command(commands.flush_cache)))
+    app.add_handler(CommandHandler("clear", command(commands.clear)))
     app.add_handler(CommandHandler("segments", handlers.segments))
     app.add_handler(CommandHandler("narrative", command(commands.narrative)))
     app.add_handler(CommandHandler("events", command(commands.events)))

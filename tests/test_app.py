@@ -31,14 +31,14 @@ def test_handlers_follow_the_flags(env, store):
         return app.build_app(Ctx(st, store, ScriptedBackend([]), registry())), st
 
     plain, st = build()
-    assert handler_kinds(plain) == ["CommandHandler"] * 5 + ["MessageHandler",
+    assert handler_kinds(plain) == ["CommandHandler"] * 6 + ["MessageHandler",
                                     "CallbackQueryHandler", "CallbackQueryHandler", "CallbackQueryHandler"]  # chart periods, charts, sections
     assert app.allowed_updates(st) == ["message", "edited_message", "callback_query"]  # chart buttons
     full, st = build(ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
     kinds = handler_kinds(full)
-    assert kinds == ["CommandHandler"] * 5 + ["MessageHandler"] + ["CallbackQueryHandler"] * 4
+    assert kinds == ["CommandHandler"] * 6 + ["MessageHandler"] + ["CallbackQueryHandler"] * 4
     assert "callback_query" in app.allowed_updates(st)
-    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"tokens", "usage", "credits", "flushcache", "segments", "narrative", "events"}
+    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"tokens", "usage", "credits", "flushcache", "segments", "narrative", "events", "clear"}
     assert any(isinstance(h, MessageHandler) for h in full.handlers[0])
     locked, st = build(ADMIN_ONLY="on")  # remembers the groups it is in, to know who their admins are
     assert "ChatMemberHandler" in handler_kinds(locked) and "my_chat_member" in app.allowed_updates(st)
@@ -186,7 +186,7 @@ async def _no_menu(commands, scope=None):
     return True
 
 
-async def test_the_menu_lists_segments_for_everyone_and_tokens_for_admins(env, store):
+async def test_the_menu_lists_commands_by_who_can_use_them(env, store):
     calls = []
 
     async def set_my_commands(commands, scope=None):
@@ -197,8 +197,9 @@ async def test_the_menu_lists_segments_for_everyone_and_tokens_for_admins(env, s
     await app.register_menu(ctx)
     everyone = ["segments", "narrative", "events"]
     assert calls == [(everyone, "NoneType", None),
+                     (everyone + ["clear"], "BotCommandScopeAllPrivateChats", None),
                      (everyone + ["tokens"], "BotCommandScopeAllChatAdministrators", None),
-                     (everyone + ["tokens"], "BotCommandScopeChat", 5)]
+                     (everyone + ["clear", "tokens"], "BotCommandScopeChat", 5)]
 
 
 def test_the_mcp_librarys_unlabelled_protocol_and_ping_lines_are_dropped(monkeypatch):
