@@ -32,7 +32,7 @@ Each is off by default. The holding-news DM and the movers reply are switched on
 
 ## Charts
 Ask for a chart, graph or plot ("chart NVDA against AMD over a year, AMD on the right axis, inverted") and the bot
-replies once: the chart as a photo with its answer as the caption. Two or three charts come as one image with a
+replies once: the chart as a photo with its answer as the caption. Two to five charts come as one image with a
 button for each (see below), not an album. An answer too
 long for a caption (about 1,000 characters) continues in a text message. The model gets the `make_chart` tool only
 when the message asks for one (chart, graph, plot, pie, visualise, breakdown, segments), so other requests don't pay
@@ -47,11 +47,17 @@ for its definition.
   a legend, with the totals in it.
 - **Pie charts:** for a share-of-total breakdown (revenue by segment, platform or region) the model draws a donut
   with `kind: pie`: one series per chart, slice names and values, with each slice's % of the total in a legend
-  beside it and the total in the middle. Past 8 slices the smallest are added up as "Other". A request for
-  several breakdowns makes several pies (up to 3), sent as one image with a button for each. Like other charts of
+  beside it and the total in the middle. Past 8 slices the smallest are added up as "Other".
+  **Fast path:** a plain "NVDA revenue breakdown" (a ticker and breakdown/segments words, nothing else) skips the model:
+  the bot calls the TickerScout `get_segments` tool itself (any MCP server that has a tool of that name) for the
+  latest quarter, draws a pie for every revenue grouping it finds (what the categories are varies by company, so it
+  searches the result at any depth, asks for the breakdowns the result lists, and, with fewer than three pies, searches
+  the income statement from `get_statements` too), drops subtotals and totals beside their parts, and replies with a one-line caption. Anything else (a period, two tickers, a question), a missing or down
+  source or an unreadable result goes to the model as usual.
+  A request for several breakdowns makes several pies (up to 5), sent as one image with a button for each. Like other charts of
   values the model passes, pies get no period buttons. The model is told to use parts of one whole only, never a subtotal beside its parts.
   This pairs with any MCP source that returns breakdowns, such as a company-segments tool.
-- **Several charts, one image:** when a reply has 2 or 3 charts (for example a breakdown by segment, platform and
+- **Several charts, one image:** when a reply has 2 to 5 charts (for example a breakdown by segment, platform and
   region), the first is the image and each chart has a button under it, labelled with the part of its title that
   differs ("Segment", "Platform", "Region"). A tap swaps the image in place and keeps the answer as the caption; the one
   shown is shaded. With `TELEGRAM_PRELOAD_CHAT` the other charts are uploaded in the background, so even the first tap
@@ -77,16 +83,20 @@ for its definition.
 - **Price history:** the interval follows the period so the history fits in one Yahoo response (daily up to 3 months,
   weekly for 6 months and a year, monthly for 2 and 5 years, quarterly beyond), at most 60 points. The model is told
   each series' first and last value, change, low and high, so it can comment on a chart whose prices it never saw.
-- **Cost:** matplotlib loads on the first chart and keeps its font cache in `matplotlib/` inside `DATA_DIR`. A chart
-  takes about half a second to draw (about a second for the first), and after the first one the bot uses about 50 MB
-  more memory.
+- **Cost:** charts are laid out by the bot's own code and painted with Pillow (its built-in font); no numpy or
+  matplotlib. A chart takes about a tenth of a second to draw (well under a second for the first) and about 30 MB of
+  memory while it is drawn. A `matplotlib/` folder left in `DATA_DIR` by older versions can be deleted.
 
 ## Commands
 | Command | Who | What |
 |---|---|---|
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
-| `/credits` | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI and z.ai have none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days |
+| `/tokens` (or `/usage`, `/credits`) | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI has none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days |
+| `/clear` | anyone, in a private chat | The bot forgets its stored history of that chat (clearing the chat on your own screen doesn't tell the bot anything, so use this too). Neither the command nor its reply is stored. Not in groups, whose history is shared by everyone and every bot in them. In the command menu of private chats |
+| `/segments TICKER` | anyone, in a group or a DM | The latest quarter's revenue breakdown pies from TickerScout `get_segments`, drawn without the model (the same as a plain "TICKER revenue breakdown" message; see Charts). In the command menu |
+| `/narrative TICKER [section]` | anyone, in a group or a DM | TickerScout's 10-K/10-Q narrative. Default `business`; sections: business, risk factors, md&a, current quarter, subsequent events, legal (any other words, `all` included, are passed on to the tool as a heading of the filing). These are long prose, so the model is given the `get_narrative` tool and writes the section to fit one message (its reply cap is 32,000 tokens, not `MAX_TOKENS`, so thinking over a long section doesn't run it out; it sees at most `MAX_TOOL_OUTPUT` characters of the result; its use shows in `/tokens`; if it fails, the start of the text is shown). A button under the reply for each section (the one shown is shaded) swaps that section into the same message: edited, nothing more is posted. A finished message is kept for 24 hours (SQLite table `text_cache`, per bot), so asking again or tapping the section again is instant and free; a stand-in for a failed model isn't kept. In the command menu |
+| `/events TICKER [section]` | anyone, in a group or a DM | TickerScout's 8-K event digest from `get_events`. Default `earnings`; sections: earnings, management changes, capital returns, debt and financing, m&a, governance, restructuring, legal. A section that fits one message is shown as TickerScout wrote it (kept 24 hours too), with no model, except that its dated items are put in ascending order (oldest first; a text whose items aren't all dated is left as it is); a longer one is shortened by the model as for `/narrative`. Buttons as for `/narrative`. In the command menu |
 | `/flushcache [portfolio_id] [year or month or day]` | an admin | Forget cached Sharesight period returns: all, or of one portfolio, or those overlapping a year (`2024`), month (`2024-05`) or day (`2024-05-17`), e.g. `/flushcache 684141 2024`; see [Caching Sharesight history](caching.md#caching-sharesight-history) |
 
 **Admins** are the user IDs in `ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with

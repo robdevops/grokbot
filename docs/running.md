@@ -3,7 +3,8 @@
 
 ## Running under systemd
 The unit in `deploy/systemd/grokbot.service` assumes the checkout is in `/opt/grokbot` with a virtualenv in
-`/opt/grokbot/.venv`. Edit those paths if yours differ.
+`/opt/grokbot/.venv` (the README's quick start makes it: `python3.13 -m venv .venv`, then
+`.venv/bin/pip install -r requirements.txt`). Edit those paths if yours differ.
 
 **1. Settings file.** Keys and settings go in `/etc/grokbot.env`, one `KEY=value` per line (no quotes needed):
 

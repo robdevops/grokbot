@@ -1,0 +1,64 @@
+{
+ "ticker": "GOOGL",
+ "company": "Alphabet Inc.",
+ "units": "actual dollars (not millions); share counts in actual shares; per-share figures in dollars per share",
+ "reporting_currency": "USD",
+ "showing": [
+  "segments",
+  "revenue_by_product",
+  "revenue_by_geography"
+ ],
+ "periods": [
+  {
+   "period": "Q3 FY2026",
+   "kind": "quarter",
+   "fiscal_year": 2026,
+   "fiscal_quarter": 3,
+   "label_in_filing_record": "Q3 2026",
+   "period_start": "2026-07-01",
+   "period_end": "2026-09-30",
+   "period_type": "three months",
+   "record": "FY26Q3",
+   "path_in_file": "quarterly[1]",
+   "revenue_by_type": {
+    "google_search_and_other": 63350000000,
+    "youtube_ads": 11207000000,
+    "google_network": 7455000000,
+    "google_advertising_total": 82012000000,
+    "google_subscriptions_platforms_and_devices": 14290000000,
+    "google_services_total": 96302000000,
+    "google_cloud": 30709000000,
+    "other_bets": 372000000,
+    "hedging_gains_losses": 194000000,
+    "total_revenues": 127577000000
+   },
+   "segments": {
+    "google_services": {
+     "revenue": 96302000000,
+     "operating_income": 39157000000
+    },
+    "google_cloud": {
+     "revenue": 30709000000,
+     "operating_income": 11121000000
+    },
+    "other_bets": {
+     "revenue": 372000000,
+     "operating_income": -2047000000
+    },
+    "hedging_gains_losses": {
+     "revenue": 194000000,
+     "operating_income": null
+    },
+    "alphabet_level_activities": {
+     "revenue": null,
+     "operating_income": -7655000000
+    },
+    "total": {
+     "revenue": 127577000000,
+     "operating_income": 40576000000
+    }
+   }
+  }
+ ],
+ "source_url": "https://tickerscout.ai/googl/financials.json"
+}

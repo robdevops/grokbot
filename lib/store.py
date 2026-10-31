@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS holding_news_msgs (
 -- Groups the bot has seen (Telegram can't list a bot's chats), so "post in <name>" can find one.
 CREATE TABLE IF NOT EXISTS chats (chat_id INTEGER PRIMARY KEY, title TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS kv (bot_id INTEGER, key TEXT, value TEXT, PRIMARY KEY (bot_id, key));
+-- Texts worth keeping for a while (the /narrative and /events messages): key -> value, with the time it was stored.
+CREATE TABLE IF NOT EXISTS text_cache (bot_id INTEGER, key TEXT, value TEXT, ts INTEGER, PRIMARY KEY (bot_id, key));
 -- Charts sent with period buttons: the make_chart call to redraw from, the model's caption, the period shown.
 CREATE TABLE IF NOT EXISTS charts (
     bot_id INTEGER, chat_id INTEGER, message_id INTEGER, spec TEXT, caption TEXT, period TEXT, ts INTEGER,
@@ -145,6 +147,13 @@ class Store:
             f"WHERE {where} ORDER BY message_id DESC LIMIT ?", (*args, size))
         return [HistoryRow(*r) for r in reversed(rows)]
 
+    def dm_clear(self, chat_id: int) -> int:
+        """Delete this bot's stored history of a private chat; returns how many messages went."""
+        args = (self._own_id(), chat_id)
+        n = self._run("SELECT COUNT(*) FROM dm_messages WHERE bot_id = ? AND chat_id = ?", args)[0][0]
+        self._run("DELETE FROM dm_messages WHERE bot_id = ? AND chat_id = ?", args)
+        return n
+
     def dm_chats(self) -> list[int]:
         """Everyone this bot has a private chat with."""
         rows = self._run("SELECT DISTINCT chat_id FROM dm_messages WHERE bot_id = ?", (self._own_id(),))
@@ -167,6 +176,18 @@ class Store:
 
     def kv_set(self, key: str, value: str) -> None:
         self._run("INSERT OR REPLACE INTO kv VALUES (?,?,?)", (self._own_id(), key, value))
+
+    # -- text cache (per bot: the text may be a model's) -----------------------------------
+    def cache_get(self, key: str, max_age: int) -> str | None:
+        rows = self._run("SELECT value FROM text_cache WHERE bot_id = ? AND key = ? AND ts >= ?",
+                         (self._own_id(), key, int(time.time()) - max_age))
+        return rows[0][0] if rows else None
+
+    def cache_put(self, key: str, value: str, max_age: int) -> None:
+        """Keep a text; rows older than `max_age` are dropped while at it."""
+        now = int(time.time())
+        self._run("INSERT OR REPLACE INTO text_cache VALUES (?,?,?,?)", (self._own_id(), key, value, now))
+        self._run("DELETE FROM text_cache WHERE ts < ?", (now - max_age,))
 
     # -- charts with period buttons (per bot: DM message IDs are per bot) -----------------
     def chart_put(self, chat_id: int, message_id: int, spec: str, caption: str, period: str) -> None:

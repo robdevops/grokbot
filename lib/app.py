@@ -13,9 +13,15 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from telegram import Update
+from telegram import (
+    BotCommand,
+    BotCommandScopeAllChatAdministrators,
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeChat,
+    Update,
+)
 from telegram.constants import ParseMode
-from telegram.error import NetworkError
+from telegram.error import NetworkError, TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -36,7 +42,6 @@ from .features.periods.windows import describe_scope, flush_scope
 from .llm.base import Backend
 from .llm.openrouter import OpenRouterBackend
 from .llm.xai import XaiBackend
-from .llm.zai import ZaiBackend
 from .mcp.server import MCPServer, Registry
 from .store import Store
 from .telegram import commands
@@ -46,7 +51,7 @@ log = logging.getLogger("bot")
 
 
 def build_backend(st: config.Settings) -> Backend:
-    return {"openrouter": OpenRouterBackend, "zai": ZaiBackend, "xai": XaiBackend}[st.provider](st)
+    return {"openrouter": OpenRouterBackend, "xai": XaiBackend}[st.provider](st)
 
 
 def journal_priority(levelno: int) -> int:
@@ -131,6 +136,25 @@ async def log_tool_size(ctx: Ctx) -> None:
     log.info("MCP tool schemas: ~%d tokens (re-sent every round they're offered)", len(schema) // 4)
 
 
+async def register_menu(ctx: Ctx) -> None:
+    """The command menu. A scoped menu replaces the default one, so each lists everything for its scope: /segments,
+    /narrative and /events for everyone; /clear too in private chats; /tokens too for the people who can use it
+    (administrators of every group, and the users in ADMIN_CHAT_IDS in their own chat with the bot)."""
+    everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER"),
+                BotCommand("narrative", "10-K/10-Q narrative: /narrative TICKER [section]"),
+                BotCommand("events", "8-K events: /events TICKER [section]")]
+    private = everyone + [BotCommand("clear", "Forget our earlier messages")]
+    tokens = BotCommand("tokens", "Provider balance, token use and cost")
+    try:
+        await ctx.bot.set_my_commands(everyone)
+        await ctx.bot.set_my_commands(private, scope=BotCommandScopeAllPrivateChats())
+        await ctx.bot.set_my_commands(everyone + [tokens], scope=BotCommandScopeAllChatAdministrators())
+        for chat_id in ctx.st.admin_chats:
+            await ctx.bot.set_my_commands(private + [tokens], scope=BotCommandScopeChat(chat_id))
+    except TelegramError as e:
+        log.warning("Couldn't register the command menu: %s", e)
+
+
 def build_ctx(st: config.Settings) -> Ctx:
     ctx = Ctx(st, Store(st.db_path), build_backend(st), Registry([]))
 
@@ -150,6 +174,7 @@ def build_app(ctx: Ctx) -> Application:
     async def post_init(app: Application) -> None:
         ctx.bot = app.bot
         ctx.store.bot_id = app.bot.id
+        await register_menu(ctx)
         ctx.registry.start()  # connects in the background; requests see whichever servers are up
         background.append(asyncio.create_task(log_tool_size(ctx)))
         if st.holding_news:
@@ -180,14 +205,19 @@ def build_app(ctx: Ctx) -> Application:
         return wrapper
 
     # Commands first: the first matching handler wins, and the catch-all would swallow them.
-    app.add_handler(CommandHandler("credits", command(commands.credits)))
+    app.add_handler(CommandHandler(["tokens", "usage", "credits"], command(commands.credits)))
     app.add_handler(CommandHandler("flushcache", command(commands.flush_cache)))
+    app.add_handler(CommandHandler("clear", command(commands.clear)))
+    app.add_handler(CommandHandler("segments", handlers.segments))
+    app.add_handler(CommandHandler("narrative", command(commands.narrative)))
+    app.add_handler(CommandHandler("events", command(commands.events)))
     app.add_handler(MessageHandler(
         (filters.ChatType.GROUPS | filters.ChatType.PRIVATE)
         & (filters.UpdateType.MESSAGE | filters.UpdateType.EDITED_MESSAGE)
         & ~filters.StatusUpdate.ALL, handlers.on_message))
     app.add_handler(CallbackQueryHandler(command(chart_buttons.on_button), pattern=r"^ch:"))  # chart periods
     app.add_handler(CallbackQueryHandler(command(chart_pages.on_page), pattern=r"^cp:"))  # which of several charts
+    app.add_handler(CallbackQueryHandler(command(commands.on_filing_button), pattern=r"^fl:"))  # section buttons
     if st.holding_news:  # the Unsubscribe / Undo buttons on holding-news messages
         app.add_handler(CallbackQueryHandler(command(holding_news.on_button), pattern=r"^hn:"))
     if st.post_to_groups or st.admin_only:  # keeps the list of groups the bot is in

@@ -353,3 +353,130 @@ async def test_the_tool_list_leaves_out_what_the_asker_may_not_use(env, store):
     assert "get_stock_quote" in prompt and "make_chart" in prompt
     assert not any(w in prompt for w in ("sharesight", "list_portfolios", "period_returns", "send_to_group", "web search"))
     assert backend.seen[0]["search"] is False
+
+
+def sticker(file_id="st", *, animated=False, video=False, thumb=None):
+    from types import SimpleNamespace as N
+    return N(photo=None, document=None, sticker=N(file_id=file_id, is_animated=animated, is_video=video,
+                                                  thumbnail=N(file_id=thumb) if thumb else None))
+
+
+def test_a_static_sticker_is_sent_as_it_is_and_an_animated_one_by_its_preview_frame():
+    assert pick_photo(sticker()) == "st"
+    assert pick_photo(sticker(animated=True, thumb="prev")) == "prev"
+    assert pick_photo(sticker(video=True, thumb="prev")) == "prev"
+    assert pick_photo(sticker(animated=True)) is None  # no preview to show
+
+
+@pytest.mark.parametrize("data, mime", [
+    (b"\x89PNG\r\n\x1a\n....", "image/png"),
+    (b"RIFF\x24\x00\x00\x00WEBPVP8 ", "image/webp"),
+    (b"\xff\xd8\xff\xe0....", "image/jpeg"),
+])
+async def test_an_image_is_sent_with_the_type_it_has_stickers_are_webp(data, mime):
+    import base64
+    from types import SimpleNamespace as N
+
+    from lib.telegram.handlers import image_part
+
+    class Bot:
+        async def get_file(self, file_id):
+            async def download():
+                return bytearray(data)
+            return N(download_as_bytearray=download)
+
+    part = await image_part(Bot(), "f", "low")
+    assert part["url"] == f"data:{mime};base64,{base64.b64encode(data).decode()}" and part["detail"] == "low"
+
+
+async def test_a_sticker_in_a_dm_or_replied_to_is_attached_but_other_group_stickers_are_not(env, store):
+    from types import SimpleNamespace as N
+    ctx, _, h = make_ctx(env, store, [])
+    fetched = []
+
+    async def get_file(file_id):
+        fetched.append(file_id)
+
+        async def download():
+            return bytearray(b"RIFF\x24\x00\x00\x00WEBPVP8 ")
+        return N(download_as_bytearray=download)
+
+    ctx.bot.get_file = get_file
+    dm = user_msg(ctx.bot, "", chat_id=5, user_id=5)
+    dm.sticker = sticker("dm-sticker").sticker
+    trig = h._trigger(dm)
+    parts = await h._images(dm, trig)
+    assert [p["url"].split(",")[0] for p in parts] == ["data:image/webp;base64"] and fetched == ["dm-sticker"]
+    group = user_msg(ctx.bot, "@stockbot what does this sticker mean?", chat_id=-100)
+    group.reply_to_message = user_msg(ctx.bot, "", chat_id=-100, mid=7)
+    group.reply_to_message.sticker = sticker("replied").sticker
+    assert len(await h._images(group, h._trigger(group))) == 1 and fetched[-1] == "replied"
+    stray = user_msg(ctx.bot, "", chat_id=-100, mid=8)  # a sticker in the group that nobody addressed to the bot
+    stray.sticker = sticker("stray").sticker
+    assert h._trigger(stray) is None  # so it is never downloaded, let alone sent
+
+
+async def test_clear_makes_the_bot_forget_a_private_chat_and_stores_nothing_of_itself(env, store):
+    from types import SimpleNamespace as N
+
+    from lib.telegram import commands
+    ctx, backend, h = make_ctx(env, store, [step("first answer"), step("fresh answer")])
+    await run(h, user_msg(ctx.bot, "remember the banana plan", chat_id=5, user_id=5, mid=1))
+    assert len(store.history(5, 20)) == 2  # the message and the reply
+    clear = user_msg(ctx.bot, "/clear", chat_id=5, user_id=5, mid=2)
+    await commands.clear(ctx, N(effective_message=clear, effective_user=clear.from_user), None)
+    assert store.history(5, 20) == [] and clear.replies[0]["text"].startswith("Done")
+    await run(h, user_msg(ctx.bot, "hello again", chat_id=5, user_id=5, mid=3))
+    assert "banana plan" not in backend.seen[1]["prompt"] and "hello again" in backend.seen[1]["prompt"]
+
+
+async def test_clear_leaves_a_groups_shared_history_alone(env, store):
+    from types import SimpleNamespace as N
+
+    from lib.telegram import commands
+    ctx, _, h = make_ctx(env, store, [step("an answer")])
+    await run(h, user_msg(ctx.bot, "@stockbot the banana plan", chat_id=-100, mid=1))
+    clear = user_msg(ctx.bot, "/clear", chat_id=-100, mid=2)
+    await commands.clear(ctx, N(effective_message=clear, effective_user=clear.from_user), None)
+    assert "private chat" in clear.replies[0]["text"]
+    assert [r.text for r in store.history(-100, 20)][:2] == ["@stockbot the banana plan", "an answer"]  # nothing deleted
+
+
+async def test_clear_only_touches_this_chat_and_this_bot(env, store):
+    from types import SimpleNamespace as N
+
+    from lib.telegram import commands
+    ctx, _, h = make_ctx(env, store, [step("a"), step("b")])
+    await run(h, user_msg(ctx.bot, "mine", chat_id=5, user_id=5, mid=1))
+    await run(h, user_msg(ctx.bot, "someone else's", chat_id=6, user_id=6, mid=1))
+    clear = user_msg(ctx.bot, "/clear", chat_id=5, user_id=5, mid=2)
+    await commands.clear(ctx, N(effective_message=clear, effective_user=clear.from_user), None)
+    assert store.history(5, 20) == [] and len(store.history(6, 20)) == 2
+
+
+async def test_typing_starts_before_the_bot_logs_the_message_or_checks_who_sent_it(env, store, monkeypatch):
+    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", ADMIN_CHAT_IDS="5")
+    seen = {}
+
+    async def is_admin(msg):
+        seen["actions"] = list(ctx.bot.actions)  # what had been sent when the (possibly slow) check began
+        return True
+
+    monkeypatch.setattr(h, "_is_admin", is_admin)
+    await run(h, user_msg(ctx.bot, "hello", chat_id=5, user_id=5))
+    assert seen["actions"] == ["typing"]
+
+
+async def test_no_typing_for_a_group_message_that_is_not_for_the_bot(env, store):
+    ctx, backend, h = make_ctx(env, store, [])
+    await run(h, user_msg(ctx.bot, "just chatting", chat_id=-100))
+    await asyncio.sleep(0)
+    assert ctx.bot.actions == [] and backend.seen == []
+
+
+async def test_segments_shows_typing_while_it_works(env, store):
+    from types import SimpleNamespace as N
+    ctx, _, h = make_ctx(env, store, [])
+    m = user_msg(ctx.bot, "/segments", chat_id=-100)
+    await h.segments(update_for(m), N(args=[]))
+    assert ctx.bot.actions[:1] == ["typing"] and m.replies[0]["text"] == "Usage: /segments TICKER"

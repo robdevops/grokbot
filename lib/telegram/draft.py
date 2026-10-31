@@ -16,6 +16,21 @@ from ..textfmt import TG_TAG_RE, TOOL_SYNTAX_RE
 log = logging.getLogger("bot")
 
 
+def keep_typing(bot, chat_id: int) -> asyncio.Task:
+    """The typing indicator from now until the task is cancelled, without waiting for Telegram: the first one goes out
+    as soon as the caller next awaits anything, then one every 4 s (Telegram's lasts ~5 s). For the moment a request
+    arrives, so the person sees it before the bot does any work. A failed send is logged, never fatal."""
+    async def run() -> None:
+        while True:
+            try:
+                await bot.send_chat_action(chat_id, ChatAction.TYPING)
+            except Exception as e:
+                log.warning("Typing indicator failed: %s", e)
+            await asyncio.sleep(4)
+
+    return asyncio.create_task(run())
+
+
 async def start_typing(bot, chat_id: int) -> asyncio.Task:
     """Send the typing indicator right now, then keep it going until the task is cancelled
     (Telegram's lasts ~5 s). The first one is sent directly rather than from the task, which
@@ -54,8 +69,9 @@ class Draft:
         self._task: asyncio.Task | None = None
         self._typing: asyncio.Task | None = None
 
-    async def start(self) -> None:
-        self._typing = await start_typing(self.bot, self.chat_id)  # until text starts arriving
+    async def start(self, typing: asyncio.Task | None = None) -> None:
+        """`typing`: an indicator already running for this request, which the draft takes over."""
+        self._typing = typing or await start_typing(self.bot, self.chat_id)  # until text starts arriving
         await self._send("")  # "Thinking..."
         self._task = asyncio.create_task(self._loop())
 

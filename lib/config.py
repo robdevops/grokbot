@@ -16,14 +16,13 @@ ENV_VARS: dict[str, str] = {
     "OPENROUTER_API_KEY": "OpenRouter key; selects the OpenRouter provider.",
     "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
     "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
-    "ZAI_API_KEY": "z.ai key; selects the z.ai provider.",
     # Common settings
     "BOT_TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
-    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter, glm-5.3-flash on z.ai).",
-    "REASONING": "Reasoning effort: low, medium or high; empty = the model's default (low on z.ai, which cannot turn thinking off).",
-    "SEARCH": "on|off. Web search (and X search on xAI; z.ai's search API on z.ai). Default on.",
+    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter).",
+    "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
+    "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
     # Advanced and optional
-    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /credits; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
+    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /tokens; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
     "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
@@ -40,12 +39,14 @@ ENV_VARS: dict[str, str] = {
     "TELEGRAM_PRELOAD_CHAT": "Chat ID of a private chat the bot can post in. Chart periods are uploaded there ahead of time and reused when a period button is tapped. Empty (default) = off.",
 }
 
-DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash", "zai": "glm-5.3-flash"}
+DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash"}
 
 # Tuning constants (not configurable).
 MAX_TOOL_ROUNDS = 6  # model <-> tool round trips per answer
 MCP_TIMEOUT = 60  # seconds per MCP tool call
 MAX_TOOL_OUTPUT = 12_000  # characters of one tool result sent to the model
+FILING_CACHE_SECONDS = 24 * 3600  # how long a /narrative or /events message is kept
+FILING_MAX_TOKENS = 32_000  # reply cap (incl. reasoning) for /narrative and /events, where a whole filing section goes in
 HISTORY_LINE_MAX = 240  # characters of one history line
 HISTORY_OWN_LINE_MAX = 160  # the bot's own earlier answers are the longest lines; cut them harder
 MCP_STARTUP_WAIT = 30  # seconds a request waits for MCP servers that are still connecting
@@ -67,7 +68,7 @@ class ConfigError(Exception):
 @dataclass(frozen=True)
 class Settings:
     telegram_token: str
-    provider: str  # "xai" | "openrouter" | "zai"
+    provider: str  # "xai" | "openrouter"
     api_key: str
     model: str
     reasoning: str
@@ -154,16 +155,15 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     env = os.environ if env is None else env
     token = env.get("TELEGRAM_BOT_TOKEN", "").strip()
     keys = {"xai": env.get("XAI_API_KEY", "").strip(),
-            "openrouter": env.get("OPENROUTER_API_KEY", "").strip(),
-            "zai": env.get("ZAI_API_KEY", "").strip()}
+            "openrouter": env.get("OPENROUTER_API_KEY", "").strip()}
     if not token:
         raise ConfigError("TELEGRAM_BOT_TOKEN is not set.")
     given = [p for p, k in keys.items() if k]
     if len(given) > 1:
-        raise ConfigError("More than one API key is set (XAI_API_KEY, OPENROUTER_API_KEY, "
-                          "ZAI_API_KEY); set only one, to choose the provider.")
+        raise ConfigError("More than one API key is set (XAI_API_KEY, OPENROUTER_API_KEY); "
+                          "set only one, to choose the provider.")
     if not given:
-        raise ConfigError("Set XAI_API_KEY (xAI), OPENROUTER_API_KEY (OpenRouter) or ZAI_API_KEY (z.ai).")
+        raise ConfigError("Set XAI_API_KEY (xAI) or OPENROUTER_API_KEY (OpenRouter).")
     provider = given[0]
     model = env.get("MODEL", "").strip() or DEFAULT_MODELS[provider]
     search_model = env.get("SEARCH_MODEL", "xiaomi/mimo-v2.6-flash:online").strip()

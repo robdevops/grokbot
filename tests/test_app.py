@@ -9,7 +9,6 @@ from lib import app, config
 from lib.context import Ctx
 from lib.llm.openrouter import OpenRouterBackend
 from lib.llm.xai import XaiBackend
-from lib.llm.zai import ZaiBackend
 from lib.mcp.server import MCPServer
 
 from .conftest import FakeBot
@@ -24,8 +23,6 @@ def test_backend_follows_the_key(env):
     assert isinstance(app.build_backend(config.load(env)), OpenRouterBackend)
     xai = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "k"})
     assert isinstance(app.build_backend(xai), XaiBackend)
-    zai = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "k"})
-    assert isinstance(app.build_backend(zai), ZaiBackend)
 
 
 def test_handlers_follow_the_flags(env, store):
@@ -34,15 +31,14 @@ def test_handlers_follow_the_flags(env, store):
         return app.build_app(Ctx(st, store, ScriptedBackend([]), registry())), st
 
     plain, st = build()
-    assert handler_kinds(plain) == ["CommandHandler", "CommandHandler", "MessageHandler",
-                                    "CallbackQueryHandler", "CallbackQueryHandler"]  # chart periods and charts
+    assert handler_kinds(plain) == ["CommandHandler"] * 6 + ["MessageHandler",
+                                    "CallbackQueryHandler", "CallbackQueryHandler", "CallbackQueryHandler"]  # chart periods, charts, sections
     assert app.allowed_updates(st) == ["message", "edited_message", "callback_query"]  # chart buttons
     full, st = build(ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
     kinds = handler_kinds(full)
-    assert kinds == ["CommandHandler", "CommandHandler", "MessageHandler", "CallbackQueryHandler",
-                     "CallbackQueryHandler", "CallbackQueryHandler"]
+    assert kinds == ["CommandHandler"] * 6 + ["MessageHandler"] + ["CallbackQueryHandler"] * 4
     assert "callback_query" in app.allowed_updates(st)
-    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"credits", "flushcache"}
+    assert {c for h in full.handlers[0] if isinstance(h, CommandHandler) for c in h.commands} == {"tokens", "usage", "credits", "flushcache", "segments", "narrative", "events", "clear"}
     assert any(isinstance(h, MessageHandler) for h in full.handlers[0])
     locked, st = build(ADMIN_ONLY="on")  # remembers the groups it is in, to know who their admins are
     assert "ChatMemberHandler" in handler_kinds(locked) and "my_chat_member" in app.allowed_updates(st)
@@ -148,7 +144,7 @@ def test_flush_cache_cli_needs_no_keys_and_flushes_by_portfolio_and_period(monke
     from lib.store import PeriodRow, Store
 
     db = str(tmp_path / "chat_log.db")
-    for var in ("TELEGRAM_BOT_TOKEN", "OPENROUTER_API_KEY", "XAI_API_KEY", "ZAI_API_KEY"):
+    for var in ("TELEGRAM_BOT_TOKEN", "OPENROUTER_API_KEY", "XAI_API_KEY"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     s = Store(db)
@@ -181,9 +177,29 @@ async def test_backfill_task_starts_unless_period_backfill_is_off(env, store, mo
         st = config.load({**env, **extra})
         ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
         built = app.build_app(ctx)
-        await built.post_init(SimpleNamespace(bot=SimpleNamespace(id=1)))
+        await built.post_init(SimpleNamespace(bot=SimpleNamespace(id=1, set_my_commands=_no_menu)))
         await asyncio.sleep(0)
         assert len(started) == expected
+
+
+async def _no_menu(commands, scope=None):
+    return True
+
+
+async def test_the_menu_lists_commands_by_who_can_use_them(env, store):
+    calls = []
+
+    async def set_my_commands(commands, scope=None):
+        calls.append(([c.command for c in commands], type(scope).__name__, getattr(scope, "chat_id", None)))
+
+    ctx = Ctx(config.load({**env, "ADMIN_CHAT_IDS": "5"}), store, ScriptedBackend([]), registry(), FakeBot())
+    ctx.bot = SimpleNamespace(set_my_commands=set_my_commands)
+    await app.register_menu(ctx)
+    everyone = ["segments", "narrative", "events"]
+    assert calls == [(everyone, "NoneType", None),
+                     (everyone + ["clear"], "BotCommandScopeAllPrivateChats", None),
+                     (everyone + ["tokens"], "BotCommandScopeAllChatAdministrators", None),
+                     (everyone + ["clear", "tokens"], "BotCommandScopeChat", 5)]
 
 
 def test_the_mcp_librarys_unlabelled_protocol_and_ping_lines_are_dropped(monkeypatch):

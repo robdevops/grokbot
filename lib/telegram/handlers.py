@@ -18,6 +18,7 @@ from ..context import Ctx
 from ..features import dm_buttons, holding_news, movers, periods, post
 from ..features.charts import TOOL as CHART_TOOL
 from ..features.charts import Charts, asks_pie, chart_hint, wants_chart
+from ..features.charts import breakdown as chart_breakdown
 from ..features.charts import buttons as chart_buttons
 from ..features.charts import pages as chart_pages
 from ..features.charts import tool as chart_tool
@@ -30,7 +31,7 @@ from ..store import is_dm
 from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
 from .access import is_admin
-from .draft import Draft, start_typing
+from .draft import Draft, keep_typing, start_typing
 from .send import reply_chunks, reply_html, reply_with_photo
 
 log = logging.getLogger("bot")
@@ -49,20 +50,37 @@ def mentions(text: str, username: str | None) -> bool:
 
 
 def photo_file_id(msg: Message) -> str | None:
-    """A photo's file id: the smallest size at least 640 px wide (fewer image tokens)."""
+    """An image's file id: a photo's smallest size at least 640 px wide (fewer image tokens), an image document, or a
+    sticker. A static sticker is a WebP image, sent as it is. An animated (Lottie) or video one can't be shown, so
+    its preview frame is, if Telegram gave one."""
     if msg.photo:
         sizes = sorted(msg.photo, key=lambda p: p.width)
         return next((p for p in sizes if p.width >= 640), sizes[-1]).file_id
     doc = msg.document
     if doc and (doc.mime_type or "") in ("image/jpeg", "image/png"):
         return doc.file_id
+    sticker = getattr(msg, "sticker", None)
+    if sticker:
+        if sticker.is_animated or sticker.is_video:
+            return sticker.thumbnail.file_id if sticker.thumbnail else None
+        return sticker.file_id
     return None
+
+
+def image_mime(data: bytes) -> str:
+    """The type of a downloaded image, from its first bytes: PNG, WebP (stickers) or else JPEG."""
+    if data[:4] == b"\x89PNG":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
 
 
 async def image_part(bot, file_id: str, detail: str) -> dict:
     f = await bot.get_file(file_id)
     data = bytes(await f.download_as_bytearray())
-    mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
+    mime = image_mime(data)
+    log.debug("Image %s, %d bytes", mime, len(data))
     return {"type": "image", "url": f"data:{mime};base64,{base64.b64encode(data).decode()}",
             "detail": detail}
 
@@ -95,18 +113,25 @@ class Handlers:
         msg = update.effective_message
         if msg is None:
             return
-        await asyncio.to_thread(self._record, msg)
         if update.edited_message:
+            await asyncio.to_thread(self._record, msg)
             return  # don't answer edited messages
         trig = self._trigger(msg)
-        if trig is None:
-            return
-        if trig.private and self.ctx.st.admin_only and not await self._is_admin(msg):
-            log.info("Ignored a DM from user %s: not an admin", msg.from_user and msg.from_user.id)
-            return
-        if await self._command(msg, trig):
-            return
-        await self._answer(msg, trig)
+        # The person sees "typing" at once, before the bot logs the message, checks who they are or does any work.
+        typing = keep_typing(self.ctx.bot, msg.chat_id) if trig else None
+        try:
+            await asyncio.to_thread(self._record, msg)
+            if trig is None:
+                return
+            if trig.private and self.ctx.st.admin_only and not await self._is_admin(msg):
+                log.info("Ignored a DM from user %s: not an admin", msg.from_user and msg.from_user.id)
+                return
+            if await self._command(msg, trig):
+                return
+            await self._answer(msg, trig, typing)
+        finally:
+            if typing:
+                typing.cancel()
 
     async def _is_admin(self, msg: Message) -> bool:
         return bool(msg.from_user and await is_admin(self.ctx, msg.from_user.id))
@@ -131,7 +156,7 @@ class Handlers:
         return Trigger(text, private, is_movers, reply_target, replied_to_bot, nocontext)
 
     async def _command(self, msg: Message, trig: Trigger) -> bool:
-        """Private-chat commands handled here (/credits has its own handler)."""
+        """Private-chat commands handled here (/tokens has its own handler)."""
         if not trig.private or not trig.text.startswith("/"):
             return False
         command = trig.text.split()[0].split("@")[0].lower()
@@ -200,7 +225,7 @@ class Handlers:
             down=down_note(ctx.registry.down()), middle=middle, fresh=fresh)
 
     # -- answering ---------------------------------------------------------------------
-    async def _answer(self, msg: Message, trig: Trigger) -> None:
+    async def _answer(self, msg: Message, trig: Trigger, typing: asyncio.Task | None = None) -> None:
         ctx, st = self.ctx, self.ctx.st
         who = f"{sender_name(msg)} {msg.from_user.id if msg.from_user else None}"
         where = "" if trig.private else f" @ {msg.chat_id}"
@@ -211,9 +236,9 @@ class Handlers:
 
         draft = Draft(ctx.bot, msg.chat_id) if trig.private else None
         if draft:
-            await draft.start()
+            await draft.start(typing)
         else:
-            typing = await start_typing(ctx.bot, msg.chat_id)  # a Telegram hiccup is not fatal
+            typing = typing or await start_typing(ctx.bot, msg.chat_id)  # a Telegram hiccup is not fatal
         charts = Charts()
         try:
             html_text = await self._generate(msg, trig, draft, charts)
@@ -232,20 +257,48 @@ class Handlers:
                 typing.cancel()
         markup = dm_buttons.keyboard() if trig.private and st.dm_buttons else None
         if charts.photos:  # one reply: the chart with the answer as its caption
-            several = len(charts.photos) > 1  # one image with a button for each chart, not an album
-            call = charts.calls[0] if not several and chart_buttons.redrawable(charts.calls[0]) else None
-            labels = chart_pages.labels_for([title for _, title in charts.photos]) if several else []
-            photo_markup = (chart_pages.keyboard(labels, 0) if several
-                            else chart_buttons.keyboard(chart_buttons.period_of(call)) if call else None)
-            sent = await reply_with_photo(
-                msg, charts.photos[0][0], "" if html_text == NO_RESPONSE else html_text,
-                ctx.store, quote=not trig.private, markup=markup, photo_markup=photo_markup)
-            if sent and several:
-                await chart_pages.remember(ctx, sent, charts.calls, [image for image, _ in charts.photos], labels)
-            elif sent and call:
-                await chart_buttons.remember(ctx, sent, call)
+            await self._send_charts(msg, charts, html_text, quote=not trig.private, markup=markup)
         else:
             await reply_chunks(msg, html_text, ctx.store, quote=not trig.private, last_markup=markup)
+
+    async def _send_charts(self, msg: Message, charts: Charts, html_text: str, *, quote: bool, markup=None) -> None:
+        """One reply: the first chart as the photo with the answer as its caption; several charts get a button each."""
+        ctx = self.ctx
+        several = len(charts.photos) > 1  # one image with a button for each chart, not an album
+        call = charts.calls[0] if not several and chart_buttons.redrawable(charts.calls[0]) else None
+        labels = chart_pages.labels_for([title for _, title in charts.photos]) if several else []
+        photo_markup = (chart_pages.keyboard(labels, 0) if several
+                        else chart_buttons.keyboard(chart_buttons.period_of(call)) if call else None)
+        sent = await reply_with_photo(
+            msg, charts.photos[0][0], "" if html_text == NO_RESPONSE else html_text,
+            ctx.store, quote=quote, markup=markup, photo_markup=photo_markup)
+        if sent and several:
+            await chart_pages.remember(ctx, sent, charts.calls, [image for image, _ in charts.photos], labels)
+        elif sent and call:
+            await chart_buttons.remember(ctx, sent, call)
+
+    async def segments(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/segments TICKER: the revenue breakdown pies of the latest quarter, drawn without the model."""
+        msg, ctx = update.effective_message, self.ctx
+        typing = keep_typing(ctx.bot, msg.chat_id)
+        try:
+            await self._segments(msg, context)
+        finally:
+            typing.cancel()
+
+    async def _segments(self, msg: Message, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = self.ctx
+        await asyncio.to_thread(ctx.store.save, msg)
+        ticker = (context.args[0] if context and context.args else "").lstrip("$")
+        charts = Charts()
+        caption = await chart_breakdown.fast(ctx, f"{ticker} revenue breakdown", charts) if ticker else None
+        private = is_dm(msg.chat_id)
+        if not caption:
+            text = (f"No revenue breakdown found for {html.escape(ticker.upper())}." if ticker
+                    else "Usage: /segments TICKER")
+            await reply_chunks(msg, text, ctx.store, quote=not private)
+            return
+        await self._send_charts(msg, charts, caption, quote=not private)
 
     async def _answer_tools(self, msg: Message, trig: Trigger, admin: bool, draft: Draft | None) -> str:
         """"What tools do you have?": the prompt carries the full list of what this person may use, and no tool is
@@ -281,6 +334,8 @@ class Handlers:
                                must_search=True, cache_key=f"chat-{chat_id}", on_text=on_text,
                                kind="movers", chat_id=chat_id)
         else:
+            if charts is not None and (caption := await chart_breakdown.fast(ctx, trig.text, charts)):
+                return caption  # drawn from the data source's own numbers, no model involved
             context = await self._gate_text(msg, trig)
             chosen = route(context, st, ctx.registry)
             admin = not st.admin_only or await self._is_admin(msg)

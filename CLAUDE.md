@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Telegram bot for a stock-chat group: answers @mentions/replies/DMs with an LLM (xAI, OpenRouter or z.ai),
+Telegram bot for a stock-chat group: answers @mentions/replies/DMs with an LLM (xAI or OpenRouter),
 MCP data tools and web search. User-facing docs are in `README.md` (quick start) and `docs/`; this file is the map.
 
 ## Commands
@@ -17,18 +17,18 @@ MCP data tools and web search. User-facing docs are in `README.md` (quick start)
 - `config.py`: `Settings` from env (`load()`), `ENV_VARS` registry, tuning constants. The only place that
   knows the provider. Every env var must appear in docs/configuration.md (a test enforces it).
 - `store.py`: SQLite `Store`: history (`messages` shared by groups, `dm_messages` per bot), users, kv,
-  holding-news state, `usage` ledger, `period_cache` (finished Sharesight periods, kept until flushed). Thread-safe; call through `asyncio.to_thread`.
+  holding-news state, `usage` ledger, `text_cache` (finished /narrative and /events messages, 24 h), `period_cache` (finished Sharesight periods, kept until flushed). Thread-safe; call through `asyncio.to_thread`.
 - `msgtext.py` sender_name/describe. `history.py` transcript lines. `textfmt.py` HTML helpers
   (md_to_html, split_html, plain_text, TG_TAG_RE). `tickers.py` Yahoo links (+ `tickers_data.py`).
 - `mcp/`: `server.py` (MCPServer lifecycle, TTL cache, `Registry`), `schema.py` (neutral `ToolDef`,
   schema diet), `results.py` (result slimming).
 - `llm/`: `base.py` (Request/Step/Answer/Backend), `chat.py` (shared chat-completions loop), `xai.py` +
-  `openrouter.py` + `zai.py` (the only provider-specific code), `runner.py` (THE tool loop), `policy.py` (THE retry ladder), `gate.py` (which tools a message needs).
+  `openrouter.py` (the only provider-specific code), `runner.py` (THE tool loop), `policy.py` (THE retry ladder), `gate.py` (which tools a message needs).
 - `prompts.py` all prompts. `ask.py` one entry point: route -> Request -> policy.ask -> usage -> NEEDS_TOOLS rerun.
 - `telegram/`: `handlers.py` (trigger -> request -> reply), `send.py`, `draft.py` (typing + streaming
-  drafts), `commands.py` (/credits), `access.py` (who is an admin). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `post.py`, `periods/` (local `period_returns` tool, cache-first; `windows.py`, `rows.py`, `backfill.py` = PERIOD_BACKFILL loop), `charts/` (local `make_chart` tool, offered when a message asks for a chart; series from the model or Yahoo price history; `render.py` = matplotlib, imported on the first chart; the handler sends one reply, the photo with the answer as caption; `buttons.py` = 1D/1M/1Y/5Y/reload under a ticker chart, redrawn without the model from the `charts` table; `pages.py` = several charts in one reply as one image with a button each).
+  drafts), `commands.py` (/tokens), `access.py` (who is an admin). `features/`: `holding_news.py`, `movers.py`, `dm_buttons.py`, `filings.py` (/narrative and /events: TickerScout `get_narrative` / `get_events` one section at a time, one message each, edited by the buttons; /narrative always goes through the model (it calls the tool itself), /events only when a section is too long for a message; handlers in `commands.py`), `post.py`, `periods/` (local `period_returns` tool, cache-first; `windows.py`, `rows.py`, `backfill.py` = PERIOD_BACKFILL loop), `charts/` (local `make_chart` tool, offered when a message asks for a chart; series from the model or Yahoo price history; `render.py` = the facade (Chart, Series, themes, `scene()`, `png()`), laid out by `cartesian.py` / `pie.py` into a `scene.py` Scene (plain draw ops in pixels, which the tests read), ticks in `ticks.py`, painted by `raster.py` with Pillow at 2x (no numpy or matplotlib); the handler sends one reply, the photo with the answer as caption; `buttons.py` = 1D/1M/1Y/5Y/reload under a ticker chart, redrawn without the model from the `charts` table; `pages.py` = several charts in one reply as one image with a button each; `breakdown.py` = fast path: a plain "TICKER revenue breakdown" is drawn from TickerScout `get_segments` without the model).
 - `app.py` wiring/startup; `context.py` `Ctx` (settings, store, backend, registry, bot).
-- `docs/plans/go-recode.md`: saved plan for a Go rewrite (not started).
+- `docs/plans/go-recode.md`: saved plan for a Go rewrite (not started); its key requirement is a modular design with self-contained features.
 - `deploy/systemd/`: the example unit `grokbot.service` and the optional `grokbot.service.d/hardening.conf` drop-in (docs/running.md).
 - `lib/` holds only what the bot needs to run. Developer helpers live in `tools/`: `report.py` (`make prompt-report`),
   `capture.py` (real MCP output for fixtures), `period_cache_without_rowid.py` (one-off DB conversion); the bot never imports them.
@@ -41,7 +41,7 @@ MCP data tools and web search. User-facing docs are in `README.md` (quick start)
 
 ## Conventions
 - 4-space indent, ruff-clean, type hints, one-line module docstrings. `features/` modules never import
-  each other. Provider differences live only in `llm/xai.py`, `llm/openrouter.py` and `llm/zai.py`.
+  each other. Provider differences live only in `llm/xai.py` and `llm/openrouter.py`.
 - Parts sent to the model are neutral dicts: `{"type": "text", ...}` / `{"type": "image", "url", "detail"}`;
   tools are `ToolDef`; each backend converts. Don't add `if provider ==` anywhere else.
 - No usernames, portfolio names or other personal names in code or docs: they come from env (README uses placeholders).
@@ -61,9 +61,6 @@ MCP data tools and web search. User-facing docs are in `README.md` (quick start)
 - A reply that hits MAX_TOKENS while thinking about tool results is re-asked in the same conversation (2x cap, low
   reasoning), not retried without tools: that would answer from memory and deny having any data.
 - `mcp` is capped below 2: 2.x dropped `streamablehttp_client`, which `mcp/server.py` uses (CI caught it). Raise the cap only with a port.
-- z.ai: `tool_choice` is ignored (even "none", so the backend omits tools instead), its built-in `web_search` is ignored whenever function
-  tools are present (so search is a function tool run through its search API), thinking can't be disabled (default `reasoning_effort`
-  low), an invalid search recency is accepted silently (so the tool schema fixes the list), and usage has no cost (price table).
 - Finished Sharesight periods are cached forever (`period_cache`); after a backdated change run `/flushcache [portfolio] [year|month|day]` or `python bot.py --flush-cache ...`. The unfinished period is never cached. `_keep_sales` in tool args is reserved for the bot's own tools (the runner strips it from the model's).
 - `must_search` requests are never retried without tools (answering from memory would invent news).
 - Telegram HTML: only b/i/u/s/code/pre/a/blockquote/tg-spoiler. `Draft` strips tags (half-written HTML is rejected).
