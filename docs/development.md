@@ -3,6 +3,7 @@
 
 ## Development
 ```
+python3.13 -m venv .venv && . .venv/bin/activate   # once; later just activate it
 pip install -r requirements-dev.txt
 make check          # ruff + pytest, a few seconds, no network
 make prompt-report  # token breakdown of a sample request
