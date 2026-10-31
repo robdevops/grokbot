@@ -31,7 +31,7 @@ from ..store import is_dm
 from ..textfmt import md_to_html, strip_disclaimer
 from ..tickers import link_tickers
 from .access import is_admin
-from .draft import Draft, start_typing
+from .draft import Draft, keep_typing, start_typing
 from .send import reply_chunks, reply_html, reply_with_photo
 
 log = logging.getLogger("bot")
@@ -113,18 +113,25 @@ class Handlers:
         msg = update.effective_message
         if msg is None:
             return
-        await asyncio.to_thread(self._record, msg)
         if update.edited_message:
+            await asyncio.to_thread(self._record, msg)
             return  # don't answer edited messages
         trig = self._trigger(msg)
-        if trig is None:
-            return
-        if trig.private and self.ctx.st.admin_only and not await self._is_admin(msg):
-            log.info("Ignored a DM from user %s: not an admin", msg.from_user and msg.from_user.id)
-            return
-        if await self._command(msg, trig):
-            return
-        await self._answer(msg, trig)
+        # The person sees "typing" at once, before the bot logs the message, checks who they are or does any work.
+        typing = keep_typing(self.ctx.bot, msg.chat_id) if trig else None
+        try:
+            await asyncio.to_thread(self._record, msg)
+            if trig is None:
+                return
+            if trig.private and self.ctx.st.admin_only and not await self._is_admin(msg):
+                log.info("Ignored a DM from user %s: not an admin", msg.from_user and msg.from_user.id)
+                return
+            if await self._command(msg, trig):
+                return
+            await self._answer(msg, trig, typing)
+        finally:
+            if typing:
+                typing.cancel()
 
     async def _is_admin(self, msg: Message) -> bool:
         return bool(msg.from_user and await is_admin(self.ctx, msg.from_user.id))
@@ -218,7 +225,7 @@ class Handlers:
             down=down_note(ctx.registry.down()), middle=middle, fresh=fresh)
 
     # -- answering ---------------------------------------------------------------------
-    async def _answer(self, msg: Message, trig: Trigger) -> None:
+    async def _answer(self, msg: Message, trig: Trigger, typing: asyncio.Task | None = None) -> None:
         ctx, st = self.ctx, self.ctx.st
         who = f"{sender_name(msg)} {msg.from_user.id if msg.from_user else None}"
         where = "" if trig.private else f" @ {msg.chat_id}"
@@ -229,9 +236,9 @@ class Handlers:
 
         draft = Draft(ctx.bot, msg.chat_id) if trig.private else None
         if draft:
-            await draft.start()
+            await draft.start(typing)
         else:
-            typing = await start_typing(ctx.bot, msg.chat_id)  # a Telegram hiccup is not fatal
+            typing = typing or await start_typing(ctx.bot, msg.chat_id)  # a Telegram hiccup is not fatal
         charts = Charts()
         try:
             html_text = await self._generate(msg, trig, draft, charts)
@@ -273,6 +280,14 @@ class Handlers:
     async def segments(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """/segments TICKER: the revenue breakdown pies of the latest quarter, drawn without the model."""
         msg, ctx = update.effective_message, self.ctx
+        typing = keep_typing(ctx.bot, msg.chat_id)
+        try:
+            await self._segments(msg, context)
+        finally:
+            typing.cancel()
+
+    async def _segments(self, msg: Message, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = self.ctx
         await asyncio.to_thread(ctx.store.save, msg)
         ticker = (context.args[0] if context and context.args else "").lstrip("$")
         charts = Charts()

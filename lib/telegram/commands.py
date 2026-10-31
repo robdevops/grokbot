@@ -19,7 +19,7 @@ from ..features.periods.windows import describe_scope, flush_scope
 from ..store import is_dm
 from ..textfmt import is_parse_error, plain_text
 from .access import is_admin
-from .draft import start_typing
+from .draft import keep_typing, start_typing
 from .send import NO_PREVIEW, reply_chunks, reply_html
 
 log = logging.getLogger("bot")
@@ -119,10 +119,10 @@ async def clear(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def show_filing(ctx: Ctx, msg, kind: filings.Kind, ticker: str, index: int | None, section: str,
-                      query=None) -> None:
+                      query=None, typing: asyncio.Task | None = None) -> None:
     """One section of a ticker's narrative or events as one message, with a button for each section: a reply to the
     command, or, from a button (`query`), the message the button sits under, edited."""
-    typing = await start_typing(ctx.bot, msg.chat_id)
+    typing = typing or await start_typing(ctx.bot, msg.chat_id)
     try:
         text = await filings.message_for(ctx, kind, ticker, section, msg.chat_id)
     finally:
@@ -147,13 +147,17 @@ async def show_filing(ctx: Ctx, msg, kind: filings.Kind, ticker: str, index: int
 
 async def _filing_command(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE, kind: filings.Kind) -> None:
     msg, words = update.effective_message, list(context.args or [])
-    await asyncio.to_thread(ctx.store.save, msg)
-    ticker = words[0].lstrip("$").upper() if words else ""
-    if not filings.TICKER.match(ticker):
-        await reply_chunks(msg, f"Usage: /{kind.command} TICKER [section]", ctx.store, quote=False)
-        return
-    index, section = filings.pick(kind, words[1:])
-    await show_filing(ctx, msg, kind, ticker, index, section)
+    typing = keep_typing(ctx.bot, msg.chat_id)  # before anything else, so the person sees it at once
+    try:
+        await asyncio.to_thread(ctx.store.save, msg)
+        ticker = words[0].lstrip("$").upper() if words else ""
+        if not filings.TICKER.match(ticker):
+            await reply_chunks(msg, f"Usage: /{kind.command} TICKER [section]", ctx.store, quote=False)
+            return
+        index, section = filings.pick(kind, words[1:])
+        await show_filing(ctx, msg, kind, ticker, index, section, typing=typing)
+    finally:
+        typing.cancel()
 
 
 async def narrative(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

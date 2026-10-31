@@ -452,3 +452,31 @@ async def test_clear_only_touches_this_chat_and_this_bot(env, store):
     clear = user_msg(ctx.bot, "/clear", chat_id=5, user_id=5, mid=2)
     await commands.clear(ctx, N(effective_message=clear, effective_user=clear.from_user), None)
     assert store.history(5, 20) == [] and len(store.history(6, 20)) == 2
+
+
+async def test_typing_starts_before_the_bot_logs_the_message_or_checks_who_sent_it(env, store, monkeypatch):
+    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", ADMIN_CHAT_IDS="5")
+    seen = {}
+
+    async def is_admin(msg):
+        seen["actions"] = list(ctx.bot.actions)  # what had been sent when the (possibly slow) check began
+        return True
+
+    monkeypatch.setattr(h, "_is_admin", is_admin)
+    await run(h, user_msg(ctx.bot, "hello", chat_id=5, user_id=5))
+    assert seen["actions"] == ["typing"]
+
+
+async def test_no_typing_for_a_group_message_that_is_not_for_the_bot(env, store):
+    ctx, backend, h = make_ctx(env, store, [])
+    await run(h, user_msg(ctx.bot, "just chatting", chat_id=-100))
+    await asyncio.sleep(0)
+    assert ctx.bot.actions == [] and backend.seen == []
+
+
+async def test_segments_shows_typing_while_it_works(env, store):
+    from types import SimpleNamespace as N
+    ctx, _, h = make_ctx(env, store, [])
+    m = user_msg(ctx.bot, "/segments", chat_id=-100)
+    await h.segments(update_for(m), N(args=[]))
+    assert ctx.bot.actions[:1] == ["typing"] and m.replies[0]["text"] == "Usage: /segments TICKER"
