@@ -28,6 +28,27 @@ It is a general chat bot: the personality is in `lib/prompts.py` (the prompts) a
 
 To keep it running, see [Running under systemd](docs/running.md#running-under-systemd).
 
+## MCP servers
+The bot's data tools come from MCP servers listed in `mcp_servers.json`, remote (`url`) or started by the bot
+(`command`). For example:
+```json
+{"mcpServers": {
+  "weather": {
+    "url": "https://example.com/mcp",
+    "headers": {"Authorization": "Bearer …"},
+    "allowed_tools": ["get_forecast", "get_alerts"],
+    "chat_commands": {
+      "forecast": {"tool": "get_forecast", "require_arg": true},
+      "alerts": {"tool": "get_alerts"}
+    }
+  },
+  "files": {"command": "uvx", "args": ["some-mcp-server"], "env": {"KEY": "value"}, "blocked_tools": ["delete_file"]}
+}}
+```
+`chat_commands` turn a server's tools into slash commands. `/forecast sydney this weekend` asks the model, which is
+offered only that tool and made to call it. With `require_arg`, a bare `/forecast` gets a usage reply from the bot
+without asking the model. Every key is listed in [How it works](docs/how-it-works.md#mcp-data-tools).
+
 ## More
 - [Configuration](docs/configuration.md): providers, every environment variable, choosing a model.
 - [How it works](docs/how-it-works.md): how it answers, search, MCP data tools (`mcp_servers.json`), formatting.

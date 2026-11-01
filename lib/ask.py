@@ -44,11 +44,13 @@ def _public(servers: list) -> list:
 
 async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = False,
               cache_key: str | None = None, on_text=None, kind: str = "chat",
-              chat_id: int = 0, extra_tools=(), admin: bool = True, max_tokens: int | None = None) -> Answer:
+              chat_id: int = 0, extra_tools=(), admin: bool = True, max_tokens: int | None = None,
+              only_tools: set[str] | None = None, must_call: bool = False) -> Answer:
     """Ask the configured provider and record the usage. `route` says which tools to offer;
     must_search forces a search (and offers nothing else). A message the gate gave fewer tools
     than exist that gets back NEEDS_TOOLS is asked again with everything on. A non-admin never
-    gets the portfolio tools, in either request."""
+    gets the portfolio tools, in either request. `only_tools` narrows the route's tools to those function names and
+    `must_call` makes the model call one first (a chat command), never answered from memory instead."""
     st = ctx.st
     if must_search:
         if not st.search:
@@ -60,9 +62,10 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         system=system_prompt(ctx.first_name, route, ctx.backend.search_what),
         parts=parts,
         model=st.model,
-        tools=[t for s in route.servers for t in s.tools] + [t for t, _ in extra_tools],
+        tools=[t for s in route.servers for t in s.tools if only_tools is None or t.name in only_tools]
+        + [t for t, _ in extra_tools],
         local={t.name: fn for t, fn in extra_tools},
-        search=route.search, must_search=must_search, reasoning=st.reasoning,
+        search=route.search, must_search=must_search, must_call=must_call, reasoning=st.reasoning,
         cache_id=cache_id(ctx.first_name, cache_key),
         on_text=_hide_needs_tools(on_text) if (route.simple or route.partial) else on_text,
         no_tools_system=no_tools_system(ctx.first_name),

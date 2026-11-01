@@ -401,3 +401,13 @@ def test_compact_schema_hides_listed_params_but_never_required_ones_and_drops_sc
               "required": ["a"]}
     out = compact_schema(schema, hide=frozenset({"a", "b"}))
     assert set(out["properties"]) == {"a", "c"} and "$schema" not in out and "additionalProperties" not in out
+
+
+async def test_a_chat_command_whose_tool_is_not_enabled_is_warned_about(caplog):
+    import logging
+    s = make_server(chat_commands={"a": {"tool": "get_a"}, "c": {"tool": "delete_c"}, "x": {"tool": "get_x"}})
+    with caplog.at_level(logging.WARNING, logger="bot"):
+        await s._load_tools(s.session)
+    assert "/a" not in caplog.text  # enabled: read-only
+    assert "chat command /c calls delete_c, which is blocked or not read-only (list it in allowed_tools)" in caplog.text
+    assert "chat command /x calls get_x, which matches no tool (did you mean 'get_" in caplog.text

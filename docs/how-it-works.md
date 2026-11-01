@@ -69,7 +69,18 @@ tool names, or `{name: longest start_date..end_date window in days, 0 = a single
 call is cached but not refreshed); `slim` (result slimming, defaults to the server's name; `sharesight` flattens holdings);
 `hide_params` (optional parameters kept out of the tool definition because the model never needs them,
 saving tokens every round; a required parameter is never hidden); `gate` (`portfolio` = only offered when the question is about portfolios/holdings);
-`current_holdings_only` (Sharesight: never include sold holdings).
+`current_holdings_only` (Sharesight: never include sold holdings);
+`chat_commands` (slash commands for the server's tools, below).
+- **Chat commands:** `"chat_commands": {"forecast": {"tool": "get_forecast", "require_arg": true}, "alerts": {"tool": "get_alerts"}}`
+  makes `/forecast …` and `/alerts` commands, in groups and DMs, listed in the command menu (an optional `"description"`
+  sets the menu text). The message is answered like a mention, with the chat history. The difference is that the model
+  is offered only that one tool, has to call it on its first round, and is never retried without it (a failure is an
+  error reply, not an answer from memory). `require_arg`: a bare `/forecast` gets
+  "Usage: /forecast <what to look up>" without asking the model. A command whose server is down, or whose tool isn't
+  enabled (blocked, or not read-only and missing from `allowed_tools`), says so. A command on a `gate: portfolio`
+  server is for admins only. Names follow Telegram's rules (lowercase letters, digits and `_`, at most 32). A name the
+  bot already uses (`/tokens`, `/clear`, …), a name used twice, or an entry without a `tool` is skipped, and the startup
+  log warns about each, and about a tool that isn't enabled.
 - **Tool names are exact:** `blocked_tools` and `allowed_tools` take the server's real tool names, as
   printed in the startup log (`get_analyst_estimates`, not `analyst_estimates`). An entry that matches
   no tool is ignored, with a warning that suggests the closest real name.

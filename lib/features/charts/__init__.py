@@ -71,6 +71,11 @@ def is_night(hour: int) -> bool:
     return hour >= NIGHT_FROM or hour < NIGHT_TO
 
 
+def is_dark(mode: str, hour: int) -> bool:
+    """The dark theme? DARKMODE: "on" always, "auto" at night (9 pm to 7 am), "off" never."""
+    return mode == "on" or (mode == "auto" and is_night(hour))
+
+
 def date_range(first: datetime, last: datetime) -> str:
     """30 Sep - 28 Oct 2026 (the year once when it is the same), or a single date for one day."""
     def day(d: datetime, year: bool) -> str:
@@ -358,7 +363,7 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
         series[0].total = pie_total(series[0], title)
     chart = Chart(title, series, str(args.get("left_label") or ""), str(args.get("right_label") or ""),
                   bool(args.get("invert_left")), bool(args.get("invert_right")), labels,
-                  dark=is_night(moment.hour))
+                  dark=is_dark(ctx.st.darkmode, moment.hour))
     for side in ("left", "right"):  # an axis of nothing but % changes labels its ticks with %
         on_side = [spec for s, spec in zip(series, specs, strict=True) if s.axis == side]
         setattr(chart, f"{side}_percent", bool(on_side) and all(spec.get("percent_change") for spec in on_side))

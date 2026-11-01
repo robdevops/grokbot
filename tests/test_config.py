@@ -119,3 +119,11 @@ def test_docs_document_every_env_var():
 def test_a_zai_key_alone_is_no_longer_a_provider():
     with pytest.raises(config.ConfigError, match="Set XAI_API_KEY"):
         config.load({"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "c"})
+
+
+def test_darkmode_defaults_to_off_and_takes_on_and_auto_in_any_case():
+    base = {"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "k"}
+    assert config.load(base).darkmode == "off"
+    assert [config.load({**base, "DARKMODE": v}).darkmode for v in ("on", "AUTO", " Off ", "")] == ["on", "auto", "off", "off"]
+    with pytest.raises(config.ConfigError, match="DARKMODE must be off, on or auto"):
+        config.load({**base, "DARKMODE": "night"})

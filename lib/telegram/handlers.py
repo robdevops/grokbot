@@ -15,13 +15,14 @@ from telegram.ext import ContextTypes
 from .. import config
 from ..ask import ask
 from ..context import Ctx
-from ..features import dm_buttons, holding_news, movers, periods, post
+from ..features import chat_commands, dm_buttons, holding_news, movers, periods, post
 from ..features.charts import TOOL as CHART_TOOL
 from ..features.charts import Charts, asks_pie, chart_hint, wants_chart
 from ..features.charts import breakdown as chart_breakdown
 from ..features.charts import buttons as chart_buttons
 from ..features.charts import pages as chart_pages
 from ..features.charts import tool as chart_tool
+from ..features.chat_commands import ChatCommand
 from ..history import compact, format_rows
 from ..llm.base import BUSY_REPLY, is_busy
 from ..llm.gate import Route, asks_tools, is_portfolio_question, route
@@ -93,6 +94,7 @@ class Trigger:
     reply_target: Message | None
     replied_to_bot: bool
     nocontext: bool = False
+    command: ChatCommand | None = None  # a chat command from mcp_servers.json: its one tool, forced
 
 
 class Handlers:
@@ -300,6 +302,52 @@ class Handlers:
             return
         await self._send_charts(msg, charts, caption, quote=not private)
 
+    def chat_command(self, cmd: ChatCommand):
+        """The handler of a chat command: the message is answered like a mention, the model offered only the command's
+        tool and made to call it. With require_arg and nothing after the command, a usage line instead, no model."""
+
+        async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+            msg, ctx = update.effective_message, self.ctx
+            if msg is None:
+                return
+            typing = keep_typing(ctx.bot, msg.chat_id)
+            try:
+                await asyncio.to_thread(self._record, msg)  # command handlers come before the one that logs messages
+                private = is_dm(msg.chat_id)
+                if private and ctx.st.admin_only and not await self._is_admin(msg):
+                    log.info("Ignored /%s from user %s: not an admin", cmd.name, msg.from_user and msg.from_user.id)
+                    return
+                text = msg.text or msg.caption or ""
+                if cmd.require_arg and not chat_commands.args_of(text):
+                    await reply_chunks(msg, chat_commands.usage(cmd), ctx.store, quote=not private)
+                    return
+                target = msg.reply_to_message
+                trig = Trigger(text, private, False, target,
+                               bool(target and target.from_user and target.from_user.id == ctx.bot.id), command=cmd)
+                await self._answer(msg, trig, typing)
+            finally:
+                typing.cancel()
+
+        return handle
+
+    async def _command_answer(self, msg: Message, trig: Trigger, draft: Draft | None) -> str:
+        """A chat command: its server's tool, alone and required. Plain replies when it can't run."""
+        ctx, cmd = self.ctx, trig.command
+        server = ctx.registry.servers.get(cmd.server)
+        fn = next((f for f, t in server.fn_names.items() if t == cmd.tool), None) if server else None
+        if server is None or server.session is None or fn is None:
+            return chat_commands.unavailable(cmd, bool(server and server.session))
+        admin = not ctx.st.admin_only or await self._is_admin(msg)
+        if server.cfg.get("gate") == "portfolio" and not admin:
+            return PORTFOLIO_ADMINS_ONLY
+        middle = chat_commands.hint(cmd, fn, chat_commands.args_of(trig.text))
+        parts = [{"type": "text", "text": await self._chat_text(msg, trig, middle=middle)}]
+        parts += await self._images(msg, trig)
+        answer = await ask(ctx, parts, Route([server], False), cache_key=f"chat-{msg.chat_id}",
+                           on_text=draft.update if draft else None, chat_id=msg.chat_id, kind="command",
+                           only_tools={fn}, must_call=True)
+        return format_answer(answer.text, movers_bots=ctx.st.movers_bots, summary=False)
+
     async def _answer_tools(self, msg: Message, trig: Trigger, admin: bool, draft: Draft | None) -> str:
         """"What tools do you have?": the prompt carries the full list of what this person may use, and no tool is
         offered, so the model reports its tools instead of guessing at them."""
@@ -316,6 +364,8 @@ class Handlers:
     async def _generate(self, msg: Message, trig: Trigger, draft: Draft | None, charts: Charts | None = None) -> str:
         ctx, st = self.ctx, self.ctx.st
         await ctx.registry.wait_started(config.MCP_STARTUP_WAIT)
+        if trig.command:
+            return await self._command_answer(msg, trig, draft)
         preset = dm_buttons.preset_for(trig.text) if trig.private and st.dm_buttons else None
         on_text = draft.update if draft else None
         chat_id = msg.chat_id
