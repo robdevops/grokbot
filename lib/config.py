@@ -21,6 +21,7 @@ ENV_VARS: dict[str, str] = {
     "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter).",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
     "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
+    "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in BOT_TZ).",
     # Advanced and optional
     "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /tokens; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
@@ -77,6 +78,7 @@ class Settings:
     max_tokens: int
     history_limit: int
     log_width: int
+    darkmode: str  # "off" | "on" | "auto": the charts' theme
     db_path: str
     tz: ZoneInfo
     admin_chats: frozenset[int]  # user IDs (alerts + admin commands) and group chat IDs (alerts only)
@@ -170,6 +172,9 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     search = env.get("SEARCH", "on").strip().lower() != "off"
     if provider == "openrouter" and not search_model:
         search = False  # nothing to run the searches with
+    darkmode = env.get("DARKMODE", "").strip().lower() or "off"
+    if darkmode not in ("off", "on", "auto"):
+        raise ConfigError(f"DARKMODE must be off, on or auto, not {darkmode!r}.")
     recipients = _pairs(env.get("SHARESIGHT_HOLDING_NEWS_RECIPIENTS", ""))
     return Settings(
         telegram_token=token,
@@ -182,6 +187,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         max_tokens=int(env.get("MAX_TOKENS") or 3000),
         history_limit=int(env.get("HISTORY_LIMIT") or 20),
         log_width=int(env.get("LOG_WIDTH") or 80),
+        darkmode=darkmode,
         db_path=database_path(env),
         tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
         admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),

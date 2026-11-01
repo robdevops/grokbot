@@ -41,7 +41,7 @@ for its definition.
   light weight (the one at zero too), short strokes above the x labels, and grey axis text. The subtitle says what
   the chart shows and when, like "% change over the past month, 30 Sep - 28 Oct 2026". Tick labels share their
   decimals, shorten big numbers (120M, 1.5B) and show % for % changes. A single y axis has no title (an inverted
-  one says "inverted"); two axes keep theirs. Charts are drawn in a dark theme from 9 pm to 7 am (`BOT_TZ`).
+  one says "inverted"); two axes keep theirs. The theme follows `DARKMODE`: light (`off`, the default), dark (`on`), or dark from 9 pm to 7 am in `BOT_TZ` (`auto`).
 - **Line labels:** with lines on one axis, each line ends in a small square and a label with its name and total
   ("NVDA  -5.7%"), nudged apart where they would overlap, and there is no legend. Two axes, bars or points keep
   a legend, with the totals in it.

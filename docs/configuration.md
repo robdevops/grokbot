@@ -18,6 +18,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter). |
 | `REASONING` | Reasoning effort: low, medium or high; empty = the model's default. |
 | `SEARCH` | on|off. Web search (and X search on xAI). Default on. |
+| `DARKMODE` | Chart theme: `off` (the default) draws light charts, `on` draws dark ones, `auto` draws dark ones from 9 pm to 7 am in `BOT_TZ`. Before this setting existed, charts were always `auto`. |
 
 ### Advanced and optional
 | Variable | Meaning |
