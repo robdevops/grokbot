@@ -43,7 +43,7 @@ TOOL = ToolDef(
     "of them, call this once per grouping, and the charts go out as one image with a button for each. Always give source. Then comment on what it shows; don't describe the chart.",
     {"type": "object", "required": ["title", "series"], "properties": {
         "title": {"type": "string"},
-        "source": {"type": "string", "description": "Where the data came from: site, tool or URL, e.g. TickerScout get_segments, finance.yahoo.com"},
+        "source": {"type": "string", "description": "Where the data came from: site, MCP server (its name, not the tool) or URL, e.g. TickerScout, finance.yahoo.com"},
         "series": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {
             "name": {"type": "string"},
             "ticker": {"type": "string"},

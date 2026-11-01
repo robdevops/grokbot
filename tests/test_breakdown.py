@@ -50,6 +50,7 @@ async def test_fast_path_draws_every_pie_and_gives_a_one_line_caption(env, store
     assert caption == "<b>NVDA</b> Q2 FY2027 revenue by segment, market platform, customer headquarters"
     assert [a["breakdown"] for _, a in ctx.registry.servers["ticker-scout"].calls] == [
         "all", "revenue_by_product", "revenue_by_geography"]  # `showing` lists two the data has under other names
+    assert {call["source"] for call in made.calls} == {"ticker-scout"}  # the MCP server's name, not its tool
 
 
 async def test_the_handler_answers_without_calling_the_model(env, store):
