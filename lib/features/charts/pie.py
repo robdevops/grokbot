@@ -36,6 +36,9 @@ def layout(chart, th, slices: list[tuple[str, float]], share) -> Scene:
     scene.add(Text(role="title", x=0.03 * W, y=0.05 * H, text=chart.title, size=14 * PT, color=th.ink, bold=True))
     if chart.subtitle:
         scene.add(Text(role="subtitle", x=0.03 * W, y=0.125 * H, text=chart.subtitle, size=10 * PT, color=th.text))
+    if chart.source:
+        scene.add(Text(role="source", x=0.03 * W, y=H - 12, text=f"Source: {chart.source}", size=8.5 * PT,
+                       color=th.text, anchor="ls"))
     return scene
 
 

@@ -37,6 +37,8 @@ button for each (see below), not an album. An answer too
 long for a caption (about 1,000 characters) continues in a text message. The model gets the `make_chart` tool only
 when the message asks for one (chart, graph, plot, pie, visualise, breakdown, segments), so other requests don't pay
 for its definition.
+- **Source:** a small muted "Source: ..." line at the bottom left. The model passes `source` (site, MCP server name or URL, never the individual
+  tool); a chart of tickers only defaults to Yahoo Finance, the revenue breakdown to the MCP server it read.
 - **Style:** a bold title on the left with a quiet subtitle under it, no frame and no vertical rules, rules of one
   light weight (the one at zero too), short strokes above the x labels, and grey axis text. The subtitle says what
   the chart shows and when, like "% change over the past month, 30 Sep - 28 Oct 2026". Tick labels share their
