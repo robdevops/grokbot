@@ -17,6 +17,7 @@ END_LABEL_GAP = 0.065  # least distance between two end-of-line labels, as a fra
 OUTER = 12  # pixels of edge around everything
 TEXT = 10 * PT  # axis, legend and subtitle type
 TITLE = 14 * PT
+SOURCE = 8.5 * PT  # the source line, a little under the axis type
 TICK_LEN, TICK_PAD = 5 * PT, 6 * PT
 LEGEND_ROW = 19 * PT
 LINE_WIDTH, MARKER, POINT = 1.6 * PT, 2 * PT, 2.35 * PT
@@ -144,6 +145,8 @@ def _frame(chart, axes: dict[str, Axis], xticks, tilt: bool, rows: int, ends: li
     top = legend_top + rows * LEGEND_ROW + 0.6 * TEXT
     xlabel_h = (max(xlabel_w) + text_h) * math.sin(math.radians(45)) if tilt else text_h
     bottom = OUTER + TICK_LEN + TICK_PAD + xlabel_h
+    if chart.source:
+        bottom += measure("Hg", SOURCE)[1] + 0.5 * TEXT
     return Frame(left, W - right, top, H - bottom, titles, labels, text_h, subtitle_y, legend_top)
 
 
@@ -246,6 +249,9 @@ def layout(chart, th) -> Scene:
     scene.add(Text(role="title", x=f.x0, y=OUTER, text=chart.title, size=TITLE, color=th.ink, bold=True))
     if chart.subtitle:
         scene.add(Text(role="subtitle", x=f.x0, y=f.subtitle_y, text=chart.subtitle, size=TEXT, color=th.text))
+    if chart.source:
+        scene.add(Text(role="source", x=OUTER, y=H - OUTER, text=f"Source: {chart.source}", size=SOURCE,
+                       color=th.text, anchor="ls"))
     return scene
 
 

@@ -60,6 +60,7 @@ class Chart:
     right_percent: bool = False
     dark: bool = False  # the dark theme (the bot draws it at night)
     subtitle: str = ""  # under the title, in quiet type
+    source: str = ""  # where the data came from, bottom left in quiet type
 
 
 def pie_slices(s: Series) -> list[tuple[str, float]]:

@@ -203,6 +203,7 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
     for label, slices in found[:MAX_CHARTS]:
         values, suffix = scaled(slices)
         args = {"title": f"{ticker} {name} revenue by {label} ({symbol}{suffix})",
+                "source": f"TickerScout {TOOL}",
                 "series": [{"name": f"Revenue by {label}", "kind": "pie",
                             "x": [n for n, _ in values], "y": [round(v, 3) for _, v in values]}]}
         if (await make(args)).startswith("Chart "):

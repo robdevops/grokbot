@@ -14,7 +14,7 @@ from lib.context import Ctx
 from lib.features import charts
 from lib.features.charts import buttons, pages, render
 from lib.features.charts.render import Chart, Series
-from lib.features.charts.scene import PT
+from lib.features.charts.scene import PT, H, W
 
 from .conftest import FakeBot, user_msg
 from .fakes import FakeMcp, ScriptedBackend, registry, step
@@ -551,6 +551,43 @@ def test_the_subtitle_sits_under_the_title_and_the_date_is_not_repeated_bottom_r
     [subtitle], [title] = scene.find("subtitle"), scene.find("title")
     assert subtitle.text == "Closing price, 1 Jan - 2 Jan 2026" and subtitle.y > title.y
     assert not any("2026" in label for label in scene.x_labels if len(label) > 4)
+
+
+async def test_the_source_is_the_models_else_yahoo_for_tickers_else_none(env, store):
+    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
+    ctx = make(env, store, yahoo)
+    build = lambda *series, **kw: charts.build(ctx, {"title": "t", "series": list(series), **kw})  # noqa: E731
+    mine = {"name": "Mine", "x": ["a", "b"], "y": [1, 2]}
+    chart, _ = await build({"name": "A", "ticker": "A"})
+    assert chart.source == "Yahoo Finance"
+    chart, _ = await build({"name": "A", "ticker": "A"}, source="example.com")
+    assert chart.source == "example.com"
+    chart, _ = await build(mine)
+    assert chart.source == ""
+    chart, _ = await build(mine, source="  a\n b  " + "x" * 300)
+    assert "\n" not in chart.source and len(chart.source) == charts.SOURCE_MAX and chart.source.endswith("…")
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_the_source_sits_bottom_left_in_quiet_type_under_the_x_labels(dark):
+    th = render.THEMES["dark" if dark else "light"]
+    for chart in (Chart("t", [Series("a", DAYS, [1.0, 2.0])], source="example.com", dark=dark),
+                  Chart("t", [Series("a", ["x", "y"], [1.0, 2.0], kind="pie")], source="example.com", dark=dark)):
+        scene = render.scene(chart)
+        [source] = scene.find("source")
+        assert source.text == "Source: example.com" and source.color == th.text
+        assert source.x < 0.05 * W and source.y > 0.9 * H
+        assert all(source.y > op.y for op in scene.find("x-label"))
+    assert not render.scene(Chart("t", [Series("a", DAYS, [1.0, 2.0])])).find("source")
+
+
+async def test_a_chart_with_no_source_asks_the_model_for_one(env, store):
+    ctx = make(env, store, FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120])))
+    _, make_chart = charts.tool(ctx, charts.Charts())
+    out = await make_chart({"title": "t", "series": [{"name": "Mine", "x": ["a", "b"], "y": [1, 2]}]})
+    assert "give `source`" in out
+    out = await make_chart({"title": "t", "source": "example.com", "series": [{"name": "Mine", "x": ["a", "b"], "y": [1, 2]}]})
+    assert "give `source`" not in out
 
 
 def test_the_line_at_zero_is_as_light_as_the_other_rules():

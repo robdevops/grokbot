@@ -40,9 +40,10 @@ TOOL = ToolDef(
     "values, parts of one whole only: never a subtotal beside its parts, and where a line is split into sub-lines "
     "(Data Center into Hyperscale and AI Clouds) use the sub-lines, the finest split, not the subtotal. A source that returns several groupings "
     "(segments, products or platforms, regions) gets one pie for every grouping, not just the first: ask it for all "
-    "of them, call this once per grouping, and the charts go out as one image with a button for each. Then comment on what it shows; don't describe the chart.",
+    "of them, call this once per grouping, and the charts go out as one image with a button for each. Always give source. Then comment on what it shows; don't describe the chart.",
     {"type": "object", "required": ["title", "series"], "properties": {
         "title": {"type": "string"},
+        "source": {"type": "string", "description": "Where the data came from: site, tool or URL, e.g. TickerScout get_segments, finance.yahoo.com"},
         "series": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {
             "name": {"type": "string"},
             "ticker": {"type": "string"},
@@ -100,6 +101,18 @@ def subtitle_for(specs: list[dict], series: list[Series], pct: bool) -> str:
         head = "% change"
     times = [x for s in series for x in s.x if isinstance(x, datetime)]
     return ", ".join(filter(None, (head, date_range(min(times), max(times)) if times else "")))
+
+
+SOURCE_MAX = 100  # characters of the source line
+TICKER_SOURCE = "Yahoo Finance"  # where the bot itself fetches ticker prices from
+
+
+def source_for(args: dict, specs: list[dict]) -> str:
+    """The chart's source line: the model's, tidied; else Yahoo for charts of tickers only; else none."""
+    given = " ".join(str(args.get("source") or "").split())
+    if given:
+        return given if len(given) <= SOURCE_MAX else given[:SOURCE_MAX - 1].rstrip() + "…"
+    return TICKER_SOURCE if specs and all(spec.get("ticker") for spec in specs) else ""
 
 
 PIE_WORDS = re.compile(r"\b(pies?|donuts?|breakdowns?|break down|segments?)\b", re.I)
@@ -367,6 +380,7 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
     for side in ("left", "right"):  # an axis of nothing but % changes labels its ticks with %
         on_side = [spec for s, spec in zip(series, specs, strict=True) if s.axis == side]
         setattr(chart, f"{side}_percent", bool(on_side) and all(spec.get("percent_change") for spec in on_side))
+    chart.source = source_for(args, specs)
     chart.subtitle = "Share of total" if pie else subtitle_for(
         specs, series, chart.left_percent and not any(s.axis == "right" for s in series))
     return chart, [pie_summary(s) if pie else summary(s, specs[i].get("percent_change"), notes[i])
@@ -464,7 +478,8 @@ def tool(ctx: Ctx, charts: Charts):
         position = next(i for i, other in enumerate(charts.slots) if other is slot)  # not index(): equal charts match
         number = sum(1 for other in charts.slots[:position + 1] if other["state"] != "failed")
         limit = "one line under 120 characters" if chart.series[0].kind == "pie" else f"{CAPTION_HINT} characters"
-        return (f"Chart {number} is ready. Your reply becomes its caption, so keep the reply to {limit}, "
+        nudge = "" if chart.source else " It has no source line: give `source` next time."
+        return (f"Chart {number} is ready.{nudge} Your reply becomes its caption, so keep the reply to {limit}, "
                 "and don't describe the chart or say you made one: say what it shows.\n"
                 + "\n".join(lines))
 
