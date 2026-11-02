@@ -624,14 +624,14 @@ def test_pie_slices_are_biggest_first_with_gaps_dropped_and_the_smallest_added_u
 
 def test_a_pie_is_a_donut_with_a_legend_of_whole_numbers_and_the_total_in_the_middle():
     chart = Chart("Revenue", [Series("p", ["US", "Taiwan"], [75.0, 25.0], kind="pie", total="$100B")],
-                  subtitle="Share of total")
+                  subtitle="Ring shows share of total")
     scene = render.scene(chart)
     wedges = scene.find("wedge")
     assert len(wedges) == 2 and wedges[0].end - wedges[0].start == pytest.approx(270)  # 75% of the way round
     assert scene.texts("total") == ["$100B"] and scene.find("hole")
     assert scene.legend == ["US  75", "Taiwan  25"]
-    big = Chart("Area", [Series("p", ["Russia", "China"], [16376870.4, 9388211.0], kind="pie")])
-    assert render.scene(big).legend == ["Russia  16,376,870", "China  9,388,211"]
+    big = Chart("Area (km²)", [Series("p", ["Russia", "China"], [16376870.4, 9388211.0], kind="pie")])
+    assert render.scene(big).legend == ["Russia  16,376,870 km²", "China  9,388,211 km²"]
     tiny = Chart("Mix", [Series("p", ["A", "B"], [0.75, 0.25], kind="pie")])  # would round to 1 and 0: shares instead
     assert render.scene(tiny).legend == ["A  75.0%", "B  25.0%"]
     for dark, bg in ((False, (255, 255, 255)), (True, (0x14, 0x1a, 0x22))):
@@ -644,7 +644,7 @@ async def test_a_pie_call_takes_slices_names_and_shares_for_the_model(env, store
     out = await make_chart({"title": "t", "series": [pie("Revenue", ["Compute", "Graphics"], [88299, 7922])]})
     assert out.startswith("Chart 1 is ready") and "Revenue (pie, 2 slices, total 96,221): Compute 91.8%, Graphics 8.2%" in out
     chart, _ = await charts.build(make(env, store), {"title": "t", "series": [pie("R", [2024, 2025], [1, 3])]})
-    assert chart.series[0].x == ["2024", "2025"] and chart.subtitle == "Share of total" and not chart.labels
+    assert chart.series[0].x == ["2024", "2025"] and chart.subtitle == "Ring shows share of total" and not chart.labels
 
 
 @pytest.mark.parametrize("series, error", [
@@ -939,3 +939,12 @@ def test_superscripts_are_drawn_as_plain_digits_not_a_missing_glyph_box():
     chart = Chart("Area (km²)", [Series("Russia", ["Russia", "China"], [17.1, 9.6], kind="pie")])
     assert "Area (km²)" in render.scene(chart).texts("title")
     assert render.png(chart)
+
+
+def test_a_pie_total_and_legend_carry_the_unit_from_the_title():
+    from lib.features import charts as pkg
+    s = Series("p", ["Russia", "China"], [17098246.0, 9596961.0], kind="pie")
+    assert render.pie_unit("Land area (km²)") == ("", " km²") and render.pie_unit("Revenue ($B)") == ("$", "B")
+    assert render.pie_unit("Land area") == ("", "") and render.pie_unit("Share (%)") == ("", "")
+    assert pkg.pie_total(s, "Land area (km²)") == "26.70m km²" and pkg.pie_total(s, "Land area") == ""
+    assert pkg.pie_total(Series("p", ["a", "b"], [60.0, 31.8], kind="pie"), "Revenue ($B)") == "$91.8B"

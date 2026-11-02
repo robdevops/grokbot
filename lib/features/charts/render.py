@@ -4,6 +4,7 @@ either one inverted, a legend or names at the line ends, or a donut."""
 from __future__ import annotations
 
 import math
+import re
 import threading
 from dataclasses import dataclass, field, replace
 
@@ -78,11 +79,28 @@ def share(part: float, whole: float) -> str:
     return "<0.1%" if 0 < pct < 0.05 else f"{pct:.1f}%"
 
 
-def legend_value(slices: list[tuple[str, float]]):
-    """What a pie's legend shows beside each name: the slice's own value as a whole number (the donut already shows the
-    share), or the share when a value would round to nothing."""
+UNIT_RE = re.compile(r"\(\s*(A\$|US\$|[$€£¥])?\s*(trillion|billion|million|thousand|[KMBT]n?|bn|mn)?\s*\)", re.IGNORECASE)
+LAST_BRACKET_RE = re.compile(r"\(([^()%\d][^()%]{0,11})\)\s*$")
+
+
+def pie_unit(title: str) -> tuple[str, str]:
+    """The unit a pie's title gives in brackets, as (before the number, after it): "($B)" -> ("$", "B"), "(km²)" ->
+    ("", " km²"); empty when it names none."""
+    found = UNIT_RE.search(title)
+    if found and (found.group(1) or found.group(2)):
+        short = {"trillion": "T", "billion": "B", "million": "M", "thousand": "K", "bn": "B", "mn": "M"}
+        unit = found.group(2) or ""
+        return found.group(1) or "", short.get(unit.lower(), unit)
+    last = LAST_BRACKET_RE.search(title)
+    return ("", f" {last.group(1).strip()}") if last else ("", "")
+
+
+def legend_value(slices: list[tuple[str, float]], title: str = ""):
+    """What a pie's legend shows beside each name: the slice's own value as a whole number with the title's unit (the
+    donut already shows the share), or the share when a value would round to nothing."""
     if all(round(y) >= 1 for _, y in slices):
-        return lambda part, whole: f"{round(part):,}"
+        prefix, suffix = pie_unit(title)
+        return lambda part, whole: f"{prefix}{round(part):,}{suffix}"
     return share
 
 
@@ -100,7 +118,7 @@ def scene(chart: Chart) -> Scene:
     th = THEMES["dark" if chart.dark else "light"]
     if any(s.kind == "pie" for s in chart.series):
         slices = pie_slices(chart.series[0])
-        return pie.layout(chart, th, slices, legend_value(slices))
+        return pie.layout(chart, th, slices, legend_value(slices, chart.title))
     return cartesian.layout(chart, th)
 
 
