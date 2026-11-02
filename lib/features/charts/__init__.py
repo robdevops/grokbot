@@ -254,21 +254,18 @@ def unify_x(series: list[Series]) -> list[str]:
     return labels
 
 
-UNIT_RE = re.compile(r"\(\s*(A\$|US\$|[$€£¥])?\s*(trillion|billion|million|thousand|[KMBT]n?|bn|mn)?\s*\)", re.IGNORECASE)
-
-
 def pie_total(s: Series, title: str) -> str:
-    """The sum of a pie's slices for its middle, in the unit the title gives in brackets ("($B)", "(€ million)");
-    nothing if the title names none, as a bare number could be anything."""
-    found = UNIT_RE.search(title)
-    if not found or not (found.group(1) or found.group(2)):
+    """The sum of a pie's slices for its middle, in the unit the title gives in brackets ("($B)", "(km²)"); nothing if
+    the title names none, as a bare number could be anything."""
+    prefix, suffix = render.pie_unit(title)
+    if not prefix and not suffix:
         return ""
     whole = sum(y for _, y in render.pie_slices(s))
-    short = {"trillion": "T", "billion": "B", "million": "M", "thousand": "K", "bn": "B", "mn": "M"}
-    unit = found.group(2) or ""
-    unit = short.get(unit.lower(), unit)
+    if suffix.startswith(" ") and whole >= 1e6:  # a unit of its own: compact, so it fits in the hole
+        big, mark = (whole / 1e9, "bn") if whole >= 1e9 else (whole / 1e6, "m")
+        return f"{prefix}{big:,.2f}{mark}{suffix}"
     digits = f"{whole:,.0f}" if whole >= 1000 else f"{whole:,.1f}"
-    return f"{found.group(1) or ''}{digits}{unit}"
+    return f"{prefix}{digits}{suffix}"
 
 
 def total(s: Series, spec: dict) -> str:
@@ -381,7 +378,7 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
         on_side = [spec for s, spec in zip(series, specs, strict=True) if s.axis == side]
         setattr(chart, f"{side}_percent", bool(on_side) and all(spec.get("percent_change") for spec in on_side))
     chart.source = source_for(args, specs)
-    chart.subtitle = "Share of total" if pie else subtitle_for(
+    chart.subtitle = "Ring shows share of total" if pie else subtitle_for(
         specs, series, chart.left_percent and not any(s.axis == "right" for s in series))
     return chart, [pie_summary(s) if pie else summary(s, specs[i].get("percent_change"), notes[i])
                    for i, s in enumerate(series)]
