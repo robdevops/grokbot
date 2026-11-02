@@ -948,3 +948,13 @@ def test_a_pie_total_and_legend_carry_the_unit_from_the_title():
     assert render.pie_unit("Land area") == ("", "") and render.pie_unit("Share (%)") == ("", "")
     assert pkg.pie_total(s, "Land area (km²)") == "26.70m km²" and pkg.pie_total(s, "Land area") == ""
     assert pkg.pie_total(Series("p", ["a", "b"], [60.0, 31.8], kind="pie"), "Revenue ($B)") == "$91.8B"
+
+
+def test_a_pie_is_big_and_centred_with_its_legend_inside_the_picture():
+    names = ["United States of America", "China", "Brazil"]
+    scene = render.scene(Chart("Area (km²)", [Series("p", names, [9.8e6, 9.6e6, 8.5e6], kind="pie")]))
+    wedge, swatch = scene.find("wedge")[0], scene.find("swatch")[0]
+    legend = scene.find("legend")
+    left, right = wedge.cx - wedge.r, max(t.x + render.raster.measure(t.text, t.size)[0] for t in legend)
+    assert wedge.r > 0.3 * H and left > 0 and right < W
+    assert left == pytest.approx(W - right, abs=2) and swatch.box[0] > wedge.cx + wedge.r
