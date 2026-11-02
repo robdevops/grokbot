@@ -920,3 +920,18 @@ def test_number_ticks_are_round_steps_inside_the_range():
 def test_date_ticks_pick_a_unit_for_the_span_and_name_the_bigger_one_at_its_boundary(start, end, labels):
     from lib.features.charts.ticks import date_ticks
     assert [label for _, label in date_ticks(start, end)] == labels
+
+
+def test_superscripts_are_drawn_as_plain_digits_not_a_missing_glyph_box():
+    from lib.features.charts import raster
+    from lib.features.charts.scene import Scene, Text
+
+    assert raster.measure("km²", 12) == raster.measure("km2", 12)
+
+    def pixels(text: str) -> bytes:
+        return raster.png(Scene(bg="#ffffff", ops=[Text(role="title", x=10, y=10, text=text, size=14, color="#000000")]))
+
+    assert pixels("52m km²") == pixels("52m km2")
+    chart = Chart("Area (km²)", [Series("Russia", ["Russia", "China"], [17.1, 9.6], kind="pie")])
+    assert "Area (km²)" in render.scene(chart).texts("title")
+    assert render.png(chart)

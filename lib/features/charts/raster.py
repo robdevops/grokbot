@@ -20,6 +20,18 @@ def font(px: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default(size=max(1, px))
 
 
+# Pillow's built-in font draws a box for these; plain stand-ins keep units like km² and symbols readable.
+_FALLBACK = {ord(k): v for k, v in {
+    "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+    "−": "-", "–": "-", "—": "-", "→": "->", "×": "x", "≈": "~", "•": "-", "µ": "u", "½": "1/2",
+    "≥": ">=", "≤": "<=", "‰": "per mille", "€": "EUR ", "£": "GBP ", "¥": "JPY ",
+}.items()}
+
+
+def _drawable(text: str) -> str:
+    return text.translate(_FALLBACK)
+
+
 def _stroke(px: float, bold: bool) -> int:
     """Pillow's font has no bold: an outline in the text's own colour stands in for it."""
     return max(1, round(px / 40)) if bold else 0
@@ -28,21 +40,23 @@ def _stroke(px: float, bold: bool) -> int:
 def measure(text: str, px: float, bold: bool = False) -> tuple[float, float]:
     """Width and height of a line of text at `px` pixels, in the picture's pixels."""
     size = round(px * SCALE)
+    text = _drawable(text)
     left, top, right, bottom = font(size).getbbox(text or " ", stroke_width=_stroke(size, bold))
     return (right - left) / SCALE, (bottom - top) / SCALE
 
 
 def _text(img: Image.Image, draw: ImageDraw.ImageDraw, op: Text) -> None:
     size = round(op.size * SCALE)
+    text = _drawable(op.text)
     kw = {"font": font(size), "fill": op.color, "stroke_width": _stroke(size, op.bold), "stroke_fill": op.color}
     x, y = op.x * SCALE, op.y * SCALE
     if not op.angle:
-        draw.text((x, y), op.text, anchor=op.anchor, **kw)
+        draw.text((x, y), text, anchor=op.anchor, **kw)
         return
     # Rotated: drawn on its own transparent tile, turned, then placed by the anchor's corner of the turned tile.
-    left, top, right, bottom = font(size).getbbox(op.text, stroke_width=kw["stroke_width"])
+    left, top, right, bottom = font(size).getbbox(text, stroke_width=kw["stroke_width"])
     tile = Image.new("RGBA", (right - left + 4, bottom - top + 4), (0, 0, 0, 0))
-    ImageDraw.Draw(tile).text((2 - left, 2 - top), op.text, **kw)
+    ImageDraw.Draw(tile).text((2 - left, 2 - top), text, **kw)
     tile = tile.rotate(op.angle, expand=True, resample=Image.BICUBIC)
     across, down = op.anchor[0], op.anchor[1]
     dx = {"l": 0, "m": tile.width / 2, "r": tile.width}[across]
