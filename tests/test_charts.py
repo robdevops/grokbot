@@ -622,14 +622,18 @@ def test_pie_slices_are_biggest_first_with_gaps_dropped_and_the_smallest_added_u
     assert [render.share(p, 100.0) for p in (62.43, 0.01, 100.0)] == ["62.4%", "<0.1%", "100.0%"]
 
 
-def test_a_pie_is_a_donut_with_a_legend_of_shares_and_the_total_in_the_middle():
+def test_a_pie_is_a_donut_with_a_legend_of_whole_numbers_and_the_total_in_the_middle():
     chart = Chart("Revenue", [Series("p", ["US", "Taiwan"], [75.0, 25.0], kind="pie", total="$100B")],
                   subtitle="Share of total")
     scene = render.scene(chart)
     wedges = scene.find("wedge")
     assert len(wedges) == 2 and wedges[0].end - wedges[0].start == pytest.approx(270)  # 75% of the way round
     assert scene.texts("total") == ["$100B"] and scene.find("hole")
-    assert scene.legend == ["US  75.0%", "Taiwan  25.0%"]
+    assert scene.legend == ["US  75", "Taiwan  25"]
+    big = Chart("Area", [Series("p", ["Russia", "China"], [16376870.4, 9388211.0], kind="pie")])
+    assert render.scene(big).legend == ["Russia  16,376,870", "China  9,388,211"]
+    tiny = Chart("Mix", [Series("p", ["A", "B"], [0.75, 0.25], kind="pie")])  # would round to 1 and 0: shares instead
+    assert render.scene(tiny).legend == ["A  75.0%", "B  25.0%"]
     for dark, bg in ((False, (255, 255, 255)), (True, (0x14, 0x1a, 0x22))):
         picture = Image.open(io.BytesIO(REAL_PNG(replace(chart, dark=dark))))
         assert picture.size == (1224, 714) and picture.getpixel((2, 2))[:3] == bg

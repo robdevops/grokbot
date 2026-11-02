@@ -1,4 +1,4 @@
-"""The layout of a pie chart: a donut, its total in the middle, and a legend of each slice's share beside it."""
+"""The layout of a pie chart: a donut, its total in the middle, and a legend of each slice's value beside it."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def layout(chart, th, slices: list[tuple[str, float]], share) -> Scene:
 
 
 def _legend(scene: Scene, th, slices, colors, whole: float, share) -> None:
-    """A square and "name  share" per slice, the names wrapped, the whole block centred beside the donut."""
+    """A square and "name  value" per slice, the names wrapped, the whole block centred beside the donut."""
     px = 11 * PT
     line_h = measure("Hg", px)[1] * 1.25
     gap = 0.9 * px

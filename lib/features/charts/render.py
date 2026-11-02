@@ -78,6 +78,14 @@ def share(part: float, whole: float) -> str:
     return "<0.1%" if 0 < pct < 0.05 else f"{pct:.1f}%"
 
 
+def legend_value(slices: list[tuple[str, float]]):
+    """What a pie's legend shows beside each name: the slice's own value as a whole number (the donut already shows the
+    share), or the share when a value would round to nothing."""
+    if all(round(y) >= 1 for _, y in slices):
+        return lambda part, whole: f"{round(part):,}"
+    return share
+
+
 def _single_axis(chart: Chart) -> Chart:
     """A chart whose series are all on the right axis is drawn on the left one, with the right axis's settings."""
     if not chart.series or any(s.axis == "left" for s in chart.series):
@@ -91,7 +99,8 @@ def scene(chart: Chart) -> Scene:
     chart = _single_axis(chart)
     th = THEMES["dark" if chart.dark else "light"]
     if any(s.kind == "pie" for s in chart.series):
-        return pie.layout(chart, th, pie_slices(chart.series[0]), share)
+        slices = pie_slices(chart.series[0])
+        return pie.layout(chart, th, slices, legend_value(slices))
     return cartesian.layout(chart, th)
 
 
