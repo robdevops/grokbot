@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 
 import httpx
@@ -33,6 +34,30 @@ def citations(annotations: list) -> list[tuple[str, str]]:
         if url.startswith(("http://", "https://")):
             out.setdefault(url, str(c.get("title") or "").strip())
     return [(title, url) for url, title in out.items()]
+
+
+def mark_citations(text: str, cites: list[tuple[int, str]]) -> str:
+    """Put "[n]" after each cited sentence, n a link to the page (the same page keeps its number). `cites` are
+    (end position in `text`, url); a position inside a tag or a link is skipped, and one right before the
+    sentence's closing punctuation moves past it."""
+    numbers: dict[str, int] = {}
+    at: dict[int, list[int]] = {}
+    for end, url in sorted(cites):
+        pos = min(end, len(text))
+        while pos < len(text) and text[pos] in ".!?":
+            pos += 1
+        before = text[:pos]
+        if (pos <= 0 or before.rfind("<") > before.rfind(">") or before.count("<a ") != before.count("</a>")
+                or before.rfind("](") > before.rfind(")")):
+            continue
+        n = numbers.setdefault(url, len(numbers) + 1)
+        if n not in at.setdefault(pos, []):
+            at[pos].append(n)
+    urls = {n: url for url, n in numbers.items()}
+    for pos in sorted(at, reverse=True):
+        marks = "".join(f'[<a href="{html.escape(urls[n], quote=True)}">{n}</a>]' for n in at[pos])
+        text = text[:pos] + marks + text[pos:]
+    return text
 
 
 def merge_reasoning(details: list[dict], new: list) -> None:
@@ -89,8 +114,15 @@ class OpenRouterBackend(ChatBackend):
         fields = getattr(delta, "model_extra", None) or {}
         merge_reasoning(extra.setdefault("details", []), fields.get("reasoning_details") or [])
         extra["searches"] = extra.get("searches", 0) + len(fields.get("annotations") or [])
+        for a in fields.get("annotations") or []:
+            c = a.get("url_citation") if isinstance(a, dict) and a.get("type") == "url_citation" else None
+            if c and isinstance(c.get("end_index"), int) and str(c.get("url") or "").startswith(("http://", "https://")):
+                extra.setdefault("cites", []).append((c["end_index"], c["url"]))
         have = extra.setdefault("sources", [])
         have += [c for c in citations(fields.get("annotations") or []) if c[1] not in {u for _, u in have}]
+
+    def _cite(self, text: str, extra: dict) -> str:
+        return mark_citations(text, extra.get("cites", []))
 
     def _assistant_fields(self, extra: dict) -> dict:
         return {"reasoning_details": extra["details"]} if extra.get("details") else {}

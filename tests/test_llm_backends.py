@@ -270,3 +270,36 @@ async def test_openrouter_run_search_hands_the_model_the_links(env):
 
     b = OpenRouterBackend(config.load(env), N(chat=N(completions=N(create=create))))
     assert await b.run_search("nvda", Usage(), {}) == "- NVDA 100 [Reuters]\nLinks: https://r.example/n"
+
+
+def cite_at(url, end):
+    return {"type": "url_citation", "url_citation": {"url": url, "title": "t", "start_index": 0, "end_index": end}}
+
+
+def test_citations_become_numbered_links_after_the_sentence():
+    from lib.llm.openrouter import mark_citations
+    a, b = "https://a.example/x?p=1&q=2", "https://b.example/"
+    text = "NVDA rose 3%. Micron guided up. Both beat."
+    out = mark_citations(text, [(12, a), (30, b), (41, a)])
+    assert out == ('NVDA rose 3%.[<a href="https://a.example/x?p=1&amp;q=2">1</a>] Micron guided up.'
+                   '[<a href="https://b.example/">2</a>] Both beat.[<a href="https://a.example/x?p=1&amp;q=2">1</a>]')
+    # two sources for one sentence; a spot inside a tag or a link, or past the end, is handled
+    assert mark_citations("One.", [(3, a), (3, b)]).endswith('.[<a href="https://a.example/x?p=1&amp;q=2">1</a>]'
+                                                              '[<a href="https://b.example/">2</a>]')
+    assert mark_citations('See <a href="u">x</a>.', [(10, a)]) == 'See <a href="u">x</a>.'
+    assert mark_citations("Hi.", [(99, a)]).startswith("Hi.[")
+    assert mark_citations("Hi.", [(0, a)]) == "Hi."
+
+
+async def test_openrouter_marks_cited_sentences_only_when_asked(env):
+    def chunks():
+        return Stream([chat_chunk("Micron guided up.", extra={"annotations": [cite_at("https://m.example/", 16)]}),
+                       chat_chunk(finish="stop")])
+
+    b = OpenRouterBackend(config.load(env), FakeChatClient(chunks(), chunks()))
+    r = req(search=True, cite=True)
+    step = await b.step(b.start(r), r, tool_choice=None)
+    assert step.text == 'Micron guided up.[<a href="https://m.example/">1</a>]'
+    assert step.raw["content"] == "Micron guided up."  # replayed to the model unmarked
+    plain = req(search=True)
+    assert (await b.step(b.start(plain), plain, tool_choice=None)).text == "Micron guided up."

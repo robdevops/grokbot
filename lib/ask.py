@@ -71,6 +71,7 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         on_text=_hide_needs_tools(on_text) if (route.simple or route.partial) else on_text,
         no_tools_system=no_tools_system(ctx.first_name),
         max_tokens=max_tokens or st.max_tokens,
+        cite=kind == "chat",  # other kinds parse or format their own text
     )
     answer = await policy.ask(ctx.backend, ctx.registry, req)
     await _record(ctx, req.model, kind, chat_id, answer)

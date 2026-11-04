@@ -489,3 +489,11 @@ async def test_segments_shows_typing_while_it_works(env, store):
     m = user_msg(ctx.bot, "/segments", chat_id=-100)
     await h.segments(update_for(m), N(args=[]))
     assert ctx.bot.actions[:1] == ["typing"] and m.replies[0]["text"] == "Usage: /segments TICKER"
+
+
+def test_numbered_source_links_survive_the_reply_formatting():
+    from lib.telegram.handlers import format_answer
+    text = 'NVDA rose 3%.[<a href="https://a.example/x?p=1&amp;q=2">1</a>] **Strong.**[<a href="https://b.example/">2</a>]'
+    out = format_answer(text, movers_bots=frozenset(), summary=False)
+    assert '[<a href="https://a.example/x?p=1&amp;q=2">1</a>]' in out and '[<a href="https://b.example/">2</a>]' in out
+    assert "<b>Strong.</b>" in out and "Sources:" not in out
