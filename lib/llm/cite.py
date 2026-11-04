@@ -51,6 +51,7 @@ def normalise_markers(text: str, sources: list[Source]) -> str:
     def fix(m: re.Match) -> str:
         url = known.get(html.unescape(m.group(1)).rstrip("/"))
         if url is None:
+            log.debug("Dropped the model's link to %s: not a page the search returned", html.unescape(m.group(1)))
             return ""
         n = numbers.setdefault(url, len(numbers) + 1)
         return f'[<a href="{html.escape(url, quote=True)}">{n}</a>]'
@@ -71,9 +72,11 @@ def mark_by_overlap(text: str, sources: list[Source]) -> str:
     link goes where the figures and the distinctive words of the sentence are also in the page's snippet.
     Words every snippet shares count for less. A source that fits no sentence gets no marker."""
     if MARKER_RE.search(text) or not sources:
+        log.debug("No [n] markers added: %s", "the model's own are there" if sources else "no sources")
         return text
     snippets = [_tokens(s.content) for s in sources if s.content]
     if not snippets:
+        log.debug("No [n] markers added: none of the %d sources came with a snippet", len(sources))
         return text
     spread: dict[str, int] = {}
     for _, words in snippets:
