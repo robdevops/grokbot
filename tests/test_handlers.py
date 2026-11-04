@@ -25,6 +25,15 @@ async def run(h, msg, edited=False):
     await asyncio.sleep(0)
 
 
+async def test_a_chat_answer_that_used_web_search_ends_with_its_sources(env, store):
+    cited = step("Micron guided higher.")
+    cited.sources = [("Reuters", "https://www.reuters.com/mu")]
+    ctx, backend, h = make_ctx(env, store, [cited])
+    m = user_msg(ctx.bot, "@stockbot what did Micron say?")
+    await run(h, m)
+    assert m.replies[0]["text"].endswith('Sources: <a href="https://www.reuters.com/mu">Reuters</a>')
+
+
 async def test_group_mention_is_answered_with_linked_tickers_and_logged(env, store):
     ctx, backend, h = make_ctx(env, store, [step("NVDA looks <b>strong</b>, SQX.AX too")])
     m = user_msg(ctx.bot, "@stockbot how is NVDA?")

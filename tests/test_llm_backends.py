@@ -244,3 +244,29 @@ async def test_xai_failed_stream_raises():
     r = req()
     with pytest.raises(RuntimeError, match="failed"):
         await b.step(b.start(r), r, tool_choice=None)
+
+
+def cite(url, title=""):
+    return {"type": "url_citation", "url_citation": {"url": url, "title": title}}
+
+
+async def test_openrouter_collects_web_search_citations(env):
+    chunks = [chat_chunk("a", extra={"annotations": [cite("https://a.example/x", "A"), cite("ftp://no", "N")]}),
+              chat_chunk("b", extra={"annotations": [cite("https://a.example/x", "A"), cite("https://b.example/y")]}),
+              chat_chunk(finish="stop")]
+    b = OpenRouterBackend(config.load(env), FakeChatClient(Stream(chunks)))
+    r = req(search=True)
+    step = await b.step(b.start(r), r, tool_choice=None)
+    assert step.sources == [("A", "https://a.example/x"), ("", "https://b.example/y")]
+
+
+async def test_openrouter_run_search_hands_the_model_the_links(env):
+    from types import SimpleNamespace as N
+    msg = N(content="- NVDA 100 [Reuters]", annotations=[cite("https://r.example/n", "R")])
+    reply = N(choices=[N(message=msg, finish_reason="stop")], usage=N(cost=0.001))
+
+    async def create(**kw):
+        return reply
+
+    b = OpenRouterBackend(config.load(env), N(chat=N(completions=N(create=create))))
+    assert await b.run_search("nvda", Usage(), {}) == "- NVDA 100 [Reuters]\nLinks: https://r.example/n"

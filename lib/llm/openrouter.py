@@ -22,6 +22,19 @@ SEARCH_PROMPT = (
 )
 
 
+def citations(annotations: list) -> list[tuple[str, str]]:
+    """(title, url) of each web page a message cites, in order, http(s) only, one per URL."""
+    out: dict[str, str] = {}
+    for a in annotations or []:
+        if not isinstance(a, dict) or a.get("type") != "url_citation":
+            continue
+        c = a.get("url_citation") or {}
+        url = str(c.get("url") or "")
+        if url.startswith(("http://", "https://")):
+            out.setdefault(url, str(c.get("title") or "").strip())
+    return [(title, url) for url, title in out.items()]
+
+
 def merge_reasoning(details: list[dict], new: list) -> None:
     """Append streamed reasoning_details, joining consecutive text fragments of one block."""
     for d in new:
@@ -76,6 +89,8 @@ class OpenRouterBackend(ChatBackend):
         fields = getattr(delta, "model_extra", None) or {}
         merge_reasoning(extra.setdefault("details", []), fields.get("reasoning_details") or [])
         extra["searches"] = extra.get("searches", 0) + len(fields.get("annotations") or [])
+        have = extra.setdefault("sources", [])
+        have += [c for c in citations(fields.get("annotations") or []) if c[1] not in {u for _, u in have}]
 
     def _assistant_fields(self, extra: dict) -> dict:
         return {"reasoning_details": extra["details"]} if extra.get("details") else {}
@@ -98,6 +113,9 @@ class OpenRouterBackend(ChatBackend):
             log.warning("Search model returned no text for %r (finish_reason=%s)",
                         query, resp.choices[0].finish_reason)
             return "The search returned no text (the search model may have run out of tokens)."
+        links = citations(getattr(resp.choices[0].message, "annotations", None) or [])
+        if links:  # the model only sees this text: hand it the URLs so it can cite them
+            text += "\nLinks: " + " ".join(url for _, url in links[:config.SOURCES_MAX])
         return text
 
     async def credits(self) -> str | None:

@@ -12,6 +12,7 @@ from .llm import policy
 from .llm.base import Answer, Request
 from .llm.gate import NEEDS_TOOLS, Route, wants_tools
 from .prompts import no_tools_system, system_prompt
+from .textfmt import with_sources
 
 log = logging.getLogger("bot")
 
@@ -83,6 +84,8 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
             on_text=on_text)
         answer = await policy.ask(ctx.backend, ctx.registry, req)
         await _record(ctx, req.model, kind, chat_id, answer)
+    if kind == "chat":  # other kinds (holding news, filings) parse or format their own text
+        answer.text = with_sources(answer.text, answer.sources)
     return answer
 
 

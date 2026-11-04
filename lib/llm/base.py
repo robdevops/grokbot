@@ -58,6 +58,7 @@ class Step:
     finish: str | None = None
     searches: int = 0  # server-side searches the provider ran for this step
     raw: Any = None  # provider payload add_results() needs to replay this step
+    sources: list[tuple[str, str]] = field(default_factory=list)  # (title, url) the search cited
 
 
 @dataclass
@@ -86,6 +87,7 @@ class Answer:
     usage: Usage
     rounds: int
     tool_calls: int
+    sources: list[tuple[str, str]] = field(default_factory=list)  # (title, url) the search cited
 
 
 class Backend:

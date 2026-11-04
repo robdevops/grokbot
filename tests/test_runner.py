@@ -310,3 +310,17 @@ async def test_arguments_that_are_not_json_are_a_warning_and_a_message_for_the_m
         await run(b, registry(mcp), with_tools(mcp))
     assert mcp.calls == [] and "weren't valid JSON" in b.results_log[0][0]
     assert [r.levelname for r in caplog.records] == ["WARNING"] and not caplog.records[0].exc_info
+
+
+async def test_the_sources_of_the_last_step_that_cited_any_land_on_the_answer():
+    m = FakeMcp()
+    first = step("", [("c1", "yahoo__q", "{}")])
+    first.sources = [("Old", "https://old.example/")]
+    last = step("Answer.")
+    last.sources = [("New", "https://new.example/")]
+    answer = await run(ScriptedBackend([first, last]), registry(m), with_tools(m))
+    assert answer.sources == [("New", "https://new.example/")]
+    first = step("", [("c1", "yahoo__q", "{}")])
+    first.sources = [("Old", "https://old.example/")]
+    answer = await run(ScriptedBackend([first, step("Answer.")]), registry(m), with_tools(m))
+    assert answer.sources == [("Old", "https://old.example/")]

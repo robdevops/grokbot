@@ -96,7 +96,8 @@ class ChatBackend(Backend):
             tokens_out=getattr(u, "completion_tokens", 0) or 0,
             cost=self._cost(u, req.model),
         )
-        return Step(text.strip(), calls, usage, finish, extra.get("searches", 0), raw=assistant)
+        return Step(text.strip(), calls, usage, finish, extra.get("searches", 0), raw=assistant,
+                    sources=extra.get("sources", []))
 
     def add_results(self, conv: dict, step: Step, results: list[str]) -> None:
         conv["messages"].append(step.raw)

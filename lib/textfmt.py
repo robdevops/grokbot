@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import re
 
-from .config import MAX_TG_MESSAGE
+from .config import MAX_TG_MESSAGE, SOURCES_MAX
 
 # [label](url), where label may itself be bracketed, as in [[1]](url) citations
 MD_LINK = re.compile(r"\[(\[[^\]]*\]|[^\[\]]+)\]\((https?://[^\s)]+)\)")
@@ -49,6 +49,21 @@ def md_to_html(text: str) -> str:
     text = MD_LINK.sub(link, text)
     text = MD_BOLD.sub(lambda m: f"<b>{m.group(1) or m.group(2)}</b>", text)
     return MD_CODE.sub(r"<code>\1</code>", text)
+
+
+def with_sources(text: str, sources: list[tuple[str, str]], limit: int = SOURCES_MAX) -> str:
+    """An answer with a "Sources:" line of links when it has none of its own."""
+    if not sources or "<a " in text or "](http" in text:
+        return text
+
+    def label(title: str, url: str) -> str:
+        host = re.sub(r"^www\.", "", url.split("/")[2]) if url.count("/") >= 2 else url
+        name = title if title else host
+        return html.escape(name if len(name) <= 40 else name[:39].rstrip() + "…")
+
+    links = " · ".join(f'<a href="{html.escape(url, quote=True)}">{label(title, url)}</a>'
+                       for title, url in sources[:limit])
+    return f"{text}\n\nSources: {links}"
 
 
 def plain_text(text: str) -> str:

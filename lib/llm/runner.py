@@ -177,12 +177,18 @@ async def _recover_fake_calls(step: Step, backend: Backend, usage: Usage) -> str
     return "\n\n".join(parts) + "\n\nAnswer the question now using these results."
 
 
+def _cited(have: list[tuple[str, str]], new: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """The sources of the latest step that cited any (the ones behind the final answer), else what was gathered."""
+    return new[:] if new else have
+
+
 async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: bool = True) -> Answer:
     t0 = time.monotonic()
     conv = backend.start(req)
     total, rounds, tool_calls = Usage(), 0, 0
     seen: dict[tuple[str, str], int] = {}
     searched = 0
+    cited: list[tuple[str, str]] = []
     while True:
         final = rounds >= config.MAX_TOOL_ROUNDS
         choice = "none" if final else ("required" if (req.must_search or req.must_call) and rounds == 0 else None)
@@ -190,6 +196,7 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
         rounds += 1
         total.add(step.usage)
         searched += step.searches
+        cited = _cited(cited, step.sources)
         u = step.usage
         log.debug("Round %d: in %d (%d cached) out %d, %s", rounds, u.tokens_in, u.cached,
                  u.tokens_out, step.finish)
@@ -228,4 +235,4 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
         if step.finish == "length":
             raise RuntimeError("hit the token cap before writing an answer")
         raise RuntimeError(f"empty reply (finish_reason={step.finish})")
-    return Answer(text, total, rounds, tool_calls)
+    return Answer(text, total, rounds, tool_calls, cited)

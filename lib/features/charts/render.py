@@ -9,7 +9,12 @@ import threading
 from dataclasses import dataclass, field, replace
 
 from . import cartesian, pie, raster
-from .cartesian import LEGEND_COLUMNS, RULE_WIDTH, legend_columns, spread  # noqa: F401  (part of this module's API)
+from .cartesian import (  # noqa: F401  (part of this module's API)
+    LEGEND_COLUMNS,
+    RULE_WIDTH,
+    legend_columns,
+    spread,
+)
 from .scene import Scene
 from .ticks import tick_label  # noqa: F401
 
