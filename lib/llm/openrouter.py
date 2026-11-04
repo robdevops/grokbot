@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 import logging
 
 import httpx
@@ -10,7 +9,7 @@ from openai import AsyncOpenAI
 
 from .. import config
 from ..config import Settings
-from .base import Request, Usage
+from .base import Request, Source, Usage
 from .chat import ChatBackend
 
 log = logging.getLogger("bot")
@@ -23,41 +22,17 @@ SEARCH_PROMPT = (
 )
 
 
-def citations(annotations: list) -> list[tuple[str, str]]:
-    """(title, url) of each web page a message cites, in order, http(s) only, one per URL."""
-    out: dict[str, str] = {}
+def citations(annotations: list) -> list[Source]:
+    """The web pages a message cites, in order, http(s) only, one per URL."""
+    out: dict[str, Source] = {}
     for a in annotations or []:
         if not isinstance(a, dict) or a.get("type") != "url_citation":
             continue
         c = a.get("url_citation") or {}
         url = str(c.get("url") or "")
         if url.startswith(("http://", "https://")):
-            out.setdefault(url, str(c.get("title") or "").strip())
-    return [(title, url) for url, title in out.items()]
-
-
-def mark_citations(text: str, cites: list[tuple[int, str]]) -> str:
-    """Put "[n]" after each cited sentence, n a link to the page (the same page keeps its number). `cites` are
-    (end position in `text`, url); a position inside a tag or a link is skipped, and one right before the
-    sentence's closing punctuation moves past it."""
-    numbers: dict[str, int] = {}
-    at: dict[int, list[int]] = {}
-    for end, url in sorted(cites):
-        pos = min(end, len(text))
-        while pos < len(text) and text[pos] in ".!?":
-            pos += 1
-        before = text[:pos]
-        if (pos <= 0 or before.rfind("<") > before.rfind(">") or before.count("<a ") != before.count("</a>")
-                or before.rfind("](") > before.rfind(")")):
-            continue
-        n = numbers.setdefault(url, len(numbers) + 1)
-        if n not in at.setdefault(pos, []):
-            at[pos].append(n)
-    urls = {n: url for url, n in numbers.items()}
-    for pos in sorted(at, reverse=True):
-        marks = "".join(f'[<a href="{html.escape(urls[n], quote=True)}">{n}</a>]' for n in at[pos])
-        text = text[:pos] + marks + text[pos:]
-    return text
+            out.setdefault(url, Source(str(c.get("title") or "").strip(), url, str(c.get("content") or "")))
+    return list(out.values())
 
 
 def merge_reasoning(details: list[dict], new: list) -> None:
@@ -118,19 +93,8 @@ class OpenRouterBackend(ChatBackend):
             log.debug("OpenRouter citations: %s", [
                 (a.get("type"), {k: (len(v) if k == "content" else v) for k, v in (a.get("url_citation") or {}).items()})
                 if isinstance(a, dict) else repr(a) for a in fields["annotations"]])
-        for a in fields.get("annotations") or []:
-            c = a.get("url_citation") if isinstance(a, dict) and a.get("type") == "url_citation" else None
-            if c and isinstance(c.get("end_index"), int) and str(c.get("url") or "").startswith(("http://", "https://")):
-                extra.setdefault("cites", []).append((c["end_index"], c["url"]))
         have = extra.setdefault("sources", [])
-        have += [c for c in citations(fields.get("annotations") or []) if c[1] not in {u for _, u in have}]
-
-    def _cite(self, text: str, extra: dict) -> str:
-        marked = mark_citations(text, extra.get("cites", []))
-        log.debug("Citations: %d with a position, %d [n] markers placed in %d characters (%d sources)",
-                  len(extra.get("cites", [])), marked.count("</a>]") - text.count("</a>]"), len(text),
-                  len(extra.get("sources", [])))
-        return marked
+        have += [c for c in citations(fields.get("annotations") or []) if c.url not in {h.url for h in have}]
 
     def _assistant_fields(self, extra: dict) -> dict:
         return {"reasoning_details": extra["details"]} if extra.get("details") else {}
@@ -155,7 +119,7 @@ class OpenRouterBackend(ChatBackend):
             return "The search returned no text (the search model may have run out of tokens)."
         links = citations(getattr(resp.choices[0].message, "annotations", None) or [])
         if links:  # the model only sees this text: hand it the URLs so it can cite them
-            text += "\nLinks: " + " ".join(url for _, url in links[:config.SOURCES_MAX])
+            text += "\nLinks: " + " ".join(link.url for link in links[:config.SOURCES_MAX])
         return text
 
     async def credits(self) -> str | None:

@@ -51,8 +51,8 @@ def md_to_html(text: str) -> str:
     return MD_CODE.sub(r"<code>\1</code>", text)
 
 
-def with_sources(text: str, sources: list[tuple[str, str]], limit: int = SOURCES_MAX) -> str:
-    """An answer with a "Sources:" line of links when it has none of its own."""
+def with_sources(text: str, sources: list, limit: int = SOURCES_MAX) -> str:
+    """An answer with a "Sources:" line of links (sources are (title, url, ...)) when it has none of its own."""
     if not sources or "<a " in text or "](http" in text:
         return text
 
@@ -62,7 +62,7 @@ def with_sources(text: str, sources: list[tuple[str, str]], limit: int = SOURCES
         return html.escape(name if len(name) <= 40 else name[:39].rstrip() + "…")
 
     links = " · ".join(f'<a href="{html.escape(url, quote=True)}">{label(title, url)}</a>'
-                       for title, url in sources[:limit])
+                       for title, url, *_ in sources[:limit])
     return f"{text}\n\nSources: {links}"
 
 

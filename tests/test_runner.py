@@ -3,7 +3,7 @@ import pytest
 from openai import APIStatusError, BadRequestError
 
 from lib import config
-from lib.llm.base import Overloaded, Usage
+from lib.llm.base import Overloaded, Source, Usage
 from lib.llm.gate import route, wants_tools
 from lib.llm.policy import ask
 from lib.llm.runner import call_query, run, run_calls
@@ -312,15 +312,12 @@ async def test_arguments_that_are_not_json_are_a_warning_and_a_message_for_the_m
     assert [r.levelname for r in caplog.records] == ["WARNING"] and not caplog.records[0].exc_info
 
 
-async def test_the_sources_of_the_last_step_that_cited_any_land_on_the_answer():
+async def test_the_sources_of_every_round_land_on_the_answer_without_repeats():
     m = FakeMcp()
     first = step("", [("c1", "yahoo__q", "{}")])
-    first.sources = [("Old", "https://old.example/")]
+    first.sources = [Source("Old", "https://old.example/", "snippet")]
     last = step("Answer.")
-    last.sources = [("New", "https://new.example/")]
+    last.sources = [Source("Old", "https://old.example/"), Source("New", "https://new.example/")]
     answer = await run(ScriptedBackend([first, last]), registry(m), with_tools(m))
-    assert answer.sources == [("New", "https://new.example/")]
-    first = step("", [("c1", "yahoo__q", "{}")])
-    first.sources = [("Old", "https://old.example/")]
-    answer = await run(ScriptedBackend([first, step("Answer.")]), registry(m), with_tools(m))
-    assert answer.sources == [("Old", "https://old.example/")]
+    assert [s.url for s in answer.sources] == ["https://old.example/", "https://new.example/"]
+    assert answer.sources[0].content == "snippet"

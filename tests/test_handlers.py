@@ -26,8 +26,9 @@ async def run(h, msg, edited=False):
 
 
 async def test_a_chat_answer_that_used_web_search_ends_with_its_sources(env, store):
+    from lib.llm.base import Source
     cited = step("Micron guided higher.")
-    cited.sources = [("Reuters", "https://www.reuters.com/mu")]
+    cited.sources = [Source("Reuters", "https://www.reuters.com/mu")]
     ctx, backend, h = make_ctx(env, store, [cited])
     m = user_msg(ctx.bot, "@stockbot what did Micron say?")
     await run(h, m)

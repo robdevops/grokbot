@@ -46,10 +46,6 @@ class ChatBackend(Backend):
     def _read_delta(self, delta, extra: dict) -> None:
         """Pick provider-specific fields out of a streamed delta."""
 
-    def _cite(self, text: str, extra: dict) -> str:
-        """The reply with [n] source links after the sentences the provider says it cited."""
-        return text
-
     def _assistant_fields(self, extra: dict) -> dict:
         """Extra fields the next request must carry on this step's assistant message."""
         return {}
@@ -100,8 +96,7 @@ class ChatBackend(Backend):
             tokens_out=getattr(u, "completion_tokens", 0) or 0,
             cost=self._cost(u, req.model),
         )
-        shown = self._cite(text, extra) if req.cite else text  # the model's own turn is replayed unmarked
-        return Step(shown.strip(), calls, usage, finish, extra.get("searches", 0), raw=assistant,
+        return Step(text.strip(), calls, usage, finish, extra.get("searches", 0), raw=assistant,
                     sources=extra.get("sources", []))
 
     def add_results(self, conv: dict, step: Step, results: list[str]) -> None:
