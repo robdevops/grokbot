@@ -15,7 +15,7 @@ WORD_RE = re.compile(r"[^\W\d_]{6,}")
 SENTENCE_END_RE = re.compile(r"(?<=[.!?])(?=\s)|\n+")
 NUMBER_WEIGHT = 3.0  # a figure shared with a source says more than a word does
 MIN_SCORE = 4.0  # below this a sentence is not taken to come from the source
-MARKER_RE = re.compile(r'\[<a href="[^"]*">\d+</a>\]')
+MARKER_RE = re.compile(r'\[<a href="([^"]*)">\d+</a>\]')
 
 
 def mark_citations(text: str, cites: list[tuple[int, str]]) -> str:
@@ -40,6 +40,22 @@ def mark_citations(text: str, cites: list[tuple[int, str]]) -> str:
         marks = "".join(f'[<a href="{html.escape(urls[n], quote=True)}">{n}</a>]' for n in at[pos])
         text = text[:pos] + marks + text[pos:]
     return text
+
+
+def normalise_markers(text: str, sources: list[Source]) -> str:
+    """The model's own [n] links kept only where they point at a page the search really returned, numbered 1, 2, ...
+    in the order they appear (a link to a page it made up is dropped, marker and all)."""
+    known = {s.url.rstrip("/"): s.url for s in sources}
+    numbers: dict[str, int] = {}
+
+    def fix(m: re.Match) -> str:
+        url = known.get(html.unescape(m.group(1)).rstrip("/"))
+        if url is None:
+            return ""
+        n = numbers.setdefault(url, len(numbers) + 1)
+        return f'[<a href="{html.escape(url, quote=True)}">{n}</a>]'
+
+    return MARKER_RE.sub(fix, text)
 
 
 def _tokens(text: str) -> tuple[set[str], set[str]]:

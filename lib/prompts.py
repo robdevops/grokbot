@@ -19,9 +19,9 @@ No disclaimers, no moralising. If your confidence is low, say so."""
 REFRESH = (" Earlier replies of yours may be incomplete or out of date: don't imitate them, fetch "
            "fresh data instead of reusing their numbers, and follow these formatting rules.")
 
+SOURCE_NOTE = "Mention a source briefly if you like, one link at most."
 SEARCH_NOTE = ("You can search {what}: use it for news, prices, current events and what "
-               "people are saying instead of claiming you lack live data. Mention a source "
-               "briefly if you like, one link at most.\n")
+               "people are saying instead of claiming you lack live data. {source}\n")
 NO_SEARCH_NOTE = "You have no web search: say plainly what you can't check instead of guessing.\n"
 SIMPLE_NOTE = ("You have no live data tools for this message. If answering needs live data "
                f"or news, reply with exactly {NEEDS_TOOLS} and nothing else. Never claim "
@@ -44,11 +44,11 @@ def tools_note(servers: list[MCPServer]) -> str:
             "which and quote the error briefly.\n")
 
 
-def system_prompt(bot_name: str, route: Route, search_what: str) -> str:
+def system_prompt(bot_name: str, route: Route, search_what: str, source_note: str = SOURCE_NOTE) -> str:
     if route.simple:
         note = SIMPLE_NOTE
     else:
-        note = (SEARCH_NOTE.format(what=search_what) if route.search else NO_SEARCH_NOTE) \
+        note = (SEARCH_NOTE.format(what=search_what, source=source_note) if route.search else NO_SEARCH_NOTE) \
             + tools_note(route.servers) + (PARTIAL_NOTE if route.partial else "")
     return SYSTEM.format(bot_name=bot_name, tools_note=note + "\n", refresh=REFRESH)
 

@@ -52,14 +52,3 @@ def test_split_html_edge_cases():
     assert all(len(c) <= 4096 for c in cs)
     cs = t.split_html("<b>" * 20 + "x " * 3000 + "</b>" * 20)
     assert len(cs) > 1 and all(len(c) <= 4096 and _balanced(c) for c in cs)
-
-
-def test_with_sources_adds_links_only_when_the_answer_has_none():
-    src = [("Reuters: NVDA & co", "https://www.reuters.com/a?x=1&y=2"), ("", "https://www.ft.com/b/c"),
-           ("x" * 60, "https://c.example/"), ("D", "https://d.example/")]
-    out = t.with_sources("NVDA rose.", src)
-    assert out == ('NVDA rose.\n\nSources: <a href="https://www.reuters.com/a?x=1&amp;y=2">Reuters: NVDA &amp; co</a>'
-                   ' · <a href="https://www.ft.com/b/c">ft.com</a> · <a href="https://c.example/">' + "x" * 39 + "…</a>")
-    assert t.with_sources('See <a href="https://a.b">a</a>.', src) == 'See <a href="https://a.b">a</a>.'
-    assert t.with_sources("See [a](https://a.b).", src) == "See [a](https://a.b)."
-    assert t.with_sources("Plain.", []) == "Plain."

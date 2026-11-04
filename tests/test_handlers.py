@@ -25,16 +25,6 @@ async def run(h, msg, edited=False):
     await asyncio.sleep(0)
 
 
-async def test_a_chat_answer_that_used_web_search_ends_with_its_sources(env, store):
-    from lib.llm.base import Source
-    cited = step("Micron guided higher.")
-    cited.sources = [Source("Reuters", "https://www.reuters.com/mu")]
-    ctx, backend, h = make_ctx(env, store, [cited])
-    m = user_msg(ctx.bot, "@stockbot what did Micron say?")
-    await run(h, m)
-    assert m.replies[0]["text"].endswith('Sources: <a href="https://www.reuters.com/mu">Reuters</a>')
-
-
 async def test_group_mention_is_answered_with_linked_tickers_and_logged(env, store):
     ctx, backend, h = make_ctx(env, store, [step("NVDA looks <b>strong</b>, SQX.AX too")])
     m = user_msg(ctx.bot, "@stockbot how is NVDA?")
@@ -517,3 +507,14 @@ async def test_the_log_shows_only_the_first_two_words_of_a_message(env, store, c
     lines = [r.getMessage() for r in caplog.records]
     assert any(line.endswith("@stockbot my…") for line in lines)
     assert not any("secret" in line or "portfolio" in line for line in lines)
+
+
+async def test_only_chat_answers_get_the_citation_instruction(env, store):
+    from lib.ask import ask
+    from lib.llm.gate import Route
+    ctx, backend, h = make_ctx(env, store, [step("a"), step("b")])
+    backend.source_note = "CITE-LIKE-THIS"
+    await ask(ctx, [{"type": "text", "text": "q"}], Route([], True))
+    await ask(ctx, [{"type": "text", "text": "q"}], Route([], True), kind="holding-news")
+    assert "CITE-LIKE-THIS" in backend.seen[0]["system"] and "CITE-LIKE-THIS" not in backend.seen[1]["system"]
+    assert "one link at most" in backend.seen[1]["system"]

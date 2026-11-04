@@ -104,6 +104,7 @@ class Backend:
 
     name = ""
     search_what = ""  # how prompts name the search ("the web and X (Twitter)")
+    source_note = ""  # prompt text on how to cite search results, where the provider's results carry URLs
 
     def start(self, req: Request) -> Any:
         """The opaque conversation state for a new request."""

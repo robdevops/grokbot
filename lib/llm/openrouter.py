@@ -52,6 +52,8 @@ def merge_reasoning(details: list[dict], new: list) -> None:
 class OpenRouterBackend(ChatBackend):
     name = "openrouter"
     search_what = "the web"
+    source_note = ("After a sentence that rests on a search result, cite it as [<a href=\"URL\">1</a>], numbering the pages "
+                   "you cite 1, 2, ... and using the page's exact URL from the results, never one you didn't get.")
 
     def __init__(self, st: Settings, client: AsyncOpenAI | None = None):
         super().__init__(st, client or AsyncOpenAI(
