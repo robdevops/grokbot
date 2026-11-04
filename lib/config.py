@@ -24,7 +24,7 @@ ENV_VARS: dict[str, str] = {
     "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in TZ).",
     # Advanced and optional
     "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /tokens; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
-    "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
+    "ADMIN_ONLY": "on|off. On (default): only admins may DM the bot or get Sharesight data. Off: everyone may. /tokens and /flushcache stay admin-only.",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
     "HISTORY_MAX": "At most this many messages of chat history in the prompt (default 10); the window's start moves every half of it, so the prompt cache keeps working.",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",

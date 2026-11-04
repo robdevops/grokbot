@@ -5,38 +5,38 @@
 ### Essential
 Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than one, or none, the bot refuses to start.
 
-| Variable | Meaning |
-|---|---|
-| `OPENROUTER_API_KEY` | OpenRouter key; selects the OpenRouter provider (default model `z-ai/glm-5.3-flash`). |
-| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather (required). |
-| `XAI_API_KEY` | xAI key; selects the xAI provider (default model `grok-4.3`). |
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENROUTER_API_KEY` | none | OpenRouter key; selects the OpenRouter provider (its default model is `z-ai/glm-5.3-flash`). |
+| `TELEGRAM_BOT_TOKEN` | none (required) | Bot token from @BotFather (required). |
+| `XAI_API_KEY` | none | xAI key; selects the xAI provider (its default model is `grok-4.3`). |
 
 ### Common settings
-| Variable | Meaning |
-|---|---|
-| `TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
-| `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter). |
-| `REASONING` | Reasoning effort: low, medium or high; empty = the model's default. |
-| `SEARCH` | on|off. Web search (and X search on xAI). Default on. |
-| `DARKMODE` | Chart theme: `off` (the default) draws light charts, `on` draws dark ones, `auto` draws dark ones from 9 pm to 7 am in `TZ`. Before this setting existed, charts were always `auto`. |
+| Variable | Default | Meaning |
+|---|---|---|
+| `TZ` | `UTC` | Time zone for timestamps, e.g. `Australia/Melbourne`. |
+| `MODEL` | `grok-4.3` on xAI, `z-ai/glm-5.3-flash` on OpenRouter | Model ID. |
+| `REASONING` | the model's own | Reasoning effort: `low`, `medium` or `high`. |
+| `SEARCH` | `on` | `on` or `off`. Web search (and X search on xAI). |
+| `DARKMODE` | `off` | Chart theme: `off` draws light charts, `on` draws dark ones, `auto` draws dark ones from 9 pm to 7 am in `TZ`. Before this setting existed, charts were always `auto`. |
 
 ### Advanced and optional
-| Variable | Meaning |
-|---|---|
-| `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/tokens`; a group's chat ID gets the down-server messages only. Admins of the groups the bot is in count as admins too. |
-| `ADMIN_ONLY` | on|off. Only admins may DM the bot or get Sharesight data (default on). |
-| `DATA_DIR` | Directory for the bot's data (the SQLite database `chat_log.db`). Bots started with the same `DATA_DIR` share group history. Default: systemd's `STATE_DIRECTORY` (see [Running under systemd](running.md#running-under-systemd)), else the working directory. In Docker, set `DATA_DIR=/data` and bind-mount a host directory there so history survives upgrades. |
-| `HISTORY_MAX` | The most messages of chat history in the prompt (default 10). Once a chat is longer, the window holds half to all of that and its start only moves every half of it, so the prompt cache keeps working. |
-| `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
-| `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
-| `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
-| `PERIOD_BACKFILL` | Comma list of Sharesight portfolio names (or `all`) whose returns per day, week, month, quarter and year are fetched into the local cache in the background (about 1,650 Sharesight calls per portfolio the first time, a few hours), so "best day since inception" answers instantly. Default `all`; list names to limit it, or `off` to disable. See [Caching Sharesight history](caching.md#caching-sharesight-history). |
-| `POST_TO_GROUPS_FROM_DM` | on|off. A group admin can have the bot post in that group from a DM (default off). |
-| `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
-| `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |
-| `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (TZ) for the daily holding-news check (default 08:00). |
-| `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
-| `TELEGRAM_IMAGE_PRELOAD_CHATID` | Chat ID of a private chat the bot can post in (a private group it is in, or a DM with you). The other periods of a chart are uploaded there in the background and reused when a period button is tapped, so the tap swaps the picture without fetching or drawing. Empty (default) = off, and a tap fetches and draws. See [Charts](features.md#charts). |
+| Variable | Default | Meaning |
+|---|---|---|
+| `ADMIN_CHAT_IDS` | empty | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/tokens`; a group's chat ID gets the down-server messages only. Admins of the groups the bot is in count as admins too. |
+| `ADMIN_ONLY` | `on` | `on`: only admins can DM the bot or get Sharesight (portfolio) data; anyone else asking about a portfolio is told it is for admins only. `off`: everyone can do both. Either way anyone can @mention the bot or reply to it in a group, and `/tokens` and `/flushcache` stay admin-only. Who counts as an admin: `ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (see [Features](features.md#commands)). |
+| `DATA_DIR` | systemd's `STATE_DIRECTORY`, else the working directory | Directory for the bot's data (the SQLite database `chat_log.db`). Bots started with the same `DATA_DIR` share group history. With systemd the default is its `STATE_DIRECTORY` (see [Running under systemd](running.md#running-under-systemd)). In Docker, set `DATA_DIR=/data` and bind-mount a host directory there so history survives upgrades. |
+| `HISTORY_MAX` | `10` | The most messages of chat history in the prompt. Once a chat is longer, the window holds half to all of that and its start only moves every half of it, so the prompt cache keeps working. |
+| `MAX_TOKENS` | `3000` | Reply cap in tokens, reasoning included. |
+| `MOVERS_BOTS` | empty (feature off) | Usernames of bots whose end-of-day big-movers lists get explained. |
+| `PORTFOLIO_NAMES` | the holding-news recipients' portfolio names | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
+| `PERIOD_BACKFILL` | `all` | Comma list of Sharesight portfolio names (or `all`) whose returns per day, week, month, quarter and year are fetched into the local cache in the background (about 1,650 Sharesight calls per portfolio the first time, a few hours), so "best day since inception" answers instantly. List names to limit it, or `off` to disable. See [Caching Sharesight history](caching.md#caching-sharesight-history). |
+| `POST_TO_GROUPS_FROM_DM` | `off` | `on` or `off`. A group admin can have the bot post in that group from a DM. |
+| `SEARCH_MODEL` | `xiaomi/mimo-v2.6-flash:online` | OpenRouter only: model that runs the searches. |
+| `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | empty (daily DM off) | Comma list of portfolio:telegram_username pairs to notify. |
+| `SHARESIGHT_HOLDING_NEWS_TIME` | `08:00` | HH:MM (in `TZ`) for the daily holding-news check. |
+| `TELEGRAM_DM_BUTTONS` | `off` | `on` or `off`. Preset-prompt buttons in private chats. |
+| `TELEGRAM_IMAGE_PRELOAD_CHATID` | empty (off) | Chat ID of a private chat the bot can post in (a private group it is in, or a DM with you). The other periods of a chart are uploaded there in the background and reused when a period button is tapped, so the tap swaps the picture without fetching or drawing. Empty = off, and a tap fetches and draws. See [Charts](features.md#charts). |
 
 ## Choosing a model
 Figures from search results and Artificial Analysis at the time of writing (October 2026), so
