@@ -32,7 +32,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `PORTFOLIO_NAMES` | the holding-news recipients' portfolio names | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
 | `PERIOD_BACKFILL` | `all` | Comma list of Sharesight portfolio names (or `all`) whose returns per day, week, month, quarter and year are fetched into the local cache in the background (about 1,650 Sharesight calls per portfolio the first time, a few hours), so "best day since inception" answers instantly. List names to limit it, or `off` to disable. See [Caching Sharesight history](caching.md#caching-sharesight-history). |
 | `POST_TO_GROUPS_FROM_DM` | `off` | `on` or `off`. A group admin can have the bot post in that group from a DM. |
-| `SEARCH_MODEL` | `xiaomi/mimo-v2.6-flash:online` | OpenRouter only: model that runs the searches. |
+| `SEARCH_MODEL` | `MODEL` with `:online` added | OpenRouter only: model that runs the searches (`:online` is what gives an OpenRouter model web search). Set but empty = no search model, so search is off. |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | empty (daily DM off) | Comma list of portfolio:telegram_username pairs to notify. |
 | `SHARESIGHT_HOLDING_NEWS_TIME` | `08:00` | HH:MM (in `TZ`) for the daily holding-news check. |
 | `TELEGRAM_DM_BUTTONS` | `off` | `on` or `off`. Preset-prompt buttons in private chats. |

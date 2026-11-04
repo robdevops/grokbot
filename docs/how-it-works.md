@@ -41,7 +41,7 @@
 ## Search
 - **xAI:** server-side `web_search` and `x_search` (X/Twitter) tools.
 - **OpenRouter:** OpenRouter's `web_search` tool; when it hands a search call back, the bot runs the
-  query through `SEARCH_MODEL` (default `xiaomi/mimo-v2.6-flash:online`) and returns the write-up; that call's cost is added to the answer's cost.
+  query through `SEARCH_MODEL` (default: `MODEL` with `:online` added) and returns the write-up; that call's cost is added to the answer's cost.
   Some models print a search call as text instead of making it; the bot recovers those queries too.
   The pages the search cited come back as `url_citation` annotations. In a chat answer each cited sentence gets a
   `[1]` after it (the number links to the page, the same page keeps its number); the text is marked before any other

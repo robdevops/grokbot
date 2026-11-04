@@ -120,3 +120,11 @@ def test_darkmode_defaults_to_off_and_takes_on_and_auto_in_any_case():
     assert [config.load({**base, "DARKMODE": v}).darkmode for v in ("on", "AUTO", " Off ", "")] == ["on", "auto", "off", "off"]
     with pytest.raises(config.ConfigError, match="DARKMODE must be off, on or auto"):
         config.load({**base, "DARKMODE": "night"})
+
+
+def test_the_search_model_defaults_to_the_model_with_online_added(env):
+    base = {"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "b"}
+    assert config.load(base).search_model == "deepseek/deepseek-v4.1-flash-1017:online"
+    assert config.load({**base, "MODEL": "a/b"}).search_model == "a/b:online"
+    assert config.load({**base, "MODEL": "a/b:online"}).search_model == "a/b:online"  # not added twice
+    assert config.load({**base, "MODEL": "a/b", "SEARCH_MODEL": "c/d:online"}).search_model == "c/d:online"

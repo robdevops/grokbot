@@ -32,7 +32,7 @@ ENV_VARS: dict[str, str] = {
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
     "PERIOD_BACKFILL": "Comma list of Sharesight portfolio names (or all) whose daily/weekly/monthly/quarterly/yearly returns are fetched into the local cache in the background, so period questions answer instantly. Default all; list names to limit it, or off to disable.",
     "POST_TO_GROUPS_FROM_DM": "on|off. Lets an admin of a group the bot is in make it post there from a DM (default off).",
-    "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
+    "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default: MODEL with :online added).",
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (TZ) for the daily holding-news check (default 08:00).",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
@@ -151,6 +151,11 @@ def _backfill(text: str) -> frozenset[str]:
     return frozenset() if names & {"off", "none", "false", "0"} else names
 
 
+def online(model: str) -> str:
+    """The model with OpenRouter's ":online" suffix, which gives it web search."""
+    return model if model.endswith(":online") else f"{model}:online"
+
+
 def load(env: Mapping[str, str] | None = None) -> Settings:
     """Build Settings from `env` (default: os.environ). Raises ConfigError if unusable."""
     env = os.environ if env is None else env
@@ -167,7 +172,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError("Set XAI_API_KEY (xAI) or OPENROUTER_API_KEY (OpenRouter).")
     provider = given[0]
     model = env.get("MODEL", "").strip() or DEFAULT_MODELS[provider]
-    search_model = env.get("SEARCH_MODEL", "xiaomi/mimo-v2.6-flash:online").strip()
+    search_model = env.get("SEARCH_MODEL", online(model)).strip()  # set but empty = no search model, so no search
     search = env.get("SEARCH", "on").strip().lower() != "off"
     if provider == "openrouter" and not search_model:
         search = False  # nothing to run the searches with
