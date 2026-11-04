@@ -31,6 +31,11 @@ SENTENCE_OPENERS = {"Today", "Also", "Meanwhile", "And", "But", "So", "Then", "Y
                     "Still", "Plus", "Even", "Now", "Overall", "However", "Elsewhere"}
 
 
+def exclude(words) -> None:
+    """Add words (upper case) that are never to be linked as tickers: the NOT_TICKERS setting."""
+    NOT_TICKERS.update(words)
+
+
 def is_ticker(word: str) -> bool:
     base, _, suffix = word.partition(".")
     if suffix in EXCHANGE_SUFFIXES and base not in NOT_TICKERS:

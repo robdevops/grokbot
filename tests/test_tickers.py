@@ -70,3 +70,18 @@ def test_link_labelled_with_its_own_url_is_numbered_but_named_links_and_code_are
     assert link_tickers('<a href="https://y.com/p">https://y.com/p…</a> ok') == '<a href="https://y.com/p">[1]</a> ok'
     assert link_tickers('<a href="https://y.com/p">Reuters</a>') == '<a href="https://y.com/p">Reuters</a>'
     assert link_tickers("<code>https://x.com</code>") == "<code>https://x.com</code>"
+
+
+def test_not_tickers_setting_adds_words_that_are_never_linked(env):
+    from lib import config, tickers
+    st = config.load({**env, "NOT_TICKERS": "gaap, GM  ups"})
+    assert st.not_tickers == {"GAAP", "GM", "UPS"} and config.load(env).not_tickers == frozenset()
+    before = set(tickers.NOT_TICKERS)
+    try:
+        assert "GAAP</a>" in tickers.link_tickers("non-GAAP EPS at GM")
+        tickers.exclude(st.not_tickers)
+        out = tickers.link_tickers("non-GAAP EPS at GM, UPS and NVDA")
+        assert "GAAP" in out and ">GAAP<" not in out and ">GM<" not in out and ">UPS<" not in out and ">NVDA<" in out
+    finally:
+        tickers.NOT_TICKERS.clear()
+        tickers.NOT_TICKERS.update(before)
