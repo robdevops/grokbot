@@ -114,6 +114,10 @@ class OpenRouterBackend(ChatBackend):
         fields = getattr(delta, "model_extra", None) or {}
         merge_reasoning(extra.setdefault("details", []), fields.get("reasoning_details") or [])
         extra["searches"] = extra.get("searches", 0) + len(fields.get("annotations") or [])
+        if fields.get("annotations"):
+            log.debug("OpenRouter citations: %s", [
+                (a.get("type"), {k: (len(v) if k == "content" else v) for k, v in (a.get("url_citation") or {}).items()})
+                if isinstance(a, dict) else repr(a) for a in fields["annotations"]])
         for a in fields.get("annotations") or []:
             c = a.get("url_citation") if isinstance(a, dict) and a.get("type") == "url_citation" else None
             if c and isinstance(c.get("end_index"), int) and str(c.get("url") or "").startswith(("http://", "https://")):
@@ -122,7 +126,11 @@ class OpenRouterBackend(ChatBackend):
         have += [c for c in citations(fields.get("annotations") or []) if c[1] not in {u for _, u in have}]
 
     def _cite(self, text: str, extra: dict) -> str:
-        return mark_citations(text, extra.get("cites", []))
+        marked = mark_citations(text, extra.get("cites", []))
+        log.debug("Citations: %d with a position, %d [n] markers placed in %d characters (%d sources)",
+                  len(extra.get("cites", [])), marked.count("</a>]") - text.count("</a>]"), len(text),
+                  len(extra.get("sources", [])))
+        return marked
 
     def _assistant_fields(self, extra: dict) -> dict:
         return {"reasoning_details": extra["details"]} if extra.get("details") else {}

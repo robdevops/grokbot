@@ -303,3 +303,17 @@ async def test_openrouter_marks_cited_sentences_only_when_asked(env):
     assert step.raw["content"] == "Micron guided up."  # replayed to the model unmarked
     plain = req(search=True)
     assert (await b.step(b.start(plain), plain, tool_choice=None)).text == "Micron guided up."
+
+
+async def test_openrouter_logs_what_its_citations_carry(env, caplog):
+    import logging
+    ann = {"type": "url_citation", "url_citation": {"url": "https://a.example/", "title": "A", "content": "x" * 500,
+                                                    "start_index": 0, "end_index": 0}}
+    b = OpenRouterBackend(config.load(env), FakeChatClient(Stream([
+        chat_chunk("Micron up.", extra={"annotations": [ann]}), chat_chunk(finish="stop")])))
+    r = req(search=True, cite=True)
+    with caplog.at_level(logging.DEBUG, logger="bot"):
+        step = await b.step(b.start(r), r, tool_choice=None)
+    text = caplog.text
+    assert "'end_index': 0" in text and "'content': 500" in text and "x" * 50 not in text  # the snippet's length only
+    assert "0 [n] markers placed" in text and step.sources == [("A", "https://a.example/")]
