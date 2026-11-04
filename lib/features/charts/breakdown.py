@@ -147,7 +147,7 @@ def parsed(ticker: str, key: str, out) -> dict | None:
     try:
         data = json.loads(out)
     except (TypeError, ValueError):
-        log.warning("Fast breakdown for %s: couldn't read %s: %s", ticker, key, " ".join(str(out).split())[:200])
+        log.warning("Fast breakdown for %s: couldn't read %s: %s", ticker, key, " ".join(str(out).split()))
         return None
     if not isinstance(data, dict) or data.get("available") is False:
         log.debug("Fast breakdown for %s: %s isn't available: %s", ticker, key, isinstance(data, dict) and data.get("message"))
@@ -189,7 +189,7 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
         symbol = CURRENCIES.get(str(payload.get("reporting_currency")))
         factor = read_units(payload, 0.0)
     except (ValueError, KeyError, IndexError, TypeError):
-        log.warning("Fast breakdown for %s: couldn't read the %s result (%s)", ticker, TOOL, " ".join(out.split())[:200])
+        log.warning("Fast breakdown for %s: couldn't read the %s result (%s)", ticker, TOOL, " ".join(out.split()))
         return None
     if not symbol or not factor:
         log.warning("Fast breakdown for %s: currency %r or units %r not understood", ticker,

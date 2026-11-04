@@ -17,17 +17,16 @@ ENV_VARS: dict[str, str] = {
     "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
     "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
     # Common settings
-    "BOT_TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
+    "TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
     "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter).",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
     "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
-    "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in BOT_TZ).",
+    "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in TZ).",
     # Advanced and optional
     "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /tokens; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
-    "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
-    "LOG_WIDTH": "Longest line (characters) for the MCP tool lists in the log; longer lists end in \"…\" (default 80, 0 = no limit).",
+    "HISTORY_MAX": "At most this many messages of chat history in the prompt (default 10); the window's start moves every half of it, so the prompt cache keeps working.",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
@@ -35,9 +34,9 @@ ENV_VARS: dict[str, str] = {
     "POST_TO_GROUPS_FROM_DM": "on|off. Lets an admin of a group the bot is in make it post there from a DM (default off).",
     "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
-    "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
+    "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (TZ) for the daily holding-news check (default 08:00).",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
-    "TELEGRAM_PRELOAD_CHAT": "Chat ID of a private chat the bot can post in. Chart periods are uploaded there ahead of time and reused when a period button is tapped. Empty (default) = off.",
+    "TELEGRAM_IMAGE_PRELOAD_CHATID": "Chat ID of a private chat the bot can post in. Chart periods are uploaded there ahead of time and reused when a period button is tapped. Empty (default) = off.",
 }
 
 DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash"}
@@ -77,8 +76,7 @@ class Settings:
     search: bool
     search_model: str
     max_tokens: int
-    history_limit: int
-    log_width: int
+    history_max: int
     darkmode: str  # "off" | "on" | "auto": the charts' theme
     db_path: str
     tz: ZoneInfo
@@ -186,11 +184,10 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         search=search,
         search_model=search_model,
         max_tokens=int(env.get("MAX_TOKENS") or 3000),
-        history_limit=int(env.get("HISTORY_LIMIT") or 20),
-        log_width=int(env.get("LOG_WIDTH") or 80),
+        history_max=int(env.get("HISTORY_MAX") or 10),
         darkmode=darkmode,
         db_path=database_path(env),
-        tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
+        tz=ZoneInfo(env.get("TZ", "UTC")),
         admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
         admin_only=_flag(env, "ADMIN_ONLY", default=True),
         movers_bots=frozenset(
@@ -198,7 +195,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         ),
         dm_buttons=_flag(env, "TELEGRAM_DM_BUTTONS"),
         post_to_groups=_flag(env, "POST_TO_GROUPS_FROM_DM"),
-        preload_chat=_chat_id(env, "TELEGRAM_PRELOAD_CHAT"),
+        preload_chat=_chat_id(env, "TELEGRAM_IMAGE_PRELOAD_CHATID"),
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
         holding_news_recipients=recipients,
         portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),

@@ -8,8 +8,8 @@
 - **Private chats:** every message is answered, and the reply streams into a Telegram message
   draft ("Thinking..." then the text as it arrives). Replies are not quoted in DMs.
 - **History:** the prompt carries a window of the chat's recent messages, oldest first. The window
-  is `HISTORY_LIMIT` to 1.5x that many messages (20-29 by default): its start only moves every
-  `HISTORY_LIMIT/2` messages, so the start of the prompt stays identical between requests and the
+  is at most `HISTORY_MAX` messages (6 to 10 by default, once the chat is longer than that): its start only moves every
+  `HISTORY_MAX/2` messages, so the start of the prompt stays identical between requests and the
   provider's prompt cache keeps working. The bot's own earlier replies appear as "You" (its latest reply in full, so follow-up questions about it
   work; older ones shortened); a replied-to
   message is quoted even if it is older than the window.
@@ -33,7 +33,7 @@
   do" is answered from the actual tool list (about 400 tokens in the prompt, no tool offered): the data sources and
   their tools, web search, charts, and the other local tools. Tools the asker may not use (Sharesight for a
   non-admin, posting to groups when it is off) are left out.
-- **Time:** the current date and time (in `BOT_TZ`) is included in every prompt.
+- **Time:** the current date and time (in `TZ`) is included in every prompt.
 - **Replies are final:** the prompt tells the model never to say it will "check later"; it makes its
   tool calls first (several at once) and answers in one go.
 - **Errors:** a failed request replies with the error text; the bot never goes silent.

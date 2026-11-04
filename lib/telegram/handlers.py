@@ -26,7 +26,7 @@ from ..features.chat_commands import ChatCommand
 from ..history import compact, format_rows
 from ..llm.base import BUSY_REPLY, is_busy
 from ..llm.gate import Route, asks_tools, is_portfolio_question, route
-from ..msgtext import describe, sender_name
+from ..msgtext import describe, log_preview, sender_name
 from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, capabilities_note, chat_prompt, down_note
 from ..store import is_dm
 from ..textfmt import md_to_html, strip_disclaimer
@@ -215,7 +215,7 @@ class Handlers:
     async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False,
                          no_history: bool = False) -> str:
         ctx, st = self.ctx, self.ctx.st
-        rows = [] if no_history else await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
+        rows = [] if no_history else await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_max)
         if trig.nocontext:  # only the message that tagged the bot
             rows = [r._replace(text=NO_CONTEXT.sub("", r.text).strip(), reply_to=None)
                     for r in rows if r.message_id == msg.message_id]
@@ -231,8 +231,7 @@ class Handlers:
         ctx, st = self.ctx, self.ctx.st
         who = f"{sender_name(msg)} {msg.from_user.id if msg.from_user else None}"
         where = "" if trig.private else f" @ {msg.chat_id}"
-        preview = " ".join(trig.text.split())
-        preview = preview[:60].rstrip() + " ..." if len(preview) > 60 else preview
+        preview = log_preview(trig.text)
         log.info("[%s%s]%s %s", who, where, " (movers list)" if trig.movers else "",
                  preview or f"[{describe(msg) or 'no text'}]")
 

@@ -497,3 +497,22 @@ def test_numbered_source_links_survive_the_reply_formatting():
     out = format_answer(text, movers_bots=frozenset(), summary=False)
     assert '[<a href="https://a.example/x?p=1&amp;q=2">1</a>]' in out and '[<a href="https://b.example/">2</a>]' in out
     assert "<b>Strong.</b>" in out and "Sources:" not in out
+
+
+def test_log_preview_keeps_two_words_and_one_ellipsis_character():
+    from lib.msgtext import log_preview
+    assert log_preview("") == "" and log_preview("hi") == "hi" and log_preview("/segments $nvda") == "/segments $nvda"
+    assert log_preview("@stockbot how is NVDA?") == "@stockbot how…"
+    assert log_preview("  @stockbot \n how  is\tit ") == "@stockbot how…"
+    assert log_preview("one two three four", words=3) == "one two three…"
+
+
+async def test_the_log_shows_only_the_first_two_words_of_a_message(env, store, caplog):
+    import logging
+    ctx, backend, h = make_ctx(env, store, [step("ok")])
+    m = user_msg(ctx.bot, "@stockbot my secret portfolio plan is to buy NVDA")
+    with caplog.at_level(logging.INFO, logger="bot"):
+        await run(h, m)
+    lines = [r.getMessage() for r in caplog.records]
+    assert any(line.endswith("@stockbot my…") for line in lines)
+    assert not any("secret" in line or "portfolio" in line for line in lines)

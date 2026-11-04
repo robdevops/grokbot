@@ -75,8 +75,8 @@ from the stream alone: warnings and errors are stored as err, the rest as info, 
 | info | Startup and connections, one line per message the bot answers, and one summary per request. |
 | debug | The detail: each MCP call and its result size, search queries, tokens per round, attached images, backfill progress. |
 
-A message line looks like `[Jane Doe (@jane) 1234567890] first 60 characters of the message ...` (groups add
+A message line looks like `[Jane Doe (@jane) 1234567890] first two words of the message…` (groups add
 ` @ <chat id>`). The summary has the time, rounds, tool calls, searches, tokens, cached % and cost; the debug line
 `Round 2: in 14158 (7400 cached) out 738, stop` gives each round's share. Each tool server logs its tools on one
-line (cut at `LOG_WIDTH`), and startup logs the token size of the tool definitions. The `Starting ...` line shows the
+line, and startup logs the token size of the tool definitions. The `Starting ...` line shows the
 git commit the checkout is on.

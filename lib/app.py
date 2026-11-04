@@ -168,8 +168,7 @@ def build_ctx(st: config.Settings) -> Ctx:
         await alert_down(ctx, server)
 
     ctx.registry = Registry.load(str(config.MCP_CONFIG), timeout=config.MCP_TIMEOUT,
-                                 max_output=config.MAX_TOOL_OUTPUT, on_down=on_down,
-                                 log_width=st.log_width)
+                                 max_output=config.MAX_TOOL_OUTPUT, on_down=on_down)
     ctx.chat_commands = chat_commands.load({label: s.cfg for label, s in ctx.registry.servers.items()},
                                            BUILT_IN_COMMANDS)
     return ctx

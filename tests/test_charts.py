@@ -442,7 +442,7 @@ async def settle():
     await asyncio.gather(*list(buttons._tasks))
 
 
-PRELOAD = {"TELEGRAM_PRELOAD_CHAT": "-900"}
+PRELOAD = {"TELEGRAM_IMAGE_PRELOAD_CHATID": "-900"}
 
 
 async def test_other_periods_are_uploaded_to_the_preload_chat_and_reused_by_the_buttons(env, store):
@@ -499,10 +499,10 @@ async def test_a_preload_chat_the_bot_cannot_post_in_stops_after_one_warning(env
 
 
 def test_the_preload_chat_must_be_a_number(env):
-    assert config.load({**env, "TELEGRAM_PRELOAD_CHAT": " -1001234 "}).preload_chat == -1001234
+    assert config.load({**env, "TELEGRAM_IMAGE_PRELOAD_CHATID": " -1001234 "}).preload_chat == -1001234
     assert config.load(env).preload_chat is None
-    with pytest.raises(config.ConfigError, match="TELEGRAM_PRELOAD_CHAT must be a Telegram chat ID"):
-        config.load({**env, "TELEGRAM_PRELOAD_CHAT": "mychat"})
+    with pytest.raises(config.ConfigError, match="TELEGRAM_IMAGE_PRELOAD_CHATID must be a Telegram chat ID"):
+        config.load({**env, "TELEGRAM_IMAGE_PRELOAD_CHATID": "mychat"})
 
 
 async def test_an_upload_is_reused_for_an_hour_but_the_1d_chart_for_15_minutes(env, store, monkeypatch):

@@ -37,19 +37,29 @@ def test_dm_before_bot_id_fails_clearly(tmp_path):
     s.save(make_msg(1, "group fine", chat_id=-5))  # groups need no bot id
 
 
-def test_history_window_is_stepped(store):
+def test_history_window_is_stepped_and_never_over_the_maximum(store):
     for i in range(1, 46):
         store.save(make_msg(i, f"m{i}", chat_id=-1, ts=i))
     rows = store.history(-1, 20)
-    assert len(rows) == 25 and rows[0].message_id == 21 and rows[-1].message_id == 45
-    # the start only moves every limit/2 messages
+    assert len(rows) == 15 and rows[0].message_id == 31 and rows[-1].message_id == 45
+    # the start only moves every max/2 messages
     starts = set()
     for i in range(46, 66):
         store.save(make_msg(i, f"m{i}", chat_id=-1, ts=i))
         rows = store.history(-1, 20)
-        assert 20 <= len(rows) <= 29
+        assert 11 <= len(rows) <= 20 and rows[-1].message_id == i
         starts.add(rows[0].message_id)
     assert len(starts) <= 3
+    assert [r.message_id for r in store.history(-1, 2)] == [64, 65]
+    assert len(store.history(-1, 1000)) == 65  # a short chat is returned whole
+
+
+def test_a_history_maximum_of_ten_gives_six_to_ten_messages(store):
+    for i in range(1, 40):
+        store.save(make_msg(i, f"m{i}", chat_id=-2, ts=i))
+        assert len(store.history(-2, 10)) <= 10
+        if i > 10:
+            assert len(store.history(-2, 10)) >= 6
 
 
 def test_kv_users_news_and_usage(store):

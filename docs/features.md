@@ -4,7 +4,7 @@
 ## Optional features (off by default)
 Each is off by default. The holding-news DM and the movers reply are switched on by setting the names they need (recipients, bots); the DM buttons have a flag.
 - **Daily holding-news DM** (switched on by listing recipients in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`, at `SHARESIGHT_HOLDING_NEWS_TIME` in
-  `BOT_TZ`, `portfolio:username` pairs such as
+  `TZ`, `portfolio:username` pairs such as
   `MyPortfolio:alice,MySMSF:alice`; empty, the default, means off):
   reads each person's current Sharesight holdings, searches for *major* news from the past 24 hours
   (a forced search), and DMs only what qualifies (most days: nothing). Stories already reported in
@@ -43,7 +43,7 @@ for its definition.
   light weight (the one at zero too), short strokes above the x labels, and grey axis text. The subtitle says what
   the chart shows and when, like "% change over the past month, 30 Sep - 28 Oct 2026". Tick labels share their
   decimals, shorten big numbers (120M, 1.5B) and show % for % changes. A single y axis has no title (an inverted
-  one says "inverted"); two axes keep theirs. The theme follows `DARKMODE`: light (`off`, the default), dark (`on`), or dark from 9 pm to 7 am in `BOT_TZ` (`auto`).
+  one says "inverted"); two axes keep theirs. The theme follows `DARKMODE`: light (`off`, the default), dark (`on`), or dark from 9 pm to 7 am in `TZ` (`auto`).
 - **Line labels:** with lines on one axis, each line ends in a small square and a label with its name and total
   ("NVDA  -5.7%"), nudged apart where they would overlap, and there is no legend. Two axes, bars or points keep
   a legend, with the totals in it.
@@ -62,12 +62,12 @@ for its definition.
 - **Several charts, one image:** when a reply has 2 to 5 charts (for example a breakdown by segment, platform and
   region), the first is the image and each chart has a button under it, labelled with the part of its title that
   differs ("Segment", "Platform", "Region"). A tap swaps the image in place and keeps the answer as the caption; the one
-  shown is shaded. With `TELEGRAM_PRELOAD_CHAT` the other charts are uploaded in the background, so even the first tap
+  shown is shaded. With `TELEGRAM_IMAGE_PRELOAD_CHATID` the other charts are uploaded in the background, so even the first tap
   is instant; without it the first tap draws the chart (about half a second) and later taps reuse it.
 - **Period buttons:** a single chart whose series are all tickers comes with buttons: 1D, 1M, 1Y, 5Y and 🔄 (reload); the period shown is shaded.
   A tap fetches the prices again and redraws the chart in place, without asking the model. Another period gets a
   plain title, repeated as the caption; the chart's own period brings back the model's caption.
-  Set `TELEGRAM_PRELOAD_CHAT` to a private chat the bot can post in (a private group, or a DM with you) and the
+  Set `TELEGRAM_IMAGE_PRELOAD_CHATID` to a private chat the bot can post in (a private group, or a DM with you) and the
   other periods are drawn and uploaded there in the background right after the reply; a tap then swaps in the
   uploaded picture without fetching or drawing, and so does going back to the chart's own period. A picture older
   than an hour (15 minutes for 1D) is drawn again with fresh prices, and 🔄 always is. Without the variable every tap draws.

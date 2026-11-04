@@ -67,13 +67,6 @@ def test_holding_news_and_movers_switch_on_by_listing_names(env):
     assert not config.load({**env, "MOVERS_BOTS": ","}).movers_explain
 
 
-def test_log_width_defaults_to_80(env):
-    assert config.load(env).log_width == 80
-    assert config.load({**env, "LOG_WIDTH": "120"}).log_width == 120
-    assert config.load({**env, "LOG_WIDTH": "0"}).log_width == 0  # 0 = no limit
-    assert config.load({**env, "LOG_WIDTH": ""}).log_width == 80
-
-
 def test_token_limits():
     assert config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"}).max_tokens == 3000
     assert config.MAX_TOOL_OUTPUT == 12_000 and config.HISTORY_OWN_LINE_MAX < config.HISTORY_LINE_MAX

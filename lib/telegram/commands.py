@@ -16,6 +16,7 @@ from ..context import Ctx
 from ..features import filings
 from ..features.periods import backfill
 from ..features.periods.windows import describe_scope, flush_scope
+from ..msgtext import log_preview
 from ..store import is_dm
 from ..textfmt import is_parse_error, plain_text
 from .access import is_admin
@@ -32,7 +33,7 @@ async def _gate(ctx: Ctx, update: Update) -> bool:
     user = update.effective_user
     if user and await is_admin(ctx, user.id):
         return True
-    log.info("Ignored %s from user %s: not an admin", update.effective_message.text, user and user.id)
+    log.info("Ignored %s from user %s: not an admin", log_preview(update.effective_message.text), user and user.id)
     return False
 
 

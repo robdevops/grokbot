@@ -85,7 +85,7 @@ async def remember(ctx: Ctx, sent, args: dict) -> None:
 
 
 async def preload(ctx: Ctx, chat_id: int, message_id: int, args: dict) -> None:
-    """Draw the other periods and upload them to TELEGRAM_PRELOAD_CHAT, keeping their file IDs for the buttons."""
+    """Draw the other periods and upload them to TELEGRAM_IMAGE_PRELOAD_CHATID, keeping their file IDs for the buttons."""
     shown = period_of(args)
     for _, period in BUTTONS:
         if period == shown:

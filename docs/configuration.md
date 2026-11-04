@@ -14,11 +14,11 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 ### Common settings
 | Variable | Meaning |
 |---|---|
-| `BOT_TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
+| `TZ` | Time zone for timestamps, e.g. Australia/Melbourne (default UTC). |
 | `MODEL` | Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter). |
 | `REASONING` | Reasoning effort: low, medium or high; empty = the model's default. |
 | `SEARCH` | on|off. Web search (and X search on xAI). Default on. |
-| `DARKMODE` | Chart theme: `off` (the default) draws light charts, `on` draws dark ones, `auto` draws dark ones from 9 pm to 7 am in `BOT_TZ`. Before this setting existed, charts were always `auto`. |
+| `DARKMODE` | Chart theme: `off` (the default) draws light charts, `on` draws dark ones, `auto` draws dark ones from 9 pm to 7 am in `TZ`. Before this setting existed, charts were always `auto`. |
 
 ### Advanced and optional
 | Variable | Meaning |
@@ -26,8 +26,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `ADMIN_CHAT_IDS` | Telegram IDs of the bot's admins (comma/space separated). Your user ID gets a message when an MCP server goes down and may use `/tokens`; a group's chat ID gets the down-server messages only. Admins of the groups the bot is in count as admins too. |
 | `ADMIN_ONLY` | on|off. Only admins may DM the bot or get Sharesight data (default on). |
 | `DATA_DIR` | Directory for the bot's data (the SQLite database `chat_log.db`). Bots started with the same `DATA_DIR` share group history. Default: systemd's `STATE_DIRECTORY` (see [Running under systemd](running.md#running-under-systemd)), else the working directory. In Docker, set `DATA_DIR=/data` and bind-mount a host directory there so history survives upgrades. |
-| `HISTORY_LIMIT` | Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20). |
-| `LOG_WIDTH` | Longest line (characters) for the MCP tool lists in the log; a longer list is cut at a whole name and ends in `…` (default 80, 0 = no limit). |
+| `HISTORY_MAX` | The most messages of chat history in the prompt (default 10). Once a chat is longer, the window holds half to all of that and its start only moves every half of it, so the prompt cache keeps working. |
 | `MAX_TOKENS` | Reply cap in tokens, reasoning included (default 3000). |
 | `MOVERS_BOTS` | Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off. |
 | `PORTFOLIO_NAMES` | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
@@ -35,9 +34,9 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `POST_TO_GROUPS_FROM_DM` | on|off. A group admin can have the bot post in that group from a DM (default off). |
 | `SEARCH_MODEL` | OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online). |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off. |
-| `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (BOT_TZ) for the daily holding-news check (default 08:00). |
+| `SHARESIGHT_HOLDING_NEWS_TIME` | HH:MM (TZ) for the daily holding-news check (default 08:00). |
 | `TELEGRAM_DM_BUTTONS` | on|off. Preset-prompt buttons in private chats (default off). |
-| `TELEGRAM_PRELOAD_CHAT` | Chat ID of a private chat the bot can post in (a private group it is in, or a DM with you). The other periods of a chart are uploaded there in the background and reused when a period button is tapped, so the tap swaps the picture without fetching or drawing. Empty (default) = off, and a tap fetches and draws. See [Charts](features.md#charts). |
+| `TELEGRAM_IMAGE_PRELOAD_CHATID` | Chat ID of a private chat the bot can post in (a private group it is in, or a DM with you). The other periods of a chart are uploaded there in the background and reused when a period button is tapped, so the tap swaps the picture without fetching or drawing. Empty (default) = off, and a tap fetches and draws. See [Charts](features.md#charts). |
 
 ## Choosing a model
 Figures from search results and Artificial Analysis at the time of writing (October 2026), so

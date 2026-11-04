@@ -55,7 +55,7 @@ def keyboard(labels: list[str], current: int) -> InlineKeyboardMarkup:
 
 async def remember(ctx: Ctx, sent: Message, calls: list[dict], images: list[bytes], labels: list[str]) -> None:
     """Keep the charts' calls so a tap can draw any of them, the picture just sent as chart 0, and, with
-    TELEGRAM_PRELOAD_CHAT, upload the others (already drawn) so the first tap is instant too."""
+    TELEGRAM_IMAGE_PRELOAD_CHATID, upload the others (already drawn) so the first tap is instant too."""
     caption = getattr(sent, "caption_html", None) or ""
     await asyncio.to_thread(ctx.store.chart_put, sent.chat_id, sent.message_id,
                             json.dumps({"pages": calls, "labels": labels}), caption, "#0")
