@@ -15,7 +15,7 @@ from .. import config
 from ..mcp.server import Registry
 from ..textfmt import TOOL_SYNTAX_RE
 from .base import Answer, Backend, Call, Request, Source, Step, Usage
-from .cite import mark_by_overlap, normalise_markers
+from .cite import cite_answer
 
 log = logging.getLogger("bot")
 
@@ -237,5 +237,5 @@ async def run(backend: Backend, registry: Registry, req: Request, *, dedupe: boo
             raise RuntimeError("hit the token cap before writing an answer")
         raise RuntimeError(f"empty reply (finish_reason={step.finish})")
     if req.cite:
-        text = mark_by_overlap(normalise_markers(text, cited), cited)
+        text = cite_answer(text, cited)
     return Answer(text, total, rounds, tool_calls, cited)

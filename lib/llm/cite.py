@@ -65,18 +65,25 @@ def _tokens(text: str) -> tuple[set[str], set[str]]:
             {w.lower() for w in WORD_RE.findall(plain)})
 
 
-def mark_by_overlap(text: str, sources: list[Source]) -> str:
+def cite_answer(text: str, sources: list[Source]) -> str:
+    """The answer with [n] links for the pages a search used: the model's own, where they point at a page the search
+    returned, then one after the sentence each remaining page's snippet fits best. Numbered in order of appearance."""
+    text = normalise_markers(text, sources)
+    cited = {html.unescape(url).rstrip("/") for url in MARKER_RE.findall(text)}
+    rest = [s for s in sources if s.url.rstrip("/") not in cited]
+    return normalise_markers(mark_by_overlap(text, rest, among=sources), sources)
+
+
+def mark_by_overlap(text: str, sources: list[Source], among: list[Source] | None = None) -> str:
     """Put "[n]" after the sentence of `text` that each source's snippet fits best, when it fits well enough.
 
     OpenRouter says which pages a search used but not which sentence each backs (its positions are 0), so the
     link goes where the figures and the distinctive words of the sentence are also in the page's snippet.
-    Words every snippet shares count for less. A source that fits no sentence gets no marker."""
-    if MARKER_RE.search(text) or not sources:
-        log.debug("No [n] markers added: %s", "the model's own are there" if sources else "no sources")
-        return text
-    snippets = [_tokens(s.content) for s in sources if s.content]
+    Words every snippet shares count for less (`among`: the snippets compared, default `sources`). A source that fits
+    no sentence gets no marker."""
+    snippets = [_tokens(s.content) for s in (among or sources) if s.content]
     if not snippets:
-        log.debug("No [n] markers added: none of the %d sources came with a snippet", len(sources))
+        log.debug("No [n] markers added by overlap: %d sources left without a snippet", len(sources))
         return text
     spread: dict[str, int] = {}
     for _, words in snippets:

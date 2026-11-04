@@ -37,10 +37,22 @@ def test_numbering_follows_the_order_in_the_text_and_a_source_that_fits_nothing_
     assert out.count("</a>]") == 2
 
 
-def test_nothing_is_marked_without_snippets_or_when_markers_exist_already():
+def test_nothing_is_marked_without_snippets():
     assert mark_by_overlap(TEXT, [Source("T", A)]) == TEXT and mark_by_overlap(TEXT, []) == TEXT
-    marked = mark_by_overlap(TEXT, [Source("Release", A, PRESS)])
-    assert mark_by_overlap(marked, [Source("News", B, NEWS)]) == marked
+
+
+def test_pages_the_model_did_not_cite_are_added_after_their_sentences_and_all_are_numbered_in_order():
+    from lib.llm.cite import cite_answer
+    srcs = [Source("Release", A, PRESS), Source("News", B, NEWS)]
+    model = TEXT.replace("EPS $2.09.", 'EPS $2.09.[<a href="https://b.example/">7</a>]')  # it cited News for the figures
+    out = cite_answer(model, srcs)
+    # the model's own link stays where it put it (number 1, though it wrote 7); Release, which it did not cite, goes
+    # after the Data Center sentence it fits (number 2); News is not cited a second time on the Street sentence
+    assert out == (
+        "AMD's quarter: revenue $13.38b, +45% y/y, EPS $2.09." + LINK_B.replace(">2<", ">1<") + " Data Center did the work, "
+        "$8.5b." + LINK_A.replace(">1<", ">2<") + " Street is bullish, with JPMorgan and Morgan Stanley raising "
+        "targets to $575 and $550 while staying neutral. My read: the multiple is high.")
+    assert cite_answer(TEXT, []) == TEXT
 
 
 def test_the_models_own_links_are_kept_only_for_pages_the_search_returned_and_renumbered():

@@ -44,11 +44,11 @@
   query through `SEARCH_MODEL` (default: `MODEL` with `:online` added) and returns the write-up; that call's cost is added to the answer's cost.
   Some models print a search call as text instead of making it; the bot recovers those queries too.
   In a chat answer the model is told to cite a sentence that rests on a search result as `[1]`, the number linking to the
-  page (its exact URL from the results). The bot keeps only links to pages the search really returned and renumbers
-  them in order. OpenRouter's `url_citation` annotations say which pages were used but not which sentence each backs
-  (the positions are 0), so if the model gave no link, the bot puts `[n]` after the sentence each snippet fits best: the
-  figures and distinctive words of the sentence also appear in the snippet. A sentence that fits none, such as an
-  opinion, gets none; there is no list of sources at the end. `DEBUG` logs show each source's best score.
+  page (its exact URL from the results). The bot keeps only links to pages the search really returned. OpenRouter's
+  `url_citation` annotations say which pages were used but not which sentence each backs (the positions are 0), so each
+  page the model did not cite gets a `[n]` after the sentence its snippet fits best: the figures and distinctive words
+  of the sentence also appear in the snippet. A sentence that fits no snippet, such as an opinion, gets none. All the
+  numbers follow the order they appear in; there is no list of sources at the end. `DEBUG` logs show each page's best score.
 - At most 5 searches per round; extras get a "skipped" note.
 - `SEARCH=off` turns search off (the prompt then says the model has no web search).
 - **Forced search:** movers lists, DM preset buttons and the holding-news digest *require* a
