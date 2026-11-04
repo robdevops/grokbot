@@ -18,7 +18,7 @@ ENV_VARS: dict[str, str] = {
     "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
     # Common settings
     "TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
-    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter).",
+    "MODEL": "Model ID (default grok-4.3 on xAI, deepseek/deepseek-v4.1-flash-1017 on OpenRouter).",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
     "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
     "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in TZ).",
@@ -39,7 +39,7 @@ ENV_VARS: dict[str, str] = {
     "TELEGRAM_IMAGE_PRELOAD_CHATID": "Chat ID of a private chat the bot can post in. Chart periods are uploaded there ahead of time and reused when a period button is tapped. Empty (default) = off.",
 }
 
-DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash"}
+DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "deepseek/deepseek-v4.1-flash-1017"}
 
 # Tuning constants (not configurable).
 MAX_TOOL_ROUNDS = 6  # model <-> tool round trips per answer

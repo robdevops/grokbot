@@ -7,7 +7,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OPENROUTER_API_KEY` | none | OpenRouter key; selects the OpenRouter provider (its default model is `z-ai/glm-5.3-flash`). |
+| `OPENROUTER_API_KEY` | none | OpenRouter key; selects the OpenRouter provider (its default model is `deepseek/deepseek-v4.1-flash-1017`). |
 | `TELEGRAM_BOT_TOKEN` | none (required) | Bot token from @BotFather (required). |
 | `XAI_API_KEY` | none | xAI key; selects the xAI provider (its default model is `grok-4.3`). |
 
@@ -15,7 +15,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | Variable | Default | Meaning |
 |---|---|---|
 | `TZ` | `UTC` | Time zone for timestamps, e.g. `Australia/Melbourne`. |
-| `MODEL` | `grok-4.3` on xAI, `z-ai/glm-5.3-flash` on OpenRouter | Model ID. |
+| `MODEL` | `grok-4.3` on xAI, `deepseek/deepseek-v4.1-flash-1017` on OpenRouter | Model ID. |
 | `REASONING` | the model's own | Reasoning effort: `low`, `medium` or `high`. |
 | `SEARCH` | `on` | `on` or `off`. Web search (and X search on xAI). |
 | `DARKMODE` | `off` | Chart theme: `off` draws light charts, `on` draws dark ones, `auto` draws dark ones from 9 pm to 7 am in `TZ`. Before this setting existed, charts were always `auto`. |
@@ -46,7 +46,8 @@ treat them as rough; speed varies by provider.
 |---|---|---|---|
 | `xiaomi/mimo-v2.6-pro` | 0.43 / 0.87 | ~28-46 tok/s | 46 (top open-weight model) |
 | `xiaomi/mimo-v2.6-flash` | 0.14 / 0.28 | ~56 tok/s | 38 |
-| `z-ai/glm-5.3-flash` (default on OpenRouter) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 |
+| `deepseek/deepseek-v4.1-flash-1017` (default on OpenRouter) | not measured | not measured | not measured |
+| `z-ai/glm-5.3-flash` (the previous default) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 |
 | `grok-4.3` / `x-ai/grok-4.3` (default on xAI) | 1.25 / 2.50 | ~105-146 tok/s | 25 (at high reasoning) |
 | `xiaomi/mimo-v2.5-pro` | 0.30 / 0.61 | ~29-46 tok/s | unreliable (retires 21 Oct 2026) |
 | `xiaomi/mimo-v2.5` | 0.12 / 0.24 | ~44-58 tok/s | not found (retires 21 Oct 2026) |

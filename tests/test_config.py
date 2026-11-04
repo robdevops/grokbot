@@ -48,7 +48,7 @@ def test_provider_defaults():
     x = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"})
     assert (x.provider, x.model, x.api_key) == ("xai", "grok-4.3", "a")
     o = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "b"})
-    assert (o.provider, o.model) == ("openrouter", "z-ai/glm-5.3-flash")
+    assert (o.provider, o.model) == ("openrouter", "deepseek/deepseek-v4.1-flash-1017")
 
 
 def test_model_and_reasoning(env):
