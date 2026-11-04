@@ -38,19 +38,3 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `SHARESIGHT_HOLDING_NEWS_TIME` | `08:00` | HH:MM (in `TZ`) for the daily holding-news check. |
 | `TELEGRAM_DM_BUTTONS` | `off` | `on` or `off`. Preset-prompt buttons in private chats. |
 | `TELEGRAM_IMAGE_PRELOAD_CHATID` | empty (off) | Chat ID of a private chat the bot can post in (a private group it is in, or a DM with you). The other periods of a chart are uploaded there in the background and reused when a period button is tapped, so the tap swaps the picture without fetching or drawing. Empty = off, and a tap fetches and draws. See [Charts](features.md#charts). |
-
-## Choosing a model
-Figures from search results and Artificial Analysis at the time of writing (October 2026), so
-treat them as rough; speed varies by provider.
-
-| Model | $ per 1M in / out | Output speed | Quality index |
-|---|---|---|---|
-| `xiaomi/mimo-v2.6-pro` | 0.43 / 0.87 | ~28-46 tok/s | 46 (top open-weight model) |
-| `xiaomi/mimo-v2.6-flash` | 0.14 / 0.28 | ~56 tok/s | 38 |
-| `deepseek/deepseek-v4.1-flash-1017` (default on OpenRouter) | not measured | not measured | not measured |
-| `z-ai/glm-5.3-flash` (the previous default) | 0.15 / 0.50 | ~50 tok/s (other hosts up to ~270) | 57 |
-| `grok-4.3` / `x-ai/grok-4.3` (default on xAI) | 1.25 / 2.50 | ~105-146 tok/s | 25 (at high reasoning) |
-| `xiaomi/mimo-v2.5-pro` | 0.30 / 0.61 | ~29-46 tok/s | unreliable (retires 21 Oct 2026) |
-| `xiaomi/mimo-v2.5` | 0.12 / 0.24 | ~44-58 tok/s | not found (retires 21 Oct 2026) |
-
-Most of the delay is reasoning time before the first answer token, not typing speed: use `REASONING=low`.
