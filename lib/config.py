@@ -56,11 +56,12 @@ SEARCH_ENGINE = "auto"
 SEARCH_RESULTS = 20
 SEARCH_TOKENS = 400  # cap on each search write-up (OpenRouter search runner)
 MAX_SEARCHES = 5  # search calls run per round
-# Index constituents linked bare in replies (features/known_tickers.py): (name, Wikipedia page, fewest and most rows
-# that look right). Fetched in the background once a day, never while answering.
+# Index constituents linked bare in replies (features/known_tickers.py): (name, Wikipedia page, Yahoo suffix, fewest
+# and most rows that look right). Fetched in the background once a day, never while answering.
 INDEX_LISTS = (
-    ("S&P 500", "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", 450, 550),
-    ("NASDAQ-100", "https://en.wikipedia.org/wiki/Nasdaq-100", 90, 110),
+    ("S&P 500", "List of S&P 500 companies", "", 450, 550),
+    ("NASDAQ-100", "Nasdaq-100", "", 90, 110),
+    ("ASX 200", "S&P/ASX 200", "AX", 190, 210),
 )
 KNOWN_TICKERS_REFRESH = 24 * 3600  # seconds between refreshes of the indexes and the US holdings
 KNOWN_TICKERS_RETRY = 30 * 60  # seconds before a failed part (a page down, Sharesight not up yet) is tried again

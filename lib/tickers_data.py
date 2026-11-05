@@ -19,11 +19,15 @@ NOT_TICKERS = {
 }
 
 # Index tickers that are also everyday words or acronyms in capitals ("IT spending", "GM expanded 200bp", "UPS demand",
-# "HD maps"): never linked bare, only as $GM, NYSE:GM or General Motors (GM). A fixed set: the indexes don't grow.
+# "HD maps", "GPT models"): never linked bare, only as $GM, NYSE:GM or General Motors (GM). A fixed set: the indexes
+# barely change.
 WORD_TICKERS = {
     "IT", "ALL", "ON", "NOW", "KEY", "LOW", "ARE", "DAY", "HAS", "WELL", "BALL", "FAST", "CAT", "AMP", "SO", "ED",
     "GM", "UPS", "IP", "IR", "ICE", "PTC", "RF", "RL", "USB", "HD", "TECH", "EA", "CE", "MAR", "DD", "CF", "MS",
     "FANG", "MSCI", "COST", "BR", "GE", "HP", "PH", "TT", "CTA",
+    # ASX 200
+    "GPT", "LLC", "WOW", "ZIP", "CAR", "SUN", "WEB", "HUB", "ARB", "ANN", "ORG", "MIN", "BEN", "PRU", "NAN", "IEL",
+    "TNE", "LOV", "IPL", "SGR", "CHC", "EVN", "DOW", "VEA", "NEC", "PNI", "IFT", "BOE", "DEG",
 }
 
 # An exchange as the model, the press or Sharesight writes it ("ASX:NXT", "NXT (ASX)") -> Yahoo's suffix ("" = US,

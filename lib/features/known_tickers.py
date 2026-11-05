@@ -1,4 +1,4 @@
-"""Tickers a reply may name bare and still get a link: the S&P 500, the NASDAQ-100 and the US Sharesight holdings.
+"""Tickers a reply may name bare and still get a link: the S&P 500, the NASDAQ-100, the ASX 200 and the holdings.
 
 Refreshed in the background once a day and kept in the kv table, so a restart has them at once; replies only read
 tickers.KNOWN and never wait for a fetch."""
@@ -20,8 +20,12 @@ from ..holdings import code_and_market, current_holdings
 
 log = logging.getLogger("bot")
 KV_KEY = "known_tickers"
-SYMBOL_RE = re.compile(r"^[A-Z]{1,5}(?:-[A-Z])?$")
-HEADERS = {"User-Agent": "grokbot/1.0 (Telegram stock-chat bot; daily index list)"}
+US_SYMBOL_RE = re.compile(r"^[A-Z]{1,5}(?:-[A-Z])?$")
+ASX_SYMBOL_RE = re.compile(r"^[A-Z0-9]{3,5}$")  # BHP, A2M, AX1
+# Wikimedia refuses programs whose User-Agent names no contact; its action API is the way in for programs.
+HEADERS = {"User-Agent": "grokbot/1.0 (+https://github.com/robdevops/grokbot; daily index list)"}
+API = "https://en.wikipedia.org/w/api.php"
+HEADER_NAMES = ("symbol", "ticker", "ticker symbol", "code", "asx code")
 
 
 class _Tables(HTMLParser):
@@ -55,9 +59,9 @@ class _Tables(HTMLParser):
             self._cell.append(data)
 
 
-def symbols_from_html(page: str) -> list[str]:
+def symbols_from_html(page: str, suffix: str = "") -> list[str]:
     """The ticker column of a Wikipedia index page: the table with id "constituents", else the first table with a
-    "Symbol" or "Ticker" header. Yahoo writes share classes with a hyphen (BRK.B -> BRK-B)."""
+    "Symbol", "Ticker" or "Code" header. US share classes as Yahoo writes them (BRK.B -> BRK-B); ASX codes as listed."""
     parser = _Tables()
     parser.feed(page)
     tables = sorted(parser.tables, key=lambda t: t["id"] != "constituents")
@@ -66,23 +70,30 @@ def symbols_from_html(page: str) -> list[str]:
         if not rows:
             continue
         header = [re.sub(r"\[.*?\]", "", h).strip().lower() for h in rows[0]]  # "Ticker[12]": a footnote
-        col = next((i for i, h in enumerate(header) if h in ("symbol", "ticker", "ticker symbol")), None)
+        col = next((i for i, h in enumerate(header) if h in HEADER_NAMES), None)
         if col is None:
             continue
-        found = [row[col].replace(".", "-") for row in rows[1:] if len(row) > col]
-        return [s for s in found if SYMBOL_RE.match(s)]
+        found = [row[col] if suffix else row[col].replace(".", "-") for row in rows[1:] if len(row) > col]
+        return [s for s in found if (ASX_SYMBOL_RE if suffix else US_SYMBOL_RE).match(s)]
     return []
 
 
-async def fetch_index(client: httpx.AsyncClient, name: str, url: str, low: int, high: int) -> list[str] | None:
-    """An index's tickers, or None if the page couldn't be read or doesn't look right."""
+async def fetch_index(client: httpx.AsyncClient, name: str, title: str, suffix: str, low: int,
+                      high: int) -> list[str] | None:
+    """An index's codes, or None if the page couldn't be read or doesn't look right."""
+    params = {"action": "parse", "page": title, "prop": "text", "format": "json", "formatversion": "2",
+              "redirects": "1"}
     try:
-        r = await client.get(url, headers=HEADERS, follow_redirects=True)
-        r.raise_for_status()
-    except httpx.HTTPError as e:
+        r = await client.get(API, params=params, headers=HEADERS, follow_redirects=True)
+        if r.status_code != 200:
+            log.warning("Known tickers: couldn't fetch the %s list: HTTP %d: %s", name, r.status_code,
+                        " ".join(r.text.split())[:200])
+            return None
+        page = r.json()["parse"]["text"]
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as e:
         log.warning("Known tickers: couldn't fetch the %s list: %s", name, e)
         return None
-    found = symbols_from_html(r.text)
+    found = symbols_from_html(page, suffix)
     if not low <= len(found) <= high:
         log.warning("Known tickers: the %s page gave %d tickers (expected %d-%d); keeping the last list",
                     name, len(found), low, high)
@@ -90,8 +101,9 @@ async def fetch_index(client: httpx.AsyncClient, name: str, url: str, low: int, 
     return found
 
 
-async def us_holdings(ctx: Ctx) -> list[str] | None:
-    """The codes of the US-listed Sharesight holdings, or None if Sharesight isn't up or isn't set up."""
+async def held_symbols(ctx: Ctx) -> dict[str, str] | None:
+    """The Sharesight holdings on exchanges we know, code -> Yahoo symbol ({"NXT": "NXT.AX", "GM": "GM"}), or None if
+    Sharesight isn't up or isn't set up."""
     server = next((s for s in ctx.registry.up() if s.cfg.get("gate") == "portfolio"), None)
     if server is None or not ctx.st.portfolio_names:
         return None
@@ -100,15 +112,40 @@ async def us_holdings(ctx: Ctx) -> list[str] | None:
     except Exception as e:  # the MCP server's own errors, bad JSON
         log.warning("Known tickers: couldn't read the holdings: %s", e)
         return None
-    pairs = (code_and_market(key) for key in held)
-    return sorted(code for code, market in pairs if tickers.yahoo_symbol(code, market) == code)
+    symbols = {}
+    for code, market in (code_and_market(key) for key in held):
+        symbol = tickers.yahoo_symbol(code, market)
+        if symbol == code:  # a US listing: Yahoo writes share classes BRK-B
+            code = symbol = code.replace(".", "-")
+        if symbol:
+            symbols[code] = symbol
+    return symbols
 
 
-def apply(saved: dict) -> None:
-    """Make the saved lists the ones replies link. Yahoo writes share classes BRK-B; the model may write BRK.B."""
-    codes = {c for name, _, _, _ in config.INDEX_LISTS for c in saved.get("indexes", {}).get(name, [])}
-    codes |= {c.replace(".", "-") for c in saved.get("held", [])}
-    tickers.set_known({**{c: c for c in codes}, **{c.replace("-", "."): c for c in codes if "-" in c}})
+def known(saved: dict) -> tuple[dict[str, str], set[str]]:
+    """Code -> Yahoo symbol from the saved lists, and the codes left out because they name a company on two
+    exchanges (in a US index and in the ASX 200) unless a holding settles which. US share classes are known both
+    ways (BRK-B and BRK.B, as the model may write it)."""
+    by_code: dict[str, set[str]] = {}
+    for name, _, suffix, _, _ in config.INDEX_LISTS:
+        for code in saved.get("indexes", {}).get(name, []):
+            by_code.setdefault(code, set()).add(f"{code}.{suffix}" if suffix else code)
+    ambiguous = {code for code, symbols in by_code.items() if len(symbols) > 1}
+    codes = {code: next(iter(symbols)) for code, symbols in by_code.items() if code not in ambiguous}
+    held = saved.get("held", {})
+    if isinstance(held, list):  # saved by an earlier version: US codes only
+        held = {code.replace(".", "-"): code.replace(".", "-") for code in held}
+    codes.update(held)
+    ambiguous -= set(held)
+    codes.update({c.replace("-", "."): s for c, s in list(codes.items()) if "-" in c and s == c})
+    return codes, ambiguous
+
+
+def apply(saved: dict) -> set[str]:
+    """Make the saved lists the ones replies link; returns the ambiguous codes left out."""
+    codes, ambiguous = known(saved)
+    tickers.set_known(codes)
+    return ambiguous
 
 
 def load(ctx: Ctx) -> dict:
@@ -125,21 +162,22 @@ async def refresh(ctx: Ctx, saved: dict, client: httpx.AsyncClient) -> dict:
     """Fetch the indexes and the holdings; a part that fails keeps its last list and is tried again sooner
     (KNOWN_TICKERS_RETRY) than the daily refresh."""
     indexes, failed = dict(saved.get("indexes", {})), False
-    for name, url, low, high in config.INDEX_LISTS:
-        found = await fetch_index(client, name, url, low, high)
+    for name, title, suffix, low, high in config.INDEX_LISTS:
+        found = await fetch_index(client, name, title, suffix, low, high)
         if found is None:
             failed = True
         else:
             indexes[name] = found
-    held = await us_holdings(ctx)
+    held = await held_symbols(ctx)
     failed |= held is None and bool(ctx.st.portfolio_names) and any(
         s.cfg.get("gate") == "portfolio" for s in ctx.registry.servers.values())
     ts = int(time.time()) - (config.KNOWN_TICKERS_REFRESH - config.KNOWN_TICKERS_RETRY if failed else 0)
-    new = {"indexes": indexes, "held": saved.get("held", []) if held is None else held, "ts": ts}
+    new = {"indexes": indexes, "held": saved.get("held", {}) if held is None else held, "ts": ts}
     await asyncio.to_thread(ctx.store.kv_set, KV_KEY, json.dumps(new))
-    apply(new)
-    log.info("Known tickers: %s, %d held, %d in all", ", ".join(f"{len(v)} {k}" for k, v in indexes.items()) or
-             "no index lists", len(new["held"]), len(tickers.KNOWN))
+    ambiguous = apply(new)
+    log.info("Known tickers: %s, %d held, %d in all (%d on two exchanges left out)",
+             ", ".join(f"{len(v)} {k}" for k, v in indexes.items()) or "no index lists", len(new["held"]),
+             len(tickers.KNOWN), len(ambiguous))
     return new
 
 

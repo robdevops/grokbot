@@ -18,6 +18,7 @@ def page(rows, table_id="constituents", header="Symbol"):
 
 
 def test_the_ticker_column_is_read_and_share_classes_use_a_hyphen():
+    assert kt.symbols_from_html(page(["BHP", "A2M", "bad"], header="Code"), "AX") == ["BHP", "A2M"]  # ASX codes
     assert kt.symbols_from_html(page(["NVDA", "BRK.B", "bad one", "GOOGL"])) == ["NVDA", "BRK-B", "GOOGL"]
     assert kt.symbols_from_html(page(["AAPL"], table_id="", header="Ticker")) == ["AAPL"]  # no id: by its header
     assert kt.symbols_from_html("<table><tr><th>Name</th></tr><tr><td>x</td></tr></table>") == []
@@ -29,42 +30,65 @@ class Sharesight(FakeMcp):
     async def call(self, tool, args):
         if tool == "list_portfolios":
             return json.dumps({"portfolios": [{"name": "Bob", "id": 7}]})
-        rows = [["GM", "NYSE", "General Motors"], ["NXT", "ASX", "NextDC"], ["ZZZ", "NASDAQ", "Zed"]]
+        rows = [["GM", "NYSE", "General Motors"], ["NXT", "ASX", "NextDC"], ["QBE", "ASX", "QBE Insurance"],
+                ["ZZZ", "MOON", "Unknown exchange"]]
         return json.dumps({"report": {"holdings": {"columns": ["code", "market", "name"], "rows": rows}}})
 
 
-def client(pages: dict[str, str]) -> httpx.AsyncClient:
+def wikipedia(pages: dict[str, str], seen: list | None = None) -> httpx.AsyncClient:
+    """Wikipedia's action API: the page HTML inside {"parse": {"text": ...}}; a page not given answers 403."""
     def reply(request: httpx.Request) -> httpx.Response:
-        text = pages.get(str(request.url))
-        return httpx.Response(200, text=text) if text is not None else httpx.Response(503)
+        if seen is not None:
+            seen.append(request)
+        title = request.url.params.get("page")
+        if title not in pages:
+            return httpx.Response(403, text="Please set a user-agent and respect our robot policy")
+        return httpx.Response(200, json={"parse": {"title": title, "text": pages[title]}})
     return httpx.AsyncClient(transport=httpx.MockTransport(reply))
 
 
-async def test_refresh_merges_the_indexes_and_the_us_holdings_and_keeps_a_list_that_fails(env, store, monkeypatch):
-    (sp, sp_url, _, _), (ndx, ndx_url, _, _) = config.INDEX_LISTS
-    monkeypatch.setattr(config, "INDEX_LISTS", ((sp, sp_url, 2, 5), (ndx, ndx_url, 2, 5)))
+def small_lists(monkeypatch):
+    lists = tuple((name, title, suffix, 2, 5) for name, title, suffix, _, _ in config.INDEX_LISTS)
+    monkeypatch.setattr(config, "INDEX_LISTS", lists)
+    return [title for _, title, _, _, _ in lists]
+
+
+async def test_refresh_reads_the_api_with_a_contact_and_links_asx_codes_to_ax(env, store, monkeypatch, caplog):
+    sp, ndx, asx = small_lists(monkeypatch)
     st = config.load({**env, "PORTFOLIO_NAMES": "Bob"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(Sharesight("sharesight", gate="portfolio")), FakeBot())
+    pages = {sp: page(["NVDA", "BRK.B", "QBE", "ALL"]), ndx: page(["NVDA", "AMD"]),
+             asx: page(["BHP", "A2M", "ALL", "QBE"], header="Code")}
+    seen: list = []
     before = dict(tickers.KNOWN)
     try:
-        saved = await kt.refresh(ctx, {}, client({sp_url: page(["NVDA", "BRK.B"]), ndx_url: page(["NVDA", "AMD"])}))
-        assert saved["indexes"] == {sp: ["NVDA", "BRK-B"], ndx: ["NVDA", "AMD"]} and saved["held"] == ["GM", "ZZZ"]
-        assert set(tickers.KNOWN) == {"NVDA", "BRK-B", "BRK.B", "AMD", "GM", "ZZZ"}  # NXT is ASX: not a bare US code
-        assert tickers.KNOWN["BRK.B"] == "BRK-B" and saved["ts"] > time.time() - 5  # all parts worked: due tomorrow
-        # the next day the S&P page is down and the NASDAQ page looks wrong: both keep yesterday's list
-        again = await kt.refresh(ctx, saved, client({ndx_url: page(["ONLY"])}))
+        saved = await kt.refresh(ctx, {}, wikipedia(pages, seen))
+        assert seen[0].url.params["action"] == "parse" and "https://" in seen[0].headers["user-agent"]
+        assert saved["indexes"]["ASX 200"] == ["BHP", "A2M", "ALL", "QBE"]
+        assert saved["held"] == {"GM": "GM", "NXT": "NXT.AX", "QBE": "QBE.AX"}  # MOON is no exchange we know
+        k = tickers.KNOWN
+        assert k["BHP"] == "BHP.AX" and k["A2M"] == "A2M.AX" and k["NVDA"] == "NVDA" and k["BRK.B"] == "BRK-B"
+        assert "ALL" not in k and k["QBE"] == "QBE.AX"  # on both exchanges: left out, unless a holding settles it
+        assert saved["ts"] > time.time() - 5  # every part worked: due tomorrow
+        # the next day the S&P page refuses and the NASDAQ page looks wrong: both keep yesterday's list
+        again = await kt.refresh(ctx, saved, wikipedia({ndx: page(["ONLY"]), asx: pages[asx]}))
         assert again["indexes"] == saved["indexes"]
-        due = again["ts"] + config.KNOWN_TICKERS_REFRESH - time.time()
-        assert due <= config.KNOWN_TICKERS_RETRY + 5  # a part failed: tried again in half an hour, not a day
+        assert "HTTP 403: Please set a user-agent" in caplog.text  # why it was refused
+        assert again["ts"] + config.KNOWN_TICKERS_REFRESH - time.time() <= config.KNOWN_TICKERS_RETRY + 5
         tickers.set_known({})
-        assert kt.load(ctx) == again and "BRK-B" in tickers.KNOWN  # a restart has them from the kv table at once
+        assert kt.load(ctx) == again and tickers.KNOWN["BHP"] == "BHP.AX"  # a restart has them from the kv table
     finally:
         tickers.set_known(before)
 
 
+def test_lists_saved_by_the_earlier_version_still_load():
+    codes, ambiguous = kt.known({"indexes": {"S&P 500": ["NVDA"]}, "held": ["GM", "BRK.B"]})
+    assert codes == {"NVDA": "NVDA", "GM": "GM", "BRK-B": "BRK-B", "BRK.B": "BRK-B"} and ambiguous == set()
+
+
 async def test_without_sharesight_the_held_list_stays_as_it_was(env, store):
     ctx = Ctx(config.load(env), store, ScriptedBackend([]), registry(), FakeBot())
-    assert await kt.us_holdings(ctx) is None
+    assert await kt.held_symbols(ctx) is None
 
 
 async def test_the_loop_waits_for_the_mcp_when_overdue_and_otherwise_until_due(env, store, monkeypatch):

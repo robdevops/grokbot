@@ -117,6 +117,12 @@ def test_names_with_an_escaped_ampersand_are_bolded_whole():
     assert link_tickers("S&amp;P Global (SPGI)", known) == f"<b>S&amp;P Global ({a('SPGI', 'SPGI')})</b>"
 
 
+def test_asx_codes_from_the_known_set_link_with_their_suffix_but_word_codes_do_not():
+    known = {"BHP": "BHP.AX", "GPT": "GPT.AX"}
+    assert link_tickers("BHP fell; GPT models", known) == f"{a('BHP.AX', 'BHP')} fell; GPT models"
+    assert link_tickers("GPT Group (GPT)", known) == f"<b>GPT Group ({a('GPT.AX', 'GPT')})</b>"
+
+
 def test_protected_markup_is_left_alone():
     assert link_tickers('<a href="x">NVDA</a> and $AMD') == f'<a href="x">NVDA</a> and {a("AMD", "AMD")}'
     assert link_tickers("<pre>$NVDA 12.3</pre> $AMD").startswith("<pre>$NVDA 12.3</pre> <a ")
