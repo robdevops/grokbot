@@ -77,6 +77,9 @@ async def test_digest_links_held_codes_however_the_model_writes_them(env, store)
 def test_known_symbols_and_listed_codes_give_yahoo_symbols():
     held = {"NXT (ASX)": "NextDC", "NVDA (NASDAQ)": "Nvidia", "X (MOON)": "x"}
     assert holding_news.known_symbols(held) == {"NXT": "NXT.AX", "NVDA": "NVDA", "X": "X"}
+    hk = {"700 (HKG)": "Tencent"}
+    news = holding_news.link_tickers("• Tencent (700): profit up; 1,700 staff", known=holding_news.known_symbols(hk))
+    assert news.count("quote/0700.HK") == 1 and holding_news.news_codes(news, hk) == ["700"]  # not "1,700"
     assert movers.listed_codes("<b>≥ 5.0% at close (ASX):</b>\nDRO +12.1%\nNXT +5.5%") == {"DRO": "DRO.AX", "NXT": "NXT.AX"}
     assert movers.listed_codes("<b>≤ -5% at close (NASDAQ, NYSE):</b>\nNVDA -6.1%") == {"NVDA": "NVDA"}
     assert movers.listed_codes("<b>≥ 5% at close (ASX, NYSE):</b>\nBHP +6%") == {}  # which exchange? no guess

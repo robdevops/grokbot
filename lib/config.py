@@ -63,6 +63,7 @@ INDEX_LISTS = (
     ("NASDAQ-100", "https://en.wikipedia.org/wiki/Nasdaq-100", 90, 110),
 )
 KNOWN_TICKERS_REFRESH = 24 * 3600  # seconds between refreshes of the indexes and the US holdings
+KNOWN_TICKERS_RETRY = 30 * 60  # seconds before a failed part (a page down, Sharesight not up yet) is tried again
 KNOWN_TICKERS_START_DELAY = 60  # seconds after startup before a due refresh, so the MCP servers are up
 SOURCES_MAX = 3  # links to a search result the model is handed back as text (OpenRouter run_search)
 MAX_TG_MESSAGE = 4000  # Telegram's limit is 4096

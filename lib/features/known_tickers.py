@@ -65,7 +65,7 @@ def symbols_from_html(page: str) -> list[str]:
         rows = [["".join(cell).strip() for cell in row] for row in table["rows"]]
         if not rows:
             continue
-        header = [h.lower() for h in rows[0]]
+        header = [re.sub(r"\[.*?\]", "", h).strip().lower() for h in rows[0]]  # "Ticker[12]": a footnote
         col = next((i for i, h in enumerate(header) if h in ("symbol", "ticker", "ticker symbol")), None)
         if col is None:
             continue
@@ -105,9 +105,10 @@ async def us_holdings(ctx: Ctx) -> list[str] | None:
 
 
 def apply(saved: dict) -> None:
-    """Make the saved lists the ones replies link."""
+    """Make the saved lists the ones replies link. Yahoo writes share classes BRK-B; the model may write BRK.B."""
     codes = {c for name, _, _, _ in config.INDEX_LISTS for c in saved.get("indexes", {}).get(name, [])}
-    tickers.set_known({c: c for c in codes | set(saved.get("held", []))})
+    codes |= {c.replace(".", "-") for c in saved.get("held", [])}
+    tickers.set_known({**{c: c for c in codes}, **{c.replace("-", "."): c for c in codes if "-" in c}})
 
 
 def load(ctx: Ctx) -> dict:
@@ -121,14 +122,20 @@ def load(ctx: Ctx) -> dict:
 
 
 async def refresh(ctx: Ctx, saved: dict, client: httpx.AsyncClient) -> dict:
-    """Fetch the indexes and the holdings; a part that fails keeps its last list."""
-    indexes = dict(saved.get("indexes", {}))
+    """Fetch the indexes and the holdings; a part that fails keeps its last list and is tried again sooner
+    (KNOWN_TICKERS_RETRY) than the daily refresh."""
+    indexes, failed = dict(saved.get("indexes", {})), False
     for name, url, low, high in config.INDEX_LISTS:
         found = await fetch_index(client, name, url, low, high)
-        if found is not None:
+        if found is None:
+            failed = True
+        else:
             indexes[name] = found
     held = await us_holdings(ctx)
-    new = {"indexes": indexes, "held": saved.get("held", []) if held is None else held, "ts": int(time.time())}
+    failed |= held is None and bool(ctx.st.portfolio_names) and any(
+        s.cfg.get("gate") == "portfolio" for s in ctx.registry.servers.values())
+    ts = int(time.time()) - (config.KNOWN_TICKERS_REFRESH - config.KNOWN_TICKERS_RETRY if failed else 0)
+    new = {"indexes": indexes, "held": saved.get("held", []) if held is None else held, "ts": ts}
     await asyncio.to_thread(ctx.store.kv_set, KV_KEY, json.dumps(new))
     apply(new)
     log.info("Known tickers: %s, %d held, %d in all", ", ".join(f"{len(v)} {k}" for k, v in indexes.items()) or
@@ -147,4 +154,4 @@ async def loop(ctx: Ctx) -> None:
                 saved = await refresh(ctx, saved, client)
             except Exception:
                 log.exception("Known tickers: refresh failed")
-                saved = {**saved, "ts": int(time.time())}  # try again tomorrow, not in a tight loop
+                saved = {**saved, "ts": int(time.time()) - config.KNOWN_TICKERS_REFRESH + config.KNOWN_TICKERS_RETRY}

@@ -18,8 +18,13 @@ NOT_TICKERS = {
     "WSJ", "NZD", "CAD", "CHF",
 }
 
-# Index tickers that are everyday words in capitals ("IT spending", "ALL in"): linked only as $IT or Name (IT).
-WORD_TICKERS = {"IT", "ALL", "ON", "NOW", "KEY", "LOW", "ARE", "DAY", "HAS", "WELL", "BALL", "FAST", "CAT", "AMP"}
+# Index tickers that are also everyday words or acronyms in capitals ("IT spending", "GM expanded 200bp", "UPS demand",
+# "HD maps"): never linked bare, only as $GM, NYSE:GM or General Motors (GM). A fixed set: the indexes don't grow.
+WORD_TICKERS = {
+    "IT", "ALL", "ON", "NOW", "KEY", "LOW", "ARE", "DAY", "HAS", "WELL", "BALL", "FAST", "CAT", "AMP", "SO", "ED",
+    "GM", "UPS", "IP", "IR", "ICE", "PTC", "RF", "RL", "USB", "HD", "TECH", "EA", "CE", "MAR", "DD", "CF", "MS",
+    "FANG", "MSCI", "COST", "BR", "GE", "HP", "PH", "TT", "CTA",
+}
 
 # An exchange as the model, the press or Sharesight writes it ("ASX:NXT", "NXT (ASX)") -> Yahoo's suffix ("" = US,
 # none). TSE is Toronto for letters and Tokyo for numbers (tickers.yahoo_symbol); HK numbers are padded to 4 digits.

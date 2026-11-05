@@ -78,10 +78,10 @@ def _alt(words) -> str:
 _CODE = r"(?:[A-Z][A-Z0-9]{0,5}(?:-[A-Z]{1,2})?|\d{3,6})"
 _PREFIX = _alt(EXCHANGE_PREFIXES)
 _SUFFIX = _alt(EXCHANGE_SUFFIXES)
-_WORD = r"[A-Z0-9][\w&'’-]*(?:\.[\w&'’-]+)*"
+_WORD = r"[A-Z0-9](?:&amp;|[\w&'’-])*(?:\.(?:&amp;|[\w&'’-])+)*"  # AT&amp;T, S&amp;P
 _MARKERS = (
     # "Micron (MU)", "NextDC (ASX:NXT)", "DUG Tech (DUG.AX)", "NXT (ASX)": up to four capitalised words, then a paren
-    rf"(?<![\w&'’.-])(?P<name>(?:{_WORD}[ ]){{0,3}}{_WORD})[ ]\((?P<paren>[A-Z0-9][A-Z0-9.:-]*(?:[ ][A-Z0-9.-]+)?)\)"
+    rf"(?<![\w&'’.;-])(?P<name>(?:(?:{_WORD}|&amp;)[ ]){{0,3}}{_WORD})[ ]\((?P<paren>[A-Z0-9][A-Z0-9.:-]*(?:[ ][A-Z0-9.-]+)?)\)"
     rf"|(?<![\w$.^:-])(?:(?P<exch>{_PREFIX}):[ ]?(?P<ecode>{_CODE})"  # ASX:NXT, NASDAQ: NVDA
     r"|\$(?P<cash>[A-Z][A-Z0-9]{1,5}(?:[.-][A-Z]{1,2}){0,2})"  # $NVDA, $SQX.AX, $BRK-B (never $A, $600, $1.2B)
     rf"|(?P<suff>(?:[A-Z][A-Z0-9]{{1,5}}|\d{{3,6}})(?:-[A-Z]{{1,2}})?\.(?:{_SUFFIX}))"  # NXT.AX, 9988.HK, RCI-B.TO
@@ -111,27 +111,31 @@ def _paren(paren: str, known: Mapping[str, str]) -> str | None:
     if base and suffix in EXCHANGE_SUFFIXES and re.fullmatch(_CODE, base) and _code_ok(base):
         return paren
     # A bare code says nothing about its exchange ("Goodman Group (GMG)" is GMG.AX), so only a known one is linked.
-    return known.get(paren)
+    return known.get(paren) or known.get(paren.replace(".", "-"))
 
 
 def _code_ok(base: str) -> bool:
-    """A code before an exchange suffix: numbers are fine (9988.HK), FY2026 and Q3 are not."""
-    return base.isdigit() or not (NOT_TICKER_RE.match(base) or base in NOT_TICKERS)
+    """A code before an exchange suffix: the suffix settles it (ALL.AX is Aristocrat), but FY2026 and Q3 are not codes."""
+    return base.isdigit() or not NOT_TICKER_RE.match(base)
 
 
-def _wrap(m: re.Match, bold: bool, known: Mapping[str, str]) -> str:
+def _wrap(m: re.Match, bold: bool, known: Mapping[str, str], pattern: re.Pattern) -> str:
     if m.group("name"):
         name, paren = m.group("name"), m.group("paren")
         words = name.split(" ")
+
+        def plain() -> str:  # not a ticker in brackets ("NVDA (Q3 FY26)"): the words before it may still hold one
+            return pattern.sub(lambda m2: _wrap(m2, bold, known, pattern), name) + m.group(0)[len(name):]
+
         if paren in EXCHANGE_PREFIXES:  # Sharesight's "NXT (ASX)": link the code, keep the exchange as text
             code = words[-1]
             symbol = yahoo_symbol(code, paren) if re.fullmatch(_CODE, code) else None
             if symbol is None or (not code.isdigit() and not is_ticker(code) and code not in known):
-                return m.group(0)
+                return plain()
             return " ".join(words[:-1] + [_link(symbol, code)]) + f" ({paren})"
         symbol = _paren(paren, known)
         if symbol is None:
-            return m.group(0)
+            return plain()
         label = paren.partition(":")[2].strip() or ticker_label(paren)
         skip = 0
         while skip < len(words) - 1 and words[skip] in SENTENCE_OPENERS:
@@ -145,10 +149,13 @@ def _wrap(m: re.Match, bold: bool, known: Mapping[str, str]) -> str:
         return _link(symbol, code) if symbol else m.group(0)
     if m.group("cash"):
         code = m.group("cash")
-        base = re.split(r"[.-]", code)[0]
-        if code not in known and not is_ticker(base):
+        base, _, suffix = code.rpartition(".")
+        if suffix in EXCHANGE_SUFFIXES and base:
+            return _link(code, ticker_label(code)) if _code_ok(base) else m.group(0)  # $ALL.AX
+        symbol = known.get(code) or known.get(code.replace(".", "-"))
+        if symbol is None and not is_ticker(re.split(r"[.-]", code)[0]):
             return m.group(0)  # $AUD, $US
-        return _link(known.get(code, code), ticker_label(code))
+        return _link(symbol or code.replace(".", "-"), code)
     if m.group("suff"):
         code = m.group("suff")
         base = code.rsplit(".", 1)[0]
@@ -203,5 +210,6 @@ def link_tickers(text: str, known: Mapping[str, str] | None = None) -> str:
     "Name (TICKER)" unless it is already bold. Any other capitalised word stays plain, so acronyms are never linked.
     Tags and anything inside <a>, <code> or <pre> are left alone, so a link the model wrote is never doubled."""
     codes = {**KNOWN, **(known or {})}
-    pattern = _link_re(frozenset(c for c in codes if len(c) > 1 and c not in NOT_TICKERS | WORD_TICKERS))
-    return _rewrite(number_links(text), lambda seg, bold: pattern.sub(lambda m: _wrap(m, bold, codes), seg))
+    bare = frozenset(c for c in codes if len(c) > 1 and not c.isdigit() and c not in NOT_TICKERS | WORD_TICKERS)
+    pattern = _link_re(bare)
+    return _rewrite(number_links(text), lambda seg, bold: pattern.sub(lambda m: _wrap(m, bold, codes, pattern), seg))

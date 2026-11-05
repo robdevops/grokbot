@@ -52,12 +52,18 @@ def known_symbols(holdings: dict[str, str]) -> dict[str, str]:
 
 
 def news_codes(news: str, holdings: dict[str, str]) -> list[str]:
-    """Holding codes that appear as bold tickers or Yahoo links in a news message."""
-    held = {k.split(" ")[0].upper() for k in holdings}
+    """Holding codes that appear as bold tickers or Yahoo links in a news message (as the holdings write them: an HK
+    holding "700" is linked as 0700.HK)."""
+    held = {_plain_code(k.split(" ")[0]): k.split(" ")[0].upper() for k in holdings}
     found = {m.upper() for m in re.findall(r"<b>([^<]{1,12})</b>", news)}
     found |= {m.split(".")[0].upper()
               for m in re.findall(r"finance\.yahoo\.com/quote/([\w.\-^]+)", news)}
-    return sorted(held & found)
+    return sorted({held[c] for c in map(_plain_code, found) if c in held})
+
+
+def _plain_code(code: str) -> str:
+    code = code.upper()
+    return code.lstrip("0") or "0" if code.isdigit() else code
 
 
 def unsubscribe_menu(codes: list[str]) -> InlineKeyboardMarkup:

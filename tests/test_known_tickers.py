@@ -1,4 +1,5 @@
 import json
+import time
 
 import httpx
 
@@ -20,6 +21,8 @@ def test_the_ticker_column_is_read_and_share_classes_use_a_hyphen():
     assert kt.symbols_from_html(page(["NVDA", "BRK.B", "bad one", "GOOGL"])) == ["NVDA", "BRK-B", "GOOGL"]
     assert kt.symbols_from_html(page(["AAPL"], table_id="", header="Ticker")) == ["AAPL"]  # no id: by its header
     assert kt.symbols_from_html("<table><tr><th>Name</th></tr><tr><td>x</td></tr></table>") == []
+    footnote = "<table id='constituents'><tr><th>Ticker<sup>[12]</sup></th></tr><tr><td>MSFT</td></tr></table>"
+    assert kt.symbols_from_html(footnote) == ["MSFT"]
 
 
 class Sharesight(FakeMcp):
@@ -46,10 +49,13 @@ async def test_refresh_merges_the_indexes_and_the_us_holdings_and_keeps_a_list_t
     try:
         saved = await kt.refresh(ctx, {}, client({sp_url: page(["NVDA", "BRK.B"]), ndx_url: page(["NVDA", "AMD"])}))
         assert saved["indexes"] == {sp: ["NVDA", "BRK-B"], ndx: ["NVDA", "AMD"]} and saved["held"] == ["GM", "ZZZ"]
-        assert set(tickers.KNOWN) == {"NVDA", "BRK-B", "AMD", "GM", "ZZZ"}  # NXT is ASX: not a bare US code
+        assert set(tickers.KNOWN) == {"NVDA", "BRK-B", "BRK.B", "AMD", "GM", "ZZZ"}  # NXT is ASX: not a bare US code
+        assert tickers.KNOWN["BRK.B"] == "BRK-B" and saved["ts"] > time.time() - 5  # all parts worked: due tomorrow
         # the next day the S&P page is down and the NASDAQ page looks wrong: both keep yesterday's list
         again = await kt.refresh(ctx, saved, client({ndx_url: page(["ONLY"])}))
         assert again["indexes"] == saved["indexes"]
+        due = again["ts"] + config.KNOWN_TICKERS_REFRESH - time.time()
+        assert due <= config.KNOWN_TICKERS_RETRY + 5  # a part failed: tried again in half an hour, not a day
         tickers.set_known({})
         assert kt.load(ctx) == again and "BRK-B" in tickers.KNOWN  # a restart has them from the kv table at once
     finally:

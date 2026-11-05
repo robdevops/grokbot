@@ -80,15 +80,41 @@ def test_sharesight_code_and_market_links_the_code_and_keeps_the_exchange():
 
 
 def test_known_tickers_link_bare_but_not_single_letters_or_everyday_words():
-    known = {"NVDA": "NVDA", "GM": "GM", "IT": "IT", "A": "A", "ALL": "ALL"}
-    out = link_tickers("NVDA up, GM too; IT spending, A big move, ALL in", known)
-    assert out == f"{a('NVDA', 'NVDA')} up, {a('GM', 'GM')} too; IT spending, A big move, ALL in"
+    known = {"NVDA": "NVDA", "AMD": "AMD", "GM": "GM", "IT": "IT", "A": "A", "ALL": "ALL", "700": "0700.HK"}
+    out = link_tickers("NVDA up, AMD too; GM expanded, IT spending, A big move, ALL in, 1,700 staff", known)
+    assert out == f"{a('NVDA', 'NVDA')} up, {a('AMD', 'AMD')} too; GM expanded, IT spending, A big move, ALL in, 1,700 staff"
+    assert link_tickers("General Motors (GM) and $GM", known) == f"<b>General Motors ({a('GM', 'GM')})</b> and {a('GM', 'GM')}"
     before = dict(tickers.KNOWN)
     try:
         tickers.set_known({"NVDA": "NVDA"})
         assert link_tickers("NVDA and AMD") == f"{a('NVDA', 'NVDA')} and AMD"  # the daily list, with no `known` passed
     finally:
         tickers.set_known(before)
+
+
+def test_an_exchange_suffix_links_even_a_code_that_is_also_a_word():
+    assert link_tickers("Aristocrat (ALL.AX) rose") == f"<b>Aristocrat ({a('ALL.AX', 'ALL')})</b> rose"
+    assert link_tickers("ASX.AX, $ALL.AX and AI.PA") == f"{a('ASX.AX', 'ASX')}, {a('ALL.AX', 'ALL')} and {a('AI.PA', 'AI')}"
+    assert link_tickers("ALL in, $FY26.AX") == "ALL in, $FY26.AX"
+
+
+def test_a_bracket_that_is_not_a_ticker_leaves_the_words_before_it_linkable():
+    known = {"NVDA": "NVDA"}
+    assert link_tickers("NVDA (Q3 FY26) revenue", known) == f"{a('NVDA', 'NVDA')} (Q3 FY26) revenue"
+    assert link_tickers("NXT.AX (FY26) guidance") == f"{a('NXT.AX', 'NXT')} (FY26) guidance"
+
+
+def test_share_classes_written_with_a_dot_link_to_yahoos_hyphen():
+    known = {"BRK-B": "BRK-B", "BRK.B": "BRK-B"}
+    assert link_tickers("Berkshire Hathaway (BRK.B) rose", known) == f"<b>Berkshire Hathaway ({a('BRK-B', 'BRK.B')})</b> rose"
+    assert link_tickers("$BRK.B and BRK.B", known) == f"{a('BRK-B', 'BRK.B')} and {a('BRK-B', 'BRK.B')}"
+
+
+def test_names_with_an_escaped_ampersand_are_bolded_whole():
+    known = {"T": "T", "PG": "PG", "SPGI": "SPGI"}
+    assert link_tickers("AT&amp;T (T) rose", known) == f"<b>AT&amp;T ({a('T', 'T')})</b> rose"
+    assert link_tickers("Procter &amp; Gamble (PG)", known) == f"<b>Procter &amp; Gamble ({a('PG', 'PG')})</b>"
+    assert link_tickers("S&amp;P Global (SPGI)", known) == f"<b>S&amp;P Global ({a('SPGI', 'SPGI')})</b>"
 
 
 def test_protected_markup_is_left_alone():

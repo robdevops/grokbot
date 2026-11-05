@@ -110,8 +110,10 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
   `NXT (ASX)`, `^GSPC` and `BTC-USD`. The system prompt asks the model for these forms. A bare word is linked only
   when it is a known ticker: the S&P 500 and NASDAQ-100 constituents (read from their Wikipedia pages) and the US
   Sharesight holdings, refreshed once a day in the background and kept in the database, so a reply never waits for
-  them. Any other capitalised word stays plain (`GAAP`, `EBITDA`, `AFR`, `M3`), so there is no stoplist to maintain;
-  single letters and index tickers that are everyday words (`IT`, `ALL`, `NOW`) need `$` or `Name (TICKER)`. A bare
+  them. Any other capitalised word stays plain (`GAAP`, `EBITDA`, `AFR`, `M3`), so there is no stoplist to maintain. An
+  exchange suffix settles it on its own (`ALL.AX` is Aristocrat);
+  single letters and index tickers that are also everyday words or acronyms (`IT`, `ALL`, `GM`, `UPS`, `HD`) need `$`,
+  an exchange prefix or `Name (TICKER)`. A part of the refresh that fails is tried again in half an hour. A bare
   code in brackets names no exchange, so `Goodman Group (GMG)` is linked only if `GMG` is known (it is `GMG.AX`).
   A holding-news digest also links the holdings' own codes, and a movers explanation the listed codes with the list's
   exchange. The visible text drops `$`, the exchange prefix and the suffix (`NXT.AX` shows as `NXT`; `BRK.B` and
