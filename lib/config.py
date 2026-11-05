@@ -29,7 +29,6 @@ ENV_VARS: dict[str, str] = {
     "HISTORY_MAX": "At most this many messages of chat history in the prompt (default 10); the window's start moves every half of it, so the prompt cache keeps working.",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
-    "NOT_TICKERS": "Extra capitalised words (comma/space separated) that must not be linked as stock tickers, e.g. GAAP GM; added to the built-in list.",
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
     "PERIOD_BACKFILL": "Comma list of Sharesight portfolio names (or all) whose daily/weekly/monthly/quarterly/yearly returns are fetched into the local cache in the background, so period questions answer instantly. Default all; list names to limit it, or off to disable.",
     "POST_TO_GROUPS_FROM_DM": "on|off. Lets an admin of a group the bot is in make it post there from a DM (default off).",
@@ -57,6 +56,14 @@ SEARCH_ENGINE = "auto"
 SEARCH_RESULTS = 20
 SEARCH_TOKENS = 400  # cap on each search write-up (OpenRouter search runner)
 MAX_SEARCHES = 5  # search calls run per round
+# Index constituents linked bare in replies (features/known_tickers.py): (name, Wikipedia page, fewest and most rows
+# that look right). Fetched in the background once a day, never while answering.
+INDEX_LISTS = (
+    ("S&P 500", "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", 450, 550),
+    ("NASDAQ-100", "https://en.wikipedia.org/wiki/Nasdaq-100", 90, 110),
+)
+KNOWN_TICKERS_REFRESH = 24 * 3600  # seconds between refreshes of the indexes and the US holdings
+KNOWN_TICKERS_START_DELAY = 60  # seconds after startup before a due refresh, so the MCP servers are up
 SOURCES_MAX = 3  # links to a search result the model is handed back as text (OpenRouter run_search)
 MAX_TG_MESSAGE = 4000  # Telegram's limit is 4096
 HOLDING_NEWS_RETRY_EVERY = 30 * 60  # seconds between retries of a holding-news check the provider was too busy for
@@ -90,7 +97,6 @@ class Settings:
     holding_news_time: str
     holding_news_recipients: dict[str, str]
     portfolio_names: frozenset[str]
-    not_tickers: frozenset[str]  # extra words never linked as tickers
     period_backfill: frozenset[str]
 
     @property
@@ -206,6 +212,5 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
         holding_news_recipients=recipients,
         portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),
-        not_tickers=frozenset(w.upper() for w in env.get("NOT_TICKERS", "").replace(",", " ").split()),
         period_backfill=_backfill(env.get("PERIOD_BACKFILL", "all")),
     )

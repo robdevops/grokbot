@@ -32,9 +32,9 @@ from telegram.ext import (
     filters,
 )
 
-from . import config, tickers
+from . import config
 from .context import Ctx
-from .features import chat_commands, dm_buttons, holding_news, post
+from .features import chat_commands, dm_buttons, holding_news, known_tickers, post
 from .features.charts import buttons as chart_buttons
 from .features.charts import pages as chart_pages
 from .features.periods import backfill
@@ -163,7 +163,6 @@ async def register_menu(ctx: Ctx) -> None:
 
 def build_ctx(st: config.Settings) -> Ctx:
     ctx = Ctx(st, Store(st.db_path), build_backend(st), Registry([]))
-    tickers.exclude(st.not_tickers)
 
     async def on_down(server: MCPServer) -> None:
         await alert_down(ctx, server)
@@ -185,6 +184,7 @@ def build_app(ctx: Ctx) -> Application:
         await register_menu(ctx)
         ctx.registry.start()  # connects in the background; requests see whichever servers are up
         background.append(asyncio.create_task(log_tool_size(ctx)))
+        background.append(asyncio.create_task(known_tickers.loop(ctx)))
         if st.holding_news:
             background.append(asyncio.create_task(holding_news.daily_loop(ctx)))
         if st.dm_buttons:

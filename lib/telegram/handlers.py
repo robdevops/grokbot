@@ -368,6 +368,7 @@ class Handlers:
         preset = dm_buttons.preset_for(trig.text) if trig.private and st.dm_buttons else None
         on_text = draft.update if draft else None
         chat_id = msg.chat_id
+        known = None
         if preset:  # a standalone request: no transcript, which would only add tokens
             prompt = PRESET_PROMPT.format(sender=sender_name(msg), label=trig.text.strip(), ask=preset,
                                           now=ctx.now(), what=ctx.backend.search_what)
@@ -377,6 +378,7 @@ class Handlers:
                                kind="preset", chat_id=chat_id)
         elif trig.movers:
             listing = msg.text_html if msg.text else (msg.caption_html or "")
+            known = movers.listed_codes(listing)
             text = await self._chat_text(msg, trig, MOVERS_EXPLAIN.format(listing=listing), no_history=True)
             parts = [{"type": "text", "text": text}]
             answer = await ask(ctx, parts, route("", st, ctx.registry, force_full=True),
@@ -413,13 +415,15 @@ class Handlers:
             answer = await ask(ctx, parts, chosen,
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,
                                admin=admin)
-        return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers)
+        return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers, known=known)
 
 
-def format_answer(text: str, *, movers_bots: frozenset[str], summary: bool) -> str:
+def format_answer(text: str, *, movers_bots: frozenset[str], summary: bool,
+                  known: dict[str, str] | None = None) -> str:
     """The model's text as Telegram HTML: Markdown fallback, no disclaimer, no tags of movers
-    bots, Yahoo links on tickers (and, for a movers list, no closing wrap-up paragraph)."""
-    out = link_tickers(movers.untag(md_to_html(strip_disclaimer(text)), movers_bots))
+    bots, Yahoo links on tickers (`known`: codes to link bare as well, such as a movers list's;
+    and, for a movers list, no closing wrap-up paragraph)."""
+    out = link_tickers(movers.untag(md_to_html(strip_disclaimer(text)), movers_bots), known)
     if summary:
         out = movers.strip_summary(out)
     return out or NO_RESPONSE

@@ -1,54 +1,101 @@
-from lib.tickers import link_tickers, ticker_label, yahoo_url
+from lib import tickers
+from lib.tickers import link_tickers, ticker_label, yahoo_symbol, yahoo_url
+
+Y = "https://finance.yahoo.com/quote/"
 
 
-def test_link_only_no_bold():
-    out = link_tickers("NVDA up 3%")
-    assert out == '<a href="https://finance.yahoo.com/quote/NVDA">NVDA</a> up 3%'
-    assert "<b>" not in out
+def a(symbol, label):
+    return f'<a href="{Y}{symbol}">{label}</a>'
 
 
-def test_label_hides_suffix_url_keeps_it():
-    out = link_tickers("SQX.AX and BRK.B and 9988.HK")
-    assert '<a href="https://finance.yahoo.com/quote/SQX.AX">SQX</a>' in out
-    assert '<a href="https://finance.yahoo.com/quote/BRK.B">BRK.B</a>' in out
-    assert '<a href="https://finance.yahoo.com/quote/9988.HK">9988</a>' in out
+def test_bare_words_are_never_linked_so_acronyms_need_no_stoplist():
+    for text in ("non-GAAP EBITDA; AFR says GM, UPS, M3, VWAP, XJO, AT&amp;T, S&amp;P 500", "NVDA up 3%",
+                 "AI and CEO, Q3 FY26", "F 5.2 today and vitamin C", "BTC and LINK bare", "I.T. staff in the U.S.",
+                 "FY2026.T and Q3.AX", "NXT:ASX and NXT.ASX"):
+        assert link_tickers(text) == text
+
+
+def test_dollar_amounts_and_currencies_are_not_cashtags():
+    for text in ("$600, $12.AX, $30.5T, US$1.2T, $A1.2bn and $US2bn", "the $A fell; $AUD and $US weak"):
+        assert link_tickers(text) == text
+
+
+def test_cashtags_link_without_the_dollar_or_bold():
+    assert link_tickers("$NVDA up 3%") == f"{a('NVDA', 'NVDA')} up 3%"
+    assert link_tickers("$SQX.AX and $BRK-B") == f"{a('SQX.AX', 'SQX')} and {a('BRK-B', 'BRK-B')}"
+    assert link_tickers("$BTC rallied") == f"{a('BTC-USD', 'BTC')} rallied" and yahoo_url("BTC").endswith("BTC-USD")
+
+
+def test_exchange_suffix_links_with_the_suffix_hidden():
+    out = link_tickers("SQX.AX and BRK.B and 9988.HK and 000660.KS")
+    assert out == f"{a('SQX.AX', 'SQX')} and BRK.B and {a('9988.HK', '9988')} and {a('000660.KS', '000660')}"
+    assert link_tickers("RCI-B.TO") == a("RCI-B.TO", "RCI-B")
     assert ticker_label("BRK.B") == "BRK.B" and ticker_label("SQX.AX") == "SQX"
 
 
-def test_crypto_gets_usd_in_url_only():
-    assert yahoo_url("BTC").endswith("BTC-USD")
-    assert '>BTC</a>' in link_tickers("BTC rallied")
+def test_exchange_prefix_maps_to_the_yahoo_suffix():
+    assert link_tickers("up on ASX:NXT.") == f"up on {a('NXT.AX', 'NXT')}."
+    assert link_tickers("(ASX: NXT)") == f"({a('NXT.AX', 'NXT')})"
+    assert link_tickers("NASDAQ: NVDA, LON:BP, NYSE:F") == f"{a('NVDA', 'NVDA')}, {a('BP.L', 'BP')}, {a('F', 'F')}"
+    assert link_tickers("TSE:7203 TSE:SHOP HKG:700") == f"{a('7203.T', '7203')} {a('SHOP.TO', 'SHOP')} {a('0700.HK', '700')}"
+    assert yahoo_symbol("NXT", "asx") == "NXT.AX" and yahoo_symbol("NVDA", "NASDAQ") == "NVDA"
+    assert yahoo_symbol("X", "MOON") is None
+
+
+def test_indices_and_crypto_pairs():
+    assert link_tickers("^GSPC and BTC-USD") == f"{a('%5EGSPC', '^GSPC')} and {a('BTC-USD', 'BTC')}"
+
+
+def test_name_and_ticker_are_bolded_together():
+    known = {"MU": "MU", "TTD": "TTD", "F": "F"}
+    out = link_tickers("• Micron (MU) +3.1%\n1. Trade Desk (TTD) -5%", known)
+    assert f"• <b>Micron ({a('MU', 'MU')})</b> +3.1%" in out and f"1. <b>Trade Desk ({a('TTD', 'TTD')})</b> -5%" in out
+    assert link_tickers("DUG Tech (DUG.AX) fell") == f"<b>DUG Tech ({a('DUG.AX', 'DUG')})</b> fell"
+    assert link_tickers("NextDC (ASX:NXT) +5%") == f"<b>NextDC ({a('NXT.AX', 'NXT')})</b> +5%"
+    assert link_tickers("Nvidia (NASDAQ: NVDA)") == f"<b>Nvidia ({a('NVDA', 'NVDA')})</b>"
+    assert link_tickers("SK Hynix (000660.KS)") == f"<b>SK Hynix ({a('000660.KS', '000660')})</b>"
+    assert link_tickers("Ford (F) fell", known) == f"<b>Ford ({a('F', 'F')})</b> fell"
+
+
+def test_a_bare_code_in_brackets_links_only_when_known_since_it_names_no_exchange():
+    text = "Goodman Group (GMG) and Digital Realty (DLR)"
+    assert link_tickers(text) == text  # GMG is GMG.AX: a US link would be wrong
+    assert link_tickers(text, {"DLR": "DLR"}) == f"Goodman Group (GMG) and <b>Digital Realty ({a('DLR', 'DLR')})</b>"
+    for text in ("the Fed (RBA) held and vitamin C (CEO)", "Australian Financial Review (AFR) reports"):
+        assert link_tickers(text, {"MU": "MU"}) == text
+
+
+def test_bolding_leaves_sentence_openers_and_existing_bold_alone():
+    known = {"MU": "MU", "NVDA": "NVDA"}
+    assert link_tickers("Today Micron (MU) ripped", known).startswith("Today <b>Micron (")
+    assert link_tickers("<b>Micron (MU)</b> up", known) == f"<b>Micron ({a('MU', 'MU')})</b> up"
+    assert link_tickers("<code>Micron (MU)</code>", known) == "<code>Micron (MU)</code>"
+    assert link_tickers("Micron (MU)\nNvidia (NVDA)", known).count("<b>") == 2  # a line break ends a name
+
+
+def test_sharesight_code_and_market_links_the_code_and_keeps_the_exchange():
+    assert link_tickers("• NVDA (NASDAQ): beat") == f"• {a('NVDA', 'NVDA')} (NASDAQ): beat"
+    assert link_tickers("• NXT (ASX): halt") == f"• {a('NXT.AX', 'NXT')} (ASX): halt"
+    assert link_tickers("Nvidia (NASDAQ) fell") == "Nvidia (NASDAQ) fell"
+
+
+def test_known_tickers_link_bare_but_not_single_letters_or_everyday_words():
+    known = {"NVDA": "NVDA", "GM": "GM", "IT": "IT", "A": "A", "ALL": "ALL"}
+    out = link_tickers("NVDA up, GM too; IT spending, A big move, ALL in", known)
+    assert out == f"{a('NVDA', 'NVDA')} up, {a('GM', 'GM')} too; IT spending, A big move, ALL in"
+    before = dict(tickers.KNOWN)
+    try:
+        tickers.set_known({"NVDA": "NVDA"})
+        assert link_tickers("NVDA and AMD") == f"{a('NVDA', 'NVDA')} and AMD"  # the daily list, with no `known` passed
+    finally:
+        tickers.set_known(before)
 
 
 def test_protected_markup_is_left_alone():
-    assert link_tickers('<a href="x">NVDA</a> and AI') == '<a href="x">NVDA</a> and AI'
-    assert link_tickers("<pre>NVDA 12.3</pre> AMD").startswith("<pre>NVDA 12.3</pre> <a ")
-    assert link_tickers("<code>NVDA</code>") == "<code>NVDA</code>"
-    # a ticker the model bolded still gets linked (inside the bold)
-    assert link_tickers("<b>AMD</b>").startswith("<b><a ")
-
-
-def test_stoplist_and_one_letter():
-    assert link_tickers("AI and CEO, Q3 FY26") == "AI and CEO, Q3 FY26"
-    assert 'quote/F"' in link_tickers("F 5.2 today")
-    assert link_tickers("vitamin C helps") == "vitamin C helps"
-
-
-def test_company_name_and_ticker_are_bolded_together():
-    out = link_tickers("• Micron (MU) +3.1%\n1. Trade Desk (TTD) -5%")
-    assert '• <b>Micron (<a href="https://finance.yahoo.com/quote/MU">MU</a>)</b> +3.1%' in out
-    assert '1. <b>Trade Desk (<a href="https://finance.yahoo.com/quote/TTD">TTD</a>)</b> -5%' in out
-    ext = link_tickers("DUG Tech (DUG.AX) fell")
-    assert ext.startswith("<b>") and ">DUG</a>)</b> fell" in ext and 'quote/DUG.AX"' in ext
-
-
-def test_bolding_leaves_sentence_openers_existing_bold_and_non_tickers_alone():
-    assert link_tickers("Today Micron (MU) ripped").startswith("Today <b>Micron (")
-    assert link_tickers("<b>Micron (MU)</b> up").count("<b>") == 1
-    assert link_tickers("<b>Micron</b> (MU)").count("<b>") == 1
-    assert "<b>" not in link_tickers("the Fed (RBA) held and vitamin C (CEO)")
-    assert "<b>" not in link_tickers("<code>Micron (MU)</code>")
-    assert link_tickers("Micron (MU)\nNvidia (NVDA)").count("<b>") == 2  # a line break ends a name
+    assert link_tickers('<a href="x">NVDA</a> and $AMD') == f'<a href="x">NVDA</a> and {a("AMD", "AMD")}'
+    assert link_tickers("<pre>$NVDA 12.3</pre> $AMD").startswith("<pre>$NVDA 12.3</pre> <a ")
+    assert link_tickers("<code>$NVDA</code>") == "<code>$NVDA</code>"
+    assert link_tickers("<b>$AMD</b>") == f"<b>{a('AMD', 'AMD')}</b>"
 
 
 def test_raw_links_go_behind_citation_numbers():
@@ -70,18 +117,3 @@ def test_link_labelled_with_its_own_url_is_numbered_but_named_links_and_code_are
     assert link_tickers('<a href="https://y.com/p">https://y.com/p…</a> ok') == '<a href="https://y.com/p">[1]</a> ok'
     assert link_tickers('<a href="https://y.com/p">Reuters</a>') == '<a href="https://y.com/p">Reuters</a>'
     assert link_tickers("<code>https://x.com</code>") == "<code>https://x.com</code>"
-
-
-def test_not_tickers_setting_adds_words_that_are_never_linked(env):
-    from lib import config, tickers
-    st = config.load({**env, "NOT_TICKERS": "gaap, GM  ups"})
-    assert st.not_tickers == {"GAAP", "GM", "UPS"} and config.load(env).not_tickers == frozenset()
-    before = set(tickers.NOT_TICKERS)
-    try:
-        assert "GAAP</a>" in tickers.link_tickers("non-GAAP EPS at GM")
-        tickers.exclude(st.not_tickers)
-        out = tickers.link_tickers("non-GAAP EPS at GM, UPS and NVDA")
-        assert "GAAP" in out and ">GAAP<" not in out and ">GM<" not in out and ">UPS<" not in out and ">NVDA<" in out
-    finally:
-        tickers.NOT_TICKERS.clear()
-        tickers.NOT_TICKERS.update(before)

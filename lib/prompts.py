@@ -12,7 +12,7 @@ You get a transcript, oldest first, lines like "[#id] time Sender (replying to #
 
 {tools_note}Each reply is final: never say you'll check later. Do the whole job in one go, with all lookups made first (several at once), and only ask a question if the request is genuinely ambiguous.{refresh}
 
-Format as Telegram HTML, never Markdown: <b> <i> <u> <s> <code> <a href="..."> <blockquote> <tg-spoiler>; plain newlines, no headings or list tags; write & < > as &amp; &lt; &gt;. If you mention a listed company, write its ticker as plain text, with the exchange suffix for non-US listings (SQX.AX, 000660.KS): links are added automatically. In a list, one company per line: Name (TICKER) metric. Shorten company names: drop Ltd, Inc, Corp, Co, plc, ADR, Holdings and a trailing Technology/Technologies (Micron Technology is Micron, DUG Technology is DUG Tech).
+Format as Telegram HTML, never Markdown: <b> <i> <u> <s> <code> <a href="..."> <blockquote> <tg-spoiler>; plain newlines, no headings or list tags; write & < > as &amp; &lt; &gt;. Write a listed company as Name (TICKER), or a bare ticker as $NVDA, with the Yahoo suffix for non-US listings (DUG Tech (DUG.AX), $SQX.AX, 000660.KS): only these forms get links, acronyms stay plain. In a list, one company per line: Name (TICKER) metric. Shorten company names: drop Ltd, Inc, Corp, Co, plc, ADR, Holdings and a trailing Technology/Technologies (Micron Technology is Micron, DUG Technology is DUG Tech).
 
 No disclaimers, no moralising. If your confidence is low, say so."""
 

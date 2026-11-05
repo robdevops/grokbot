@@ -67,6 +67,22 @@ async def test_daily_digest_dms_news_with_links_and_records_it(env, store):
     assert ctx.backend.seen[0]["tools"] == [] and ctx.backend.seen[0]["search"] is True  # forced search only
 
 
+async def test_digest_links_held_codes_however_the_model_writes_them(env, store):
+    ctx = holding_ctx(env, store, [step("• Nvidia (NVDA): beat estimates\n• AMD fell, GAAP loss")])
+    text, codes = (await holding_news.run_holding_news(ctx))["bob_llama"]
+    assert '<b>Nvidia (<a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>)</b>' in text
+    assert 'quote/AMD"' in text and "quote/GAAP" not in text and codes == ["AMD", "NVDA"]
+
+
+def test_known_symbols_and_listed_codes_give_yahoo_symbols():
+    held = {"NXT (ASX)": "NextDC", "NVDA (NASDAQ)": "Nvidia", "X (MOON)": "x"}
+    assert holding_news.known_symbols(held) == {"NXT": "NXT.AX", "NVDA": "NVDA", "X": "X"}
+    assert movers.listed_codes("<b>≥ 5.0% at close (ASX):</b>\nDRO +12.1%\nNXT +5.5%") == {"DRO": "DRO.AX", "NXT": "NXT.AX"}
+    assert movers.listed_codes("<b>≤ -5% at close (NASDAQ, NYSE):</b>\nNVDA -6.1%") == {"NVDA": "NVDA"}
+    assert movers.listed_codes("<b>≥ 5% at close (ASX, NYSE):</b>\nBHP +6%") == {}  # which exchange? no guess
+    assert movers.listed_codes("<b>≥ 5% at close:</b>\nBHP +6%") == {}
+
+
 async def test_digest_says_nothing_when_nothing_and_respects_mutes(env, store):
     ctx = holding_ctx(env, store, [step("NOTHING")])
     assert (await holding_news.run_holding_news(ctx)) == {"bob_llama": None} and ctx.bot.sent == []

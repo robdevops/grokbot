@@ -26,13 +26,14 @@ async def run(h, msg, edited=False):
 
 
 async def test_group_mention_is_answered_with_linked_tickers_and_logged(env, store):
-    ctx, backend, h = make_ctx(env, store, [step("NVDA looks <b>strong</b>, SQX.AX too")])
+    ctx, backend, h = make_ctx(env, store, [step("$NVDA looks <b>strong</b>, SQX.AX too, GAAP not")])
     m = user_msg(ctx.bot, "@stockbot how is NVDA?")
     await run(h, m)
     assert len(m.replies) == 1
     text = m.replies[0]["text"]
     assert '<a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>' in text
     assert '<a href="https://finance.yahoo.com/quote/SQX.AX">SQX</a>' in text and "<b>NVDA" not in text
+    assert "quote/GAAP" not in text  # a bare acronym is never linked
     assert m.replies[0]["do_quote"] is True and m.replies[0]["disable_notification"] is True
     rows = store.history(-100, 20)
     assert [r.text for r in rows][0] == "@stockbot how is NVDA?" and len(rows) == 2
@@ -222,12 +223,15 @@ async def test_movers_list_off_by_default_then_answered_once_without_tagging(env
         assert len(m.replies) == expect
     assert backend.seen[0]["tools"] == [] and backend.seen[0]["search"] is True  # forced search only
     assert "Small caps" not in m.replies[0]["text"]  # closing wrap-up paragraph dropped
+    assert 'quote/NVDA.AX"' in m.replies[0]["text"]  # the list's "(ASX)" header gives the codes their suffix
 
 
 def test_format_answer():
-    out = format_answer("**NVDA** up, ping @finbotibot", movers_bots=frozenset({"finbotibot"}), summary=False)
+    out = format_answer("**$NVDA** up, ping @finbotibot", movers_bots=frozenset({"finbotibot"}), summary=False)
     assert "@finbotibot" not in out and "finbotibot" in out and 'quote/NVDA"' in out
     assert format_answer("", movers_bots=frozenset(), summary=False) == "(no response)"
+    assert "quote/" not in format_answer("NVDA up", movers_bots=frozenset(), summary=False)
+    assert 'quote/NVDA"' in format_answer("NVDA up", movers_bots=frozenset(), summary=False, known={"NVDA": "NVDA"})
 
 
 def test_mentions():

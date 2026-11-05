@@ -104,12 +104,19 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
 ## Formatting and ticker links
 - Replies are Telegram HTML. Markdown the model slips in (`**bold**`, links, backticks) is
   converted; trailing "not advice"/"NFA"/"DYOR" disclaimers are stripped.
-- **Yahoo Finance links:** the model writes plain tickers (with the exchange suffix for non-US
-  listings: `SQX.AX`, `000660.KS`) and the bot links each one to its Yahoo Finance page. The visible text drops the suffix (`SQX.AX` shows as `SQX`, `BRK.B` stays) while the URL
-  keeps it; crypto gets `-USD` in the URL (`BTC` -> `BTC-USD`). Words like CEO, ETF, FY26 and Q3 are
-  not linked, a lone letter only counts next to a price or move (`F 5.2`), and text already inside a
-  link, `<code>` or `<pre>` is left alone. A company name written as `Name (TICKER)` is bold,
-  name and ticker together (`Micron (MU)`), unless it is already bold.
+- **Yahoo Finance links:** only a ticker written in a marked form is linked to its Yahoo Finance page: `$NVDA`,
+  an exchange suffix (`NXT.AX`, `000660.KS`), an exchange prefix (`ASX:NXT`, `NASDAQ: NVDA`, mapped to Yahoo's suffix:
+  `ASX:NXT` -> `NXT.AX`), `Name (TICKER)` (bold, name and ticker together, unless already bold), Sharesight's
+  `NXT (ASX)`, `^GSPC` and `BTC-USD`. The system prompt asks the model for these forms. A bare word is linked only
+  when it is a known ticker: the S&P 500 and NASDAQ-100 constituents (read from their Wikipedia pages) and the US
+  Sharesight holdings, refreshed once a day in the background and kept in the database, so a reply never waits for
+  them. Any other capitalised word stays plain (`GAAP`, `EBITDA`, `AFR`, `M3`), so there is no stoplist to maintain;
+  single letters and index tickers that are everyday words (`IT`, `ALL`, `NOW`) need `$` or `Name (TICKER)`. A bare
+  code in brackets names no exchange, so `Goodman Group (GMG)` is linked only if `GMG` is known (it is `GMG.AX`).
+  A holding-news digest also links the holdings' own codes, and a movers explanation the listed codes with the list's
+  exchange. The visible text drops `$`, the exchange prefix and the suffix (`NXT.AX` shows as `NXT`; `BRK.B` and
+  number codes such as `9988` stay as they are) while the URL keeps it; crypto gets `-USD` in the URL. Text inside a
+  link, `<code>` or `<pre>` is left alone.
 - **Citations:** a raw link in a reply (a bare URL, or a link labelled with its own URL) becomes a
   numbered link, `[1]`, `[2]`, in order of appearance, the same URL keeping its number. Links with a
   real label, and anything in `<code>` or `<pre>`, are left alone.

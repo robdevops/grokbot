@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import html
-import json
 import logging
 import re
 from datetime import datetime, timedelta
@@ -18,14 +17,14 @@ from telegram.ext import ContextTypes
 from .. import config
 from ..ask import ask
 from ..context import Ctx
+from ..holdings import code_and_market, current_holdings
 from ..llm.base import BUSY_REPLY, is_busy
 from ..llm.gate import Route
-from ..mcp.results import table_records
 from ..prompts import HOLDING_NEWS_PROMPT
 from ..telegram.draft import Draft
 from ..telegram.send import send_html
 from ..textfmt import ANY_TAG_RE, md_to_html, split_html, strip_disclaimer
-from ..tickers import link_tickers
+from ..tickers import link_tickers, yahoo_symbol
 
 log = logging.getLogger("bot")
 UNSUBSCRIBE_BUTTON = InlineKeyboardMarkup([[InlineKeyboardButton("🔕 Unsubscribe…", callback_data="hn:menu")]])
@@ -44,6 +43,12 @@ def as_bullets(text: str) -> str:
     """One "• " bullet per non-empty line, whatever bullet style (if any) the model used."""
     lines = (re.sub(r"^\s*(?:[•\-*–·]|\d+[.)])\s+", "", ln).strip() for ln in text.splitlines())
     return "\n".join(f"• {ln}" for ln in lines if ln)
+
+
+def known_symbols(holdings: dict[str, str]) -> dict[str, str]:
+    """The holdings' codes as Yahoo symbols ({"NXT": "NXT.AX"}), so the digest links them however the model writes them."""
+    pairs = (code_and_market(key) for key in holdings)
+    return {code: yahoo_symbol(code, market) or code for code, market in pairs}
 
 
 def news_codes(news: str, holdings: dict[str, str]) -> list[str]:
@@ -68,25 +73,6 @@ def undo_button(code: str) -> InlineKeyboardMarkup:
         [[InlineKeyboardButton(f"↩️ Undo (unsubscribed from {what})", callback_data=f"hn:undo:{code}")]])
 
 
-async def current_holdings(server, portfolio_names: list[str]) -> dict[str, str]:
-    """Current holdings across the named portfolios, as {"CODE (MARKET)": name}."""
-    data = json.loads(await server.call("list_portfolios", {}))
-    portfolios = {p["name"].lower(): p for p in data.get("portfolios", [])}
-    holdings: dict[str, str] = {}
-    for name in portfolio_names:
-        p = portfolios.get(name)
-        if not p:
-            log.warning("Holding news: no Sharesight portfolio called %r (have: %s)",
-                        name, ", ".join(sorted(portfolios)))
-            continue
-        report = json.loads(await server.call(
-            "get_performance_report", {"portfolio_id": p["id"], "include_sales": False})).get("report") or {}
-        for h in table_records(report.get("holdings")):
-            if h.get("code"):
-                holdings[f"{h['code']} ({h.get('market', '?')})"] = h.get("name") or h["code"]
-    return holdings
-
-
 async def holding_news_text(ctx: Ctx, username: str, holdings: dict[str, str]) -> str | None:
     """Ask the model for major news about these holdings; None if there's nothing."""
     since = int((datetime.now() - timedelta(days=3)).timestamp())
@@ -101,7 +87,7 @@ async def holding_news_text(ctx: Ctx, username: str, holdings: dict[str, str]) -
     raw = strip_disclaimer(answer.text)
     if is_nothing(raw):
         return None
-    return link_tickers(as_bullets(md_to_html(raw)))
+    return link_tickers(as_bullets(md_to_html(raw)), known=known_symbols(holdings))
 
 
 async def send_holding_news(ctx: Ctx, chat_id: int, news: str, codes: list[str]) -> None:
