@@ -1,4 +1,4 @@
-"""Current Sharesight holdings across named portfolios, shared by holding news and the known-ticker list."""
+"""Sharesight portfolios and their current holdings, shared by holding news, the known tickers and the tool gate."""
 
 from __future__ import annotations
 
@@ -10,17 +10,33 @@ from .mcp.results import table_records
 
 log = logging.getLogger("bot")
 KEY_RE = re.compile(r"^(\S+) \((.*)\)$")
+# Every portfolio's name, lowercased, as Sharesight lists them: a message naming one is a portfolio question
+# (llm/gate.py). Set from the kv cache at startup and by the daily refresh (features/known_tickers.py).
+PORTFOLIO_NAMES: set[str] = set()
 
 
-async def current_holdings(server, portfolio_names: list[str]) -> dict[str, str]:
-    """Current holdings across the named portfolios, as {"CODE (MARKET)": name}."""
-    data = json.loads(await server.call("list_portfolios", {}))
-    portfolios = {p["name"].lower(): p for p in data.get("portfolios", [])}
+def set_portfolio_names(names) -> None:
+    PORTFOLIO_NAMES.clear()
+    PORTFOLIO_NAMES.update(n.lower() for n in names)
+
+
+async def portfolios(server) -> list[dict]:
+    """Sharesight's list_portfolios: [{"id", "name", "consolidated", ...}]."""
+    return json.loads(await server.call("list_portfolios", {})).get("portfolios", [])
+
+
+async def current_holdings(server, portfolio_names: list[str] | None) -> dict[str, str]:
+    """Current holdings across the named portfolios (None: every one but the consolidated views, which repeat the
+    others), as {"CODE (MARKET)": name}."""
+    listed = await portfolios(server)
+    portfolios_by_name = {p["name"].lower(): p for p in listed}
+    if portfolio_names is None:
+        portfolio_names = [p["name"].lower() for p in listed if not p.get("consolidated")]
     holdings: dict[str, str] = {}
     for name in portfolio_names:
-        p = portfolios.get(name)
+        p = portfolios_by_name.get(name)
         if not p:
-            log.warning("No Sharesight portfolio called %r (have: %s)", name, ", ".join(sorted(portfolios)))
+            log.warning("No Sharesight portfolio called %r (have: %s)", name, ", ".join(sorted(portfolios_by_name)))
             continue
         report = json.loads(await server.call(
             "get_performance_report", {"portfolio_id": p["id"], "include_sales": False})).get("report") or {}

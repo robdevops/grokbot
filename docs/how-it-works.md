@@ -110,7 +110,7 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
   `ASX:NXT` -> `NXT.AX`), `Name (TICKER)` (bold, name and ticker together, unless already bold), Sharesight's
   `NXT (ASX)`, `^GSPC` and `BTC-USD`. The system prompt asks the model for these forms. A bare word is linked only
   when it is a known ticker: the S&P 500, NASDAQ-100 and S&P/ASX 200 constituents (read through Wikipedia's API) and
-  the Sharesight holdings, refreshed once a day in the background and kept in the database, so a reply never waits for
+  the holdings of every Sharesight portfolio, refreshed once a day in the background and kept in the database, so a reply never waits for
   them. An ASX code links with its suffix (`BHP` -> `BHP.AX`); a code in a US index and in the ASX 200 names two
   companies, so it isn't linked bare unless a holding says which. Any other capitalised word stays plain (`GAAP`, `EBITDA`, `AFR`, `M3`), so there is no stoplist to maintain. An
   exchange suffix settles it on its own (`ALL.AX` is Aristocrat);

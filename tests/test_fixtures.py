@@ -73,6 +73,8 @@ async def test_holding_news_reads_current_holdings_from_real_shaped_reports():
     only_alice = await sharesight_holdings.current_holdings(SharesightFixtures("sharesight"), ["alicesmsf"])
     assert set(only_alice) < set(holdings) and "GNP (ASX)" not in only_alice
     assert await sharesight_holdings.current_holdings(SharesightFixtures("sharesight"), ["no such portfolio"]) == {}
+    every = await sharesight_holdings.current_holdings(SharesightFixtures("sharesight"), None)  # no names: all of them
+    assert set(holdings) <= set(every)
 
 
 def test_sharesight_tool_definitions_hide_the_parameters_the_model_never_needs():

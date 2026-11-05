@@ -29,7 +29,6 @@ ENV_VARS: dict[str, str] = {
     "HISTORY_MAX": "At most this many messages of chat history in the prompt (default 10); the window's start moves every half of it, so the prompt cache keeps working.",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
-    "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
     "PERIOD_BACKFILL": "Comma list of Sharesight portfolio names (or all) whose daily/weekly/monthly/quarterly/yearly returns are fetched into the local cache in the background, so period questions answer instantly. Default all; list names to limit it, or off to disable.",
     "POST_TO_GROUPS_FROM_DM": "on|off. Lets an admin of a group the bot is in make it post there from a DM (default off).",
     "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default: MODEL with :online added).",
@@ -103,7 +102,6 @@ class Settings:
     holding_news_time: str
     holding_news_skip: frozenset[int]  # weekdays with no check, Monday = 0
     holding_news_recipients: dict[str, str]
-    portfolio_names: frozenset[str]
     period_backfill: frozenset[str]
 
     @property
@@ -237,6 +235,5 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
         holding_news_skip=_weekdays(env, "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS"),
         holding_news_recipients=recipients,
-        portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),
         period_backfill=_backfill(env.get("PERIOD_BACKFILL", "all")),
     )

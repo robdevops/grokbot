@@ -281,12 +281,18 @@ def test_gate_keeps_sharesight_out_of_other_questions(text, settings):
     assert s not in route(text, settings, registry(y, s)).servers
 
 
-def test_gate_matches_configured_portfolio_names_as_whole_words(env):
-    st = config.load({**env, "PORTFOLIO_NAMES": "Family Trust, BobSMSF"})
+def test_gate_matches_sharesights_portfolio_names_as_whole_words(env):
+    from lib import holdings
+    st = config.load(env)
     y, s = servers()
-    for text in ("how is the family trust going", "BobSMSF?", "bobsmsf's returns"):
-        assert s in route(text, st, registry(y, s)).servers, text
-    assert s not in route("trustworthy family", st, registry(y, s)).servers
+    before = set(holdings.PORTFOLIO_NAMES)
+    try:
+        holdings.set_portfolio_names(["Family Trust", "BobSMSF"])  # as list_portfolios gave them
+        for text in ("how is the family trust going", "BobSMSF?", "bobsmsf's returns"):
+            assert s in route(text, st, registry(y, s)).servers, text
+        assert s not in route("trustworthy family", st, registry(y, s)).servers
+    finally:
+        holdings.set_portfolio_names(before)
 
 
 def test_gate_marks_routes_that_offer_fewer_tools(settings):

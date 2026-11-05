@@ -90,13 +90,7 @@ def test_admin_only_is_on_unless_turned_off(env):
 
 def test_no_names_in_code_defaults(env):
     s = config.load(env)
-    assert s.holding_news_recipients == {} and s.movers_bots == frozenset() and s.portfolio_names == frozenset()
-
-
-def test_portfolio_names_default_to_the_recipients_portfolios_and_can_be_overridden(env):
-    base = {**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:me, BobSMSF:me"}
-    assert config.load(base).portfolio_names == {"bob", "bobsmsf"}
-    assert config.load({**base, "PORTFOLIO_NAMES": "Family Trust, Bob"}).portfolio_names == {"family trust", "bob"}
+    assert s.holding_news_recipients == {} and s.movers_bots == frozenset()
 
 
 def test_movers_bots_normalised(env):
