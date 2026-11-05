@@ -19,7 +19,7 @@ MCP data tools and web search. User-facing docs are in `README.md` (quick start)
 - `store.py`: SQLite `Store`: history (`messages` shared by groups, `dm_messages` per bot), users, kv,
   holding-news state, `usage` ledger, `text_cache` (finished /narrative and /events messages, 24 h), `period_cache` (finished Sharesight periods, kept until flushed). Thread-safe; call through `asyncio.to_thread`.
 - `msgtext.py` sender_name/describe. `history.py` transcript lines. `textfmt.py` HTML helpers
-  (md_to_html, split_html, plain_text, TG_TAG_RE). `tickers.py` Yahoo links on marked tickers (`$X`, `X.AX`, `ASX:X`, `Name (X)`, `X (ASX)`) and the known set `tickers.KNOWN`; bare words otherwise never link (+ `tickers_data.py`: exchange prefixes -> Yahoo suffixes, the gate's NOT_TICKERS). `holdings.py` current Sharesight holdings (holding news, known tickers).
+  (md_to_html, split_html, plain_text, TG_TAG_RE). `tickers.py` Yahoo (or Google, FINANCE_LINK_PROVIDER) links on marked tickers (`$X`, `X.AX`, `ASX:X`, `Name (X)`, `X (ASX)`) and the known set `tickers.KNOWN`; bare words otherwise never link (+ `tickers_data.py`: exchange prefixes -> Yahoo suffixes, the gate's NOT_TICKERS). `holdings.py` current Sharesight holdings (holding news, known tickers).
 - `mcp/`: `server.py` (MCPServer lifecycle, TTL cache, `Registry`), `schema.py` (neutral `ToolDef`,
   schema diet), `results.py` (result slimming).
 - `llm/`: `base.py` (Request/Step/Answer/Backend), `chat.py` (shared chat-completions loop), `xai.py` +

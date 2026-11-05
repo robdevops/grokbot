@@ -38,9 +38,50 @@ def is_ticker(word: str) -> bool:
     return not (word in NOT_TICKERS or NOT_TICKER_RE.match(word))
 
 
+YAHOO_QUOTE = "https://finance.yahoo.com/quote/"
+GOOGLE_QUOTE = "https://www.google.com/finance/quote/"
+GOOGLE_SEARCH = "https://www.google.com/finance?q="
+QUOTE_PREFIXES = (YAHOO_QUOTE, GOOGLE_QUOTE, GOOGLE_SEARCH)  # history.compact and news_codes read these links back
+PROVIDER = ["yahoo"]  # FINANCE_LINK_PROVIDER, set at startup (app.build_ctx)
+# Yahoo's suffix -> Google Finance's exchange code ("NXT.AX" -> "NXT:ASX")
+GOOGLE_EXCHANGES = {
+    "AX": "ASX", "NZ": "NZE", "L": "LON", "TO": "TSE", "V": "CVE", "HK": "HKG", "T": "TYO", "KS": "KRX",
+    "KQ": "KOSDAQ", "DE": "ETR", "F": "FRA", "PA": "EPA", "AS": "AMS", "BR": "EBR", "SW": "SWX", "MI": "BIT",
+    "MC": "BME", "ST": "STO", "OL": "OSL", "CO": "CPH", "HE": "HEL", "SI": "SGX", "SS": "SHA", "SZ": "SHE",
+    "TW": "TPE", "BO": "BOM", "NS": "NSE", "SA": "BVMF", "MX": "BMV", "JO": "JSE", "TA": "TLV",
+}
+
+
+def set_provider(name: str) -> None:
+    PROVIDER[0] = name
+
+
 def yahoo_url(symbol: str) -> str:
     sym = f"{symbol}-USD" if symbol in CRYPTO else symbol
-    return "https://finance.yahoo.com/quote/" + quote(sym, safe="")
+    return YAHOO_QUOTE + quote(sym, safe="")
+
+
+def google_url(symbol: str) -> str:
+    """Google Finance's page for a Yahoo symbol: CODE:EXCHANGE where the suffix names it (NXT.AX -> NXT:ASX, 0700.HK ->
+    700:HKG), BTC-USD as is, else a search (a US ticker gives no exchange: NASDAQ or NYSE)."""
+    base, _, suffix = symbol.rpartition(".")
+    if base and suffix in GOOGLE_EXCHANGES:
+        code = base.lstrip("0") or "0" if suffix == "HK" else base
+        return GOOGLE_QUOTE + quote(f"{code}:{GOOGLE_EXCHANGES[suffix]}", safe=":")
+    if symbol in CRYPTO or symbol.endswith("-USD"):
+        return GOOGLE_QUOTE + quote(symbol if symbol.endswith("-USD") else f"{symbol}-USD", safe="")
+    return GOOGLE_SEARCH + quote(symbol.replace("-", "."), safe="")  # BRK-B is BRK.B at Google
+
+
+def quote_url(symbol: str) -> str:
+    """The quote page for a Yahoo symbol, at the FINANCE_LINK_PROVIDER."""
+    return google_url(symbol) if PROVIDER[0] == "google" else yahoo_url(symbol)
+
+
+def quote_labels(html: str) -> set[str]:
+    """The labels of the quote links in a reply (the codes as shown: NXT, 700), whichever provider made them."""
+    starts = "|".join(re.escape(p) for p in QUOTE_PREFIXES)
+    return set(re.findall(rf'<a href="(?:{starts})[^"]*">([^<]+)</a>', html))
 
 
 def ticker_label(symbol: str) -> str:
@@ -98,7 +139,7 @@ def _link_re(codes: frozenset[str]) -> re.Pattern:
 
 
 def _link(symbol: str, label: str) -> str:
-    return f'<a href="{yahoo_url(symbol)}">{label}</a>'
+    return f'<a href="{quote_url(symbol)}">{label}</a>'
 
 
 def _paren(paren: str, known: Mapping[str, str]) -> str | None:

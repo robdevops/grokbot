@@ -32,7 +32,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import config
+from . import config, tickers
 from .context import Ctx
 from .features import chat_commands, dm_buttons, holding_news, known_tickers, post
 from .features.charts import buttons as chart_buttons
@@ -163,6 +163,7 @@ async def register_menu(ctx: Ctx) -> None:
 
 def build_ctx(st: config.Settings) -> Ctx:
     ctx = Ctx(st, Store(st.db_path), build_backend(st), Registry([]))
+    tickers.set_provider(st.link_provider)
 
     async def on_down(server: MCPServer) -> None:
         await alert_down(ctx, server)

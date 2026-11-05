@@ -149,3 +149,28 @@ def test_link_labelled_with_its_own_url_is_numbered_but_named_links_and_code_are
     assert link_tickers('<a href="https://y.com/p">https://y.com/p…</a> ok') == '<a href="https://y.com/p">[1]</a> ok'
     assert link_tickers('<a href="https://y.com/p">Reuters</a>') == '<a href="https://y.com/p">Reuters</a>'
     assert link_tickers("<code>https://x.com</code>") == "<code>https://x.com</code>"
+
+
+def test_google_finance_links_name_the_exchange_where_the_symbol_does(env):
+    from lib import config
+    from lib.history import compact
+    assert config.load({**env, "FINANCE_LINK_PROVIDER": "Google"}).link_provider == "google"
+    assert config.load(env).link_provider == "yahoo"
+    try:
+        config.load({**env, "FINANCE_LINK_PROVIDER": "bing"})
+        raise AssertionError("bing accepted")
+    except config.ConfigError:
+        pass
+    g = tickers.google_url
+    assert g("NXT.AX") == "https://www.google.com/finance/quote/NXT:ASX"
+    assert g("0700.HK") == "https://www.google.com/finance/quote/700:HKG" and g("7203.T").endswith("/7203:TYO")
+    assert g("BTC") == g("BTC-USD") == "https://www.google.com/finance/quote/BTC-USD"
+    assert g("NVDA") == "https://www.google.com/finance?q=NVDA" and g("BRK-B").endswith("?q=BRK.B")
+    tickers.set_provider("google")
+    try:
+        out = link_tickers("ASX:NXT and $NVDA")
+        assert out == ('<a href="https://www.google.com/finance/quote/NXT:ASX">NXT</a> and '
+                       '<a href="https://www.google.com/finance?q=NVDA">NVDA</a>')
+        assert compact(out) == "NXT and NVDA" and tickers.quote_labels(out) == {"NXT", "NVDA"}
+    finally:
+        tickers.set_provider("yahoo")

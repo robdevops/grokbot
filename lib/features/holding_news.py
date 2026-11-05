@@ -24,7 +24,7 @@ from ..prompts import HOLDING_NEWS_PROMPT
 from ..telegram.draft import Draft
 from ..telegram.send import send_html
 from ..textfmt import ANY_TAG_RE, md_to_html, split_html, strip_disclaimer
-from ..tickers import link_tickers, yahoo_symbol
+from ..tickers import link_tickers, quote_labels, yahoo_symbol
 
 log = logging.getLogger("bot")
 UNSUBSCRIBE_BUTTON = InlineKeyboardMarkup([[InlineKeyboardButton("🔕 Unsubscribe…", callback_data="hn:menu")]])
@@ -52,12 +52,11 @@ def known_symbols(holdings: dict[str, str]) -> dict[str, str]:
 
 
 def news_codes(news: str, holdings: dict[str, str]) -> list[str]:
-    """Holding codes that appear as bold tickers or Yahoo links in a news message (as the holdings write them: an HK
-    holding "700" is linked as 0700.HK)."""
+    """Holding codes that appear as bold tickers or quote links in a news message (as the holdings write them: an HK
+    holding "700" is linked as 0700.HK but labelled 700)."""
     held = {_plain_code(k.split(" ")[0]): k.split(" ")[0].upper() for k in holdings}
     found = {m.upper() for m in re.findall(r"<b>([^<]{1,12})</b>", news)}
-    found |= {m.split(".")[0].upper()
-              for m in re.findall(r"finance\.yahoo\.com/quote/([\w.\-^]+)", news)}
+    found |= {label.upper() for label in quote_labels(news)}
     return sorted({held[c] for c in map(_plain_code, found) if c in held})
 
 

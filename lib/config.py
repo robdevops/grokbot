@@ -26,6 +26,7 @@ ENV_VARS: dict[str, str] = {
     "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /tokens; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "ADMIN_ONLY": "on|off. On (default): only admins may DM the bot or get Sharesight data. Off: everyone may. /tokens and /flushcache stay admin-only.",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
+    "FINANCE_LINK_PROVIDER": "Where ticker links go: yahoo (default, Yahoo Finance) or google (Google Finance).",
     "HISTORY_MAX": "At most this many messages of chat history in the prompt (default 10); the window's start moves every half of it, so the prompt cache keeps working.",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
@@ -88,6 +89,7 @@ class Settings:
     max_tokens: int
     history_max: int
     darkmode: str  # "off" | "on" | "auto": the charts' theme
+    link_provider: str  # "yahoo" | "google": where ticker links go
     db_path: str
     tz: ZoneInfo
     admin_chats: frozenset[int]  # user IDs (alerts + admin commands) and group chat IDs (alerts only)
@@ -186,6 +188,9 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     search = env.get("SEARCH", "on").strip().lower() != "off"
     if provider == "openrouter" and not search_model:
         search = False  # nothing to run the searches with
+    link_provider = env.get("FINANCE_LINK_PROVIDER", "").strip().lower() or "yahoo"
+    if link_provider not in ("yahoo", "google"):
+        raise ConfigError(f"FINANCE_LINK_PROVIDER must be yahoo or google, not {link_provider!r}.")
     darkmode = env.get("DARKMODE", "").strip().lower() or "off"
     if darkmode not in ("off", "on", "auto"):
         raise ConfigError(f"DARKMODE must be off, on or auto, not {darkmode!r}.")
@@ -201,6 +206,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         max_tokens=int(env.get("MAX_TOKENS") or 3000),
         history_max=int(env.get("HISTORY_MAX") or 10),
         darkmode=darkmode,
+        link_provider=link_provider,
         db_path=database_path(env),
         tz=ZoneInfo(env.get("TZ", "UTC")),
         admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
