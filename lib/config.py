@@ -55,6 +55,7 @@ MAX_IMAGES = 2 # photos sent to the model per request
 TEMPERATURE = 0.6
 SEARCH_ENGINE = "auto"
 SEARCH_RESULTS = 20
+HOLDING_NEWS_SEARCH_RESULTS = 60  # the daily holding-news check searches every holding in one request
 SEARCH_TOKENS = 400  # cap on each search write-up (OpenRouter search runner)
 MAX_SEARCHES = 5  # search calls run per round
 # Index constituents linked bare in replies (features/known_tickers.py): (name, Wikipedia page, Yahoo suffix, fewest

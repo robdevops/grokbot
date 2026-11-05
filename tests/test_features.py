@@ -116,6 +116,43 @@ async def test_one_search_covers_everyone_and_each_person_gets_their_own_items(e
     assert {m["chat_id"] for m in ctx.bot.sent} == {5, 6}
 
 
+def test_funds_and_notes_about_the_search_are_left_out():
+    from lib.features.holding_news.text import drop_notes, is_fund
+    for name in ("VanEck Semiconductor ETF", "Betashares Nasdaq 100 ETF", "GraniteShares 2x Long NVDA Daily ETF",
+                 "Global X Physical Silver", "iShares Core S&P 500", "Roundhill Magnificent Seven ETF"):
+        assert is_fund(name), name
+    for name in ("Nvidia", "NextDC", "Goodman Group", "Commonwealth Bank of Australia", "Rocket Lab"):
+        assert not is_fund(name), name
+    news = ("• CrowdStrike (CRWD): agreed to buy Fiddler AI\n"
+            "• Note: my search budget ran out after the first pass, so coverage is incomplete.\n"
+            "• <b>Coverage</b> of the smaller names was thin")
+    assert drop_notes(news) == "• CrowdStrike (CRWD): agreed to buy Fiddler AI"
+
+
+async def test_the_daily_check_skips_funds_and_asks_for_a_wide_search(env, store):
+    class WithEtf(Sharesight):
+        async def call(self, tool, args):
+            if tool == "list_portfolios":
+                return await super().call(tool, args)
+            rows = [["NVDA", "NASDAQ", "Nvidia"], ["SMH", "NASDAQ", "VanEck Semiconductor ETF"]]
+            return json.dumps({"report": {"holdings": {"columns": ["code", "market", "name"], "rows": rows}}})
+
+    st = config.load({**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:bob_llama"})
+    seen = []
+
+    class Backend(ScriptedBackend):
+        async def step(self, conv, req, *, tool_choice):
+            seen.append(req.search_results)
+            return await super().step(conv, req, tool_choice=tool_choice)
+
+    ctx = Ctx(st, store, Backend([step("NOTHING")]), registry(WithEtf("sharesight", tools=("list_portfolios",))),
+              FakeBot())
+    await holding_news.run_holding_news(ctx)
+    assert "NVDA (NASDAQ)" in ctx.backend.seen[0]["prompt"] and "SMH" not in ctx.backend.seen[0]["prompt"]
+    assert "no notes about your search" in ctx.backend.seen[0]["prompt"]
+    assert seen == [config.HOLDING_NEWS_SEARCH_RESULTS]
+
+
 async def test_digest_says_nothing_when_nothing_and_respects_mutes(env, store):
     ctx = holding_ctx(env, store, [step("NOTHING")])
     assert (await holding_news.run_holding_news(ctx)) == {"bob_llama": None} and ctx.bot.sent == []

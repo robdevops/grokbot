@@ -9,7 +9,9 @@ Each is off by default. The holding-news DM and the movers reply are switched on
   reads each person's current Sharesight holdings, searches for *major* news from the past 24 hours
   (a forced search), and DMs only what qualifies (most days: nothing). The daily check is one search for everyone's
   holdings together, so a stock two people hold costs one search; each person then gets the items about their own
-  holdings (an item that names none goes to everyone). Each check searches back to the last one (at least 24 hours,
+  holdings (an item that names none goes to everyone; the model's notes about its own search are dropped). ETFs and
+  funds (recognised by name: ETF, Fund, iShares, VanEck, Global X, 2x ...) are left out of the search, since they have no
+  company news of their own. On OpenRouter this one request may read up to 60 search results (chat requests: 20). Each check searches back to the last one (at least 24 hours,
   at most 7 days), so days skipped with `SHARESIGHT_HOLDING_NEWS_SKIP_DAYS` (say `sun,mon`, after the US weekend), an
   outage or a restart leave no gap; the message says how far back it looked (`past 72h`). An item that cites the same
   article as one already sent is dropped, even if the model repeats it. Stories already reported in

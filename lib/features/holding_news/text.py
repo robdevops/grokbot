@@ -51,6 +51,21 @@ def _plain_code(code: str) -> str:
     return code.lstrip("0") or "0" if code.isdigit() else code
 
 
+FUND_RE = re.compile(r"\b(?:ETFs?|ETP|ETC|Fund|Index|iShares|SPDR|BetaShares|VanEck|Vanguard|Global X|ProShares|"
+                     r"Direxion|GraniteShares|Roundhill|Leveraged|[23]x)\b", re.IGNORECASE)
+NOTE_RE = re.compile(r"^\W*(?:<[^>]+>)*\s*(?:note|disclaimer|caveat|coverage|search)\b", re.IGNORECASE)
+
+
+def is_fund(name: str) -> bool:
+    """An ETF or fund, by its name ("VanEck Semiconductor ETF", "Global X Physical Silver"): no company news of its own."""
+    return bool(FUND_RE.search(name or ""))
+
+
+def drop_notes(news: str) -> str:
+    """The digest without the model's lines about the search itself ("Note: my search budget ran out ...")."""
+    return "\n".join(ln for ln in news.splitlines() if not NOTE_RE.match(ln.lstrip("• ").strip()))
+
+
 def window_hours(now: float, last_run: float | None) -> int:
     """Hours the daily check covers: since the last one (after skipped days, an outage or a restart), whole hours,
     at least a day and at most HOLDING_NEWS_MAX_WINDOW; a day when there was no last run."""

@@ -87,6 +87,7 @@ class Request:
     no_tools_system: str = ""  # system prompt for the retry without tools
     local: dict[str, Callable[[dict], Awaitable[str]]] = field(default_factory=dict)  # tools run in the bot
     max_tokens: int | None = None  # reply cap incl. reasoning; None = the provider's setting
+    search_results: int | None = None  # results the provider's search may read in all, where it caps them; None = default
     cite: bool = False  # put [n] links to the pages a search used after the sentences they back
 
 

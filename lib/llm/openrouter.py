@@ -64,7 +64,7 @@ class OpenRouterBackend(ChatBackend):
         tools = []
         if req.search or req.must_search:
             tools.append({"type": "openrouter:web_search", "parameters": {
-                "engine": config.SEARCH_ENGINE, "max_total_results": config.SEARCH_RESULTS}})
+                "engine": config.SEARCH_ENGINE, "max_total_results": req.search_results or config.SEARCH_RESULTS}})
         tools += [{"type": "function", "function": {
             "name": t.name, "description": t.description, "parameters": t.parameters}}
             for t in req.tools]

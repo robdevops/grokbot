@@ -44,6 +44,11 @@ async def test_openrouter_cache_headers_and_tool_shapes(env):
     assert kw["extra_body"]["reasoning"] == {"effort": "low"} and kw["extra_body"]["usage"] == {"include": True}
     assert [t["type"] for t in kw["tools"]] == ["openrouter:web_search", "function"]
     assert kw["tools"][1]["function"]["name"] == "yahoo__q"
+    assert kw["tools"][0]["parameters"]["max_total_results"] == config.SEARCH_RESULTS
+    wide = req(search=True, search_results=60)
+    client.streams.append(Stream([chat_chunk("ok"), chat_chunk(finish="stop")]))
+    await b.step(b.start(wide), wide, tool_choice=None)
+    assert client.kwargs[1]["tools"][0]["parameters"]["max_total_results"] == 60  # a request that needs more
     assert kw["messages"][1]["content"][1] == {"type": "image_url", "image_url": {"url": "data:x", "detail": "low"}}
     assert kw["max_tokens"] == st.max_tokens and kw["stream"] is True
 
