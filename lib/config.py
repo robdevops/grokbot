@@ -36,6 +36,7 @@ ENV_VARS: dict[str, str] = {
     "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default: MODEL with :online added).",
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (TZ) for the daily holding-news check (default 08:00).",
+    "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS": "Weekdays (in TZ) with no holding-news check, e.g. sun,mon; the next check covers them. Empty (default) = every day.",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
     "TELEGRAM_IMAGE_PRELOAD_CHATID": "Chat ID of a private chat the bot can post in. Chart periods are uploaded there ahead of time and reused when a period button is tapped. Empty (default) = off.",
 }
@@ -69,6 +70,7 @@ KNOWN_TICKERS_RETRY = 30 * 60  # seconds before a failed part (a page down, Shar
 KNOWN_TICKERS_START_DELAY = 60  # seconds after startup before a due refresh, so the MCP servers are up
 SOURCES_MAX = 3  # links to a search result the model is handed back as text (OpenRouter run_search)
 MAX_TG_MESSAGE = 4000  # Telegram's limit is 4096
+HOLDING_NEWS_MAX_WINDOW = 7 * 24  # hours: the longest a check looks back, after skipped days or an outage
 HOLDING_NEWS_RETRY_EVERY = 30 * 60  # seconds between retries of a holding-news check the provider was too busy for
 HOLDING_NEWS_RETRY_FOR = 12 * 3600  # seconds after which it gives up
 
@@ -99,6 +101,7 @@ class Settings:
     post_to_groups: bool
     preload_chat: int | None  # where chart periods are pre-uploaded
     holding_news_time: str
+    holding_news_skip: frozenset[int]  # weekdays with no check, Monday = 0
     holding_news_recipients: dict[str, str]
     portfolio_names: frozenset[str]
     period_backfill: frozenset[str]
@@ -152,6 +155,20 @@ def _pairs(text: str) -> dict[str, str]:
         name.strip().lower(): user.strip().lstrip("@").lower()
         for name, user in (pair.split(":", 1) for pair in text.split(",") if ":" in pair)
     }
+
+
+WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def _weekdays(env: Mapping[str, str], name: str) -> frozenset[int]:
+    """"sun, Monday" -> {6, 0}: day names or their first three letters."""
+    days = set()
+    for word in env.get(name, "").replace(",", " ").lower().split():
+        day = next((i for i, d in enumerate(WEEKDAYS) if word in (d, d[:3])), None)
+        if day is None:
+            raise ConfigError(f"{name}: {word!r} isn't a weekday (use mon, tue, ... or the full name).")
+        days.add(day)
+    return frozenset(days)
 
 
 def _names(text: str) -> frozenset[str]:
@@ -218,6 +235,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         post_to_groups=_flag(env, "POST_TO_GROUPS_FROM_DM"),
         preload_chat=_chat_id(env, "TELEGRAM_IMAGE_PRELOAD_CHATID"),
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
+        holding_news_skip=_weekdays(env, "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS"),
         holding_news_recipients=recipients,
         portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),
         period_backfill=_backfill(env.get("PERIOD_BACKFILL", "all")),

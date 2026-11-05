@@ -36,5 +36,6 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `SEARCH_MODEL` | `MODEL` with `:online` added | OpenRouter only: model that runs the searches (`:online` is what gives an OpenRouter model web search). Set but empty = no search model, so search is off. |
 | `SHARESIGHT_HOLDING_NEWS_RECIPIENTS` | empty (daily DM off) | Comma list of portfolio:telegram_username pairs to notify. |
 | `SHARESIGHT_HOLDING_NEWS_TIME` | `08:00` | HH:MM (in `TZ`) for the daily holding-news check. |
+| `SHARESIGHT_HOLDING_NEWS_SKIP_DAYS` | empty | Weekdays (in `TZ`) with no holding-news check, e.g. `sun,mon` (names or their first three letters). The next check covers the gap: it always searches back to the last check (at most 7 days). Empty = every day. |
 | `TELEGRAM_DM_BUTTONS` | `off` | `on` or `off`. Preset-prompt buttons in private chats. |
 | `TELEGRAM_IMAGE_PRELOAD_CHATID` | empty (off) | Chat ID of a private chat the bot can post in (a private group it is in, or a DM with you). The other periods of a chart are uploaded there in the background and reused when a period button is tapped, so the tap swaps the picture without fetching or drawing. Empty = off, and a tap fetches and draws. See [Charts](features.md#charts). |

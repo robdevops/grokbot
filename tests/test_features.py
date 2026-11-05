@@ -140,6 +140,74 @@ async def test_busy_provider_is_retried_for_just_that_person_then_delivered(env,
     assert not any(r.exc_info for r in caplog.records)
 
 
+def test_the_window_reaches_back_to_the_last_check():
+    from lib.features.holding_news.text import window_hours
+    now = 1_000_000_000
+    assert window_hours(now, None) == 24 and window_hours(now, now - 2 * 3600) == 24  # a day at least
+    assert window_hours(now, now - 24 * 3600) == 24 and window_hours(now, now - 72 * 3600 + 60) == 72
+    assert window_hours(now, now - 30 * 86400) == config.HOLDING_NEWS_MAX_WINDOW == 168
+
+
+def test_an_item_citing_an_article_already_sent_is_dropped():
+    from lib.features.holding_news.text import drop_repeats
+    sent = ['• <a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>: beat <a href="https://x.com/a">[1]</a>']
+    new = ('• <a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>: beat again <a href="https://x.com/a">[1]</a>\n'
+           '• <a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>: guidance raised <a href="https://x.com/b">[2]</a>\n'
+           '• AMD fell')
+    kept, dropped = drop_repeats(new, sent)
+    assert "x.com/a" not in kept and "x.com/b" in kept and "AMD fell" in kept and len(dropped) == 1
+    assert drop_repeats(new, []) == (new, [])  # the quote link on NVDA doesn't count as an article
+
+
+def test_skip_days_parse_names_and_abbreviations(env):
+    assert config.load({**env, "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS": "sun, Monday"}).holding_news_skip == {6, 0}
+    assert config.load(env).holding_news_skip == frozenset()
+    with pytest.raises(config.ConfigError, match="funday"):
+        config.load({**env, "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS": "funday"})
+
+
+async def test_after_skipped_days_the_check_covers_them_and_a_busy_one_keeps_the_window(env, store):
+    import time
+    ctx = holding_ctx(env, store, [Overloaded("at capacity"), step("• NVDA (NASDAQ): halted https://x.com/h")])
+    store.kv_set(holding_news.LAST_RUN_KEY, str(int(time.time()) - 72 * 3600 + 60))  # Saturday's, now it's Tuesday
+    await holding_news.run_holding_news(ctx, busy=[])
+    assert int(store.kv_get(holding_news.LAST_RUN_KEY)) < time.time() - 71 * 3600  # busy: the window stays open
+    await holding_news.run_holding_news(ctx)
+    assert "past 72 hours" in ctx.backend.seen[-1]["prompt"] and "(past 72h)" in ctx.bot.sent[-1]["text"]
+    assert int(store.kv_get(holding_news.LAST_RUN_KEY)) >= time.time() - 5  # answered: the next window starts now
+
+
+async def test_the_daily_loop_skips_its_days(env, store, monkeypatch, caplog):
+    import asyncio
+    import logging
+    st = config.load({**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:bob_llama",
+                      "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS": "sun"})
+    ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
+    sunday = datetime(2026, 11, 8, 8, 0, tzinfo=st.tz)
+    ran, sleeps = [], []
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return sunday
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) > 2:
+            raise asyncio.CancelledError
+
+    async def run(ctx, **kw):
+        ran.append(kw)
+        return {}
+
+    monkeypatch.setattr(holding_news, "datetime", Clock)
+    monkeypatch.setattr(holding_news.asyncio, "sleep", sleep)
+    monkeypatch.setattr(holding_news, "run_holding_news", run)
+    with caplog.at_level(logging.INFO, logger="bot"), pytest.raises(asyncio.CancelledError):
+        await holding_news.daily_loop(ctx)
+    assert ran == [] and "Holding news: skipped (Sunday)" in caplog.text
+
+
 async def test_busy_provider_is_given_up_on_after_the_retry_window(env, store, monkeypatch, caplog):
     monkeypatch.setattr(config, "HOLDING_NEWS_RETRY_EVERY", 4 * 3600)
     monkeypatch.setattr(config, "HOLDING_NEWS_RETRY_FOR", 12 * 3600)

@@ -125,8 +125,8 @@ HOLDING_NEWS_PROMPT = """This is an automated daily check, not a chat message.
 Holdings:
 {holdings}
 
-Search {what} for MAJOR news about these companies published in the past 24 hours.
-The bar is high. Only material, price-moving events count: results or earnings, guidance changes, takeover or merger news, capital raisings, major contract wins or losses, regulatory or clinical-trial decisions, trading halts or suspensions, CEO or CFO departures, dividend cuts or suspensions, delistings, serious legal action. Ignore routine filings (director share dealings, buy-back updates, AGM notices, presentations with nothing new), general market or sector moves, analyst price-target changes, opinion pieces, and anything older than 24 hours or that you can't date. When in doubt, leave it out. Most days the answer is nothing.
+Search {what} for MAJOR news about these companies published in the past {hours} hours.
+The bar is high. Only material, price-moving events count: results or earnings, guidance changes, takeover or merger news, capital raisings, major contract wins or losses, regulatory or clinical-trial decisions, trading halts or suspensions, CEO or CFO departures, dividend cuts or suspensions, delistings, serious legal action. Ignore routine filings (director share dealings, buy-back updates, AGM notices, presentations with nothing new), general market or sector moves, analyst price-target changes, opinion pieces, and anything older than {hours} hours or that you can't date. When in doubt, leave it out. Most days the answer is nothing.
 
 If nothing qualifies, reply with exactly the word NOTHING, with no bullet or anything else. Otherwise reply with only the qualifying items as bullet points, one item per line, no intro and no blank lines between them. Start each line with "• ":
 • Name (TICKER): what happened, with one source link.
