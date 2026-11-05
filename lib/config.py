@@ -60,7 +60,7 @@ MAX_SEARCHES = 5  # search calls run per round
 # and most rows that look right). Fetched in the background once a day, never while answering.
 INDEX_LISTS = (
     ("S&P 500", "List of S&P 500 companies", "", 450, 550),
-    ("NASDAQ-100", "Nasdaq-100", "", 90, 110),
+    ("NASDAQ-100", "List of NASDAQ-100 companies", "", 90, 110),
     ("ASX 200", "S&P/ASX 200", "AX", 190, 210),
 )
 KNOWN_TICKERS_REFRESH = 24 * 3600  # seconds between refreshes of the indexes and the US holdings
