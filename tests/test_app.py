@@ -199,8 +199,8 @@ async def test_the_menu_lists_commands_by_who_can_use_them(env, store):
     everyone = ["segments", "narrative", "events"]
     assert calls == [(everyone, "NoneType", None),
                      (everyone + ["clear"], "BotCommandScopeAllPrivateChats", None),
-                     (everyone + ["tokens"], "BotCommandScopeAllChatAdministrators", None),
-                     (everyone + ["clear", "tokens"], "BotCommandScopeChat", 5)]
+                     (everyone + ["usage"], "BotCommandScopeAllChatAdministrators", None),
+                     (everyone + ["clear", "usage"], "BotCommandScopeChat", 5)]
 
 
 def test_the_mcp_librarys_unlabelled_protocol_and_ping_lines_are_dropped(monkeypatch):

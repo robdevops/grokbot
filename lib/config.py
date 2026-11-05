@@ -23,8 +23,8 @@ ENV_VARS: dict[str, str] = {
     "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
     "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in TZ).",
     # Advanced and optional
-    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /tokens; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
-    "ADMIN_ONLY": "on|off. On (default): only admins may DM the bot or get Sharesight data. Off: everyone may. /tokens and /flushcache stay admin-only.",
+    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /usage; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
+    "ADMIN_ONLY": "on|off. On (default): only admins may DM the bot or get Sharesight data. Off: everyone may. /usage and /flushcache stay admin-only.",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
     "FINANCE_LINK_TARGET": "Where ticker links go: yahoo (default, Yahoo Finance), google (Google Finance) or tradingview.",
     "HISTORY_MAX": "At most this many messages of chat history in the prompt (default 10); the window's start moves every half of it, so the prompt cache keeps working.",

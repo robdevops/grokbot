@@ -143,20 +143,20 @@ async def log_tool_size(ctx: Ctx) -> None:
 
 async def register_menu(ctx: Ctx) -> None:
     """The command menu. A scoped menu replaces the default one, so each lists everything for its scope: /segments,
-    /narrative, /events and the chat commands of mcp_servers.json for everyone; /clear too in private chats; /tokens too for the people who can use it
+    /narrative, /events and the chat commands of mcp_servers.json for everyone; /clear too in private chats; /usage too for the people who can use it
     (administrators of every group, and the users in ADMIN_CHAT_IDS in their own chat with the bot)."""
     everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER"),
                 BotCommand("narrative", "10-K/10-Q narrative: /narrative TICKER [section]"),
                 BotCommand("events", "8-K events: /events TICKER [section]")]
     everyone += [BotCommand(c.name, c.description) for c in ctx.chat_commands]  # from mcp_servers.json
     private = everyone + [BotCommand("clear", "Forget our earlier messages")]
-    tokens = BotCommand("tokens", "Provider balance, token use and cost")
+    usage = BotCommand("usage", "Provider balance, token use and cost")
     try:
         await ctx.bot.set_my_commands(everyone)
         await ctx.bot.set_my_commands(private, scope=BotCommandScopeAllPrivateChats())
-        await ctx.bot.set_my_commands(everyone + [tokens], scope=BotCommandScopeAllChatAdministrators())
+        await ctx.bot.set_my_commands(everyone + [usage], scope=BotCommandScopeAllChatAdministrators())
         for chat_id in ctx.st.admin_chats:
-            await ctx.bot.set_my_commands(private + [tokens], scope=BotCommandScopeChat(chat_id))
+            await ctx.bot.set_my_commands(private + [usage], scope=BotCommandScopeChat(chat_id))
     except TelegramError as e:
         log.warning("Couldn't register the command menu: %s", e)
 

@@ -1,4 +1,4 @@
-"""Commands: /tokens (also /usage, /credits; admins) and /narrative and /events (anyone), and the admin cache flush."""
+"""Commands: /usage (also /tokens, /credits; admins) and /narrative and /events (anyone), and the admin cache flush."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def usage_text(rows: list[tuple], label: str, kinds: list[tuple] = ()) -> str:
 
 
 async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/tokens - admins only: the provider balance (OpenRouter has one), then tokens and cost per
+    """/usage (or /tokens, /credits) - admins only: the provider balance (OpenRouter has one), then tokens and cost per
     model for the last 24 hours and 7 days, and the requests and cost per kind (chat, the daily holding news...)."""
     if not await _gate(ctx, update):
         return

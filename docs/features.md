@@ -94,7 +94,7 @@ for its definition.
 |---|---|---|
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
-| `/tokens` (or `/usage`, `/credits`) | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI has none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days, and the requests and cost per kind (chat, the daily holding-news check, movers, DM buttons, chat commands, filings) |
+| `/usage` (or `/tokens`, `/credits`) | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI has none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days, and the requests and cost per kind (chat, the daily holding-news check, movers, DM buttons, chat commands, filings) |
 | `/<name> [text]` from `chat_commands` | anyone (admins only for a `gate: portfolio` server) | Commands configured per MCP server in `mcp_servers.json`: the model answers with only that server tool, which it has to call. See [How it works](how-it-works.md#mcp-data-tools). In the command menu |
 | `/clear` | anyone, in a private chat | The bot forgets its stored history of that chat (clearing the chat on your own screen doesn't tell the bot anything, so use this too). Neither the command nor its reply is stored. Not in groups, whose history is shared by everyone and every bot in them. In the command menu of private chats |
 | `/segments TICKER` | anyone, in a group or a DM | The latest quarter's revenue breakdown pies from TickerScout `get_segments`, drawn without the model (the same as a plain "TICKER revenue breakdown" message; see Charts). In the command menu |

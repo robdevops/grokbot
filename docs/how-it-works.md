@@ -85,7 +85,7 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
   "Usage: /forecast <what to look up>" without asking the model. A command whose server is down, or whose tool isn't
   enabled (blocked, or not read-only and missing from `allowed_tools`), says so. A command on a `gate: portfolio`
   server is for admins only. Names follow Telegram's rules (lowercase letters, digits and `_`, at most 32). A name the
-  bot already uses (`/tokens`, `/clear`, …), a name used twice, or an entry without a `tool` is skipped, and the startup
+  bot already uses (`/usage`, `/clear`, …), a name used twice, or an entry without a `tool` is skipped, and the startup
   log warns about each, and about a tool that isn't enabled.
 - **Tool names are exact:** `blocked_tools` and `allowed_tools` take the server's real tool names, as
   printed in the startup log (`get_analyst_estimates`, not `analyst_estimates`). An entry that matches
