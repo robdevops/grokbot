@@ -322,7 +322,7 @@ A. **Carve the seams in Python first (recommended; settle the open question).** 
    - A second BotFather bot in the same groups.
    - `grokbot-shadow.service` is the same unit plus `User=grokbot` (same dynamic UID, so it shares
      `/var/lib/grokbot/chat_log.db`), `EnvironmentFile=/etc/grokbot-shadow.env` and `ExecStart=/opt/grokbot/grokbot shadow`.
-   - The shadow env turns off holding news, movers, buttons, posting and backfill, and sets `ADMIN_CHAT_IDS` to the maintainer.
+   - The shadow env turns off holding news, movers, buttons, posting and backfill, and sets `TELEGRAM_ADMIN_CHAT_IDS` to the maintainer.
    - What to compare:
      - ask both bots the same things;
      - diff the summary lines;

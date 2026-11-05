@@ -107,10 +107,10 @@ for its definition.
 | `/events TICKER [section]` | anyone, in a group or a DM | TickerScout's 8-K event digest from `get_events`. Default `earnings`; sections: earnings, management changes, capital returns, debt and financing, m&a, governance, restructuring, legal. A section that fits one message is shown as TickerScout wrote it (kept 24 hours too), with no model, except that its dated items are put in ascending order (oldest first; a text whose items aren't all dated is left as it is); a longer one is shortened by the model as for `/narrative`. Buttons as for `/narrative`. In the command menu |
 | `/flushcache [portfolio_id] [year or month or day]` | an admin | Forget cached Sharesight period returns: all, or of one portfolio, or those overlapping a year (`2024`), month (`2024-05`) or day (`2024-05-17`), e.g. `/flushcache 684141 2024`; see [Caching Sharesight history](caching.md#caching-sharesight-history) |
 
-**Admins** are the user IDs in `ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with
+**Admins** are the user IDs in `TELEGRAM_ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with
 Telegram, cached for five minutes). The bot only knows a group once someone has written in it, or it was added, since
 it started tracking groups. Admins who post anonymously (as the group) can't be recognised. With `ADMIN_ONLY` on (the
 default), only admins can DM the bot, and Sharesight data is for admins only: anyone else asking about a portfolio
 gets "Portfolio data is for admins only." Holding-news DMs, buttons and down-server messages the bot sends itself are
-unaffected. With nobody in `ADMIN_CHAT_IDS` and no known group, nobody can DM the bot or reach Sharesight: set
+unaffected. With nobody in `TELEGRAM_ADMIN_CHAT_IDS` and no known group, nobody can DM the bot or reach Sharesight: set
 `ADMIN_ONLY=off` to allow everyone.

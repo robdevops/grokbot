@@ -23,7 +23,6 @@ ENV_VARS: dict[str, str] = {
     "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
     "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in TZ).",
     # Advanced and optional
-    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /usage; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "ADMIN_ONLY": "on|off. On (default): only admins may DM the bot or get Sharesight data. Off: everyone may. /usage and /flushcache stay admin-only.",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
     "FINANCE_LINK_TARGET": "Where ticker links go: yahoo (default, Yahoo Finance), google (Google Finance) or tradingview.",
@@ -37,6 +36,7 @@ ENV_VARS: dict[str, str] = {
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
     "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (TZ) for the daily holding-news check (default 08:00).",
     "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS": "Weekdays (in TZ) with no holding-news check, e.g. sun,mon; the next check covers them. Empty (default) = every day.",
+    "TELEGRAM_ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /usage; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
     "TELEGRAM_IMAGE_PRELOAD_CHATID": "Chat ID of a private chat the bot can post in. Chart periods are uploaded there ahead of time and reused when a period button is tapped. Empty (default) = off.",
 }
@@ -226,7 +226,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         link_target=link_target,
         db_path=database_path(env),
         tz=ZoneInfo(env.get("TZ", "UTC")),
-        admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
+        admin_chats=_ids(env.get("TELEGRAM_ADMIN_CHAT_IDS", "")),
         admin_only=_flag(env, "ADMIN_ONLY", default=True),
         movers_bots=frozenset(
             u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "").replace(",", " ").split()

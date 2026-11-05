@@ -79,7 +79,7 @@ def test_search_off_without_search_model(env):
 
 
 def test_admin_chats_and_recipients(env):
-    s = config.load({**env, "ADMIN_CHAT_IDS": "-1, -2 3", "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:@Me"})
+    s = config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "-1, -2 3", "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:@Me"})
     assert s.admin_chats == {-1, -2, 3} and s.holding_news_recipients == {"bob": "me"}
 
 

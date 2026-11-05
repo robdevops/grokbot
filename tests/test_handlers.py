@@ -274,7 +274,7 @@ def test_dm_buttons_hash_changes_with_presets(monkeypatch):
 
 # ---- admin-only (the default) ---------------------------------------------------------
 async def test_dm_from_a_non_admin_is_logged_but_ignored(env, store):
-    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", ADMIN_CHAT_IDS="5")
+    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", TELEGRAM_ADMIN_CHAT_IDS="5")
     stranger = user_msg(ctx.bot, "hello", chat_id=9, user_id=9)
     await run(h, stranger)
     assert stranger.replies == [] and backend.seen == [] and store.history(9, 20)
@@ -299,7 +299,7 @@ async def test_group_admin_can_dm_but_admin_only_off_lets_everyone_in(env, store
 async def test_non_admin_gets_no_portfolio_data_in_a_group(env, store):
     sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
     ctx, backend, h = make_ctx(env, store, [step("ok")], servers=[sharesight], ADMIN_ONLY="on",
-                               ADMIN_CHAT_IDS="5")
+                               TELEGRAM_ADMIN_CHAT_IDS="5")
     asked = user_msg(ctx.bot, "@stockbot how is my portfolio doing?", user_id=9)
     await run(h, asked)
     assert asked.replies[0]["text"] == "Portfolio data is for admins only." and backend.seen == []
@@ -459,7 +459,7 @@ async def test_clear_only_touches_this_chat_and_this_bot(env, store):
 
 
 async def test_typing_starts_before_the_bot_logs_the_message_or_checks_who_sent_it(env, store, monkeypatch):
-    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", ADMIN_CHAT_IDS="5")
+    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", TELEGRAM_ADMIN_CHAT_IDS="5")
     seen = {}
 
     async def is_admin(msg):

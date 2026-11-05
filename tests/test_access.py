@@ -15,7 +15,7 @@ def make_ctx(env, store, **extra):
 
 
 async def test_listed_user_is_admin_without_any_lookup(env, store):
-    ctx = make_ctx(env, store, ADMIN_CHAT_IDS="5, -100")
+    ctx = make_ctx(env, store, TELEGRAM_ADMIN_CHAT_IDS="5, -100")
     assert await access.is_admin(ctx, 5) and not await access.is_admin(ctx, 6)
 
 

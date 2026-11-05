@@ -310,7 +310,7 @@ def test_movers_helpers():
 
 # ---- commands --------------------------------------------------------------------------
 async def test_credits_shows_balance_and_usage_to_admins_only(env, store):
-    st = config.load({**env, "ADMIN_CHAT_IDS": "5, -100"})
+    st = config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "5, -100"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
     store.add_usage(-1, "m", "chat", 1, 1000, 500, 20, 0.5)
     stranger = user_msg(ctx.bot, "/credits", user_id=9, mid=1)
@@ -333,7 +333,7 @@ async def test_credits_still_shows_usage_when_the_balance_fails(env, store):
         async def credits(self):
             raise RuntimeError("boom")
 
-    ctx = Ctx(config.load({**env, "ADMIN_CHAT_IDS": "5"}), store, Broken([]), registry(), FakeBot())
+    ctx = Ctx(config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "5"}), store, Broken([]), registry(), FakeBot())
     store.add_usage(-1, "m", "chat", 1, 10, 0, 2, 0.1)
     msg = user_msg(ctx.bot, "/credits", user_id=5)
     await commands.credits(ctx, update_for(msg), None)
@@ -362,7 +362,7 @@ async def test_flushcache_command_is_admin_only_and_flushes_by_portfolio_and_per
     from lib.features.periods import backfill
     from lib.store import PeriodRow
 
-    st = config.load({**env, "ADMIN_CHAT_IDS": "5", "PERIOD_BACKFILL": "x"})
+    st = config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "5", "PERIOD_BACKFILL": "x"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
     store.period_put([PeriodRow(p, f"{y}-0{m}-01", f"{y}-0{m}-28", 1.0, 1.0, "AUD", [])
                       for p in (70007, 80008) for y in (2024, 2025) for m in (1, 2)])

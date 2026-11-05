@@ -96,7 +96,7 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
 - **Everyone who can reach the bot can use every enabled tool**, including Sharesight portfolio
   data (there is no per-user tool restriction; Telegram/BotFather
   controls who may use the bot). Restrict the bot in BotFather, or leave Sharesight out.
-- **Down servers:** if a server dies, chats in `ADMIN_CHAT_IDS` get a message with the error, and the
+- **Down servers:** if a server dies, chats in `TELEGRAM_ADMIN_CHAT_IDS` get a message with the error, and the
   model is told the source is down (and quotes the error) instead of claiming it has no access. A
   dead server is not restarted until the bot restarts.
 - **Slimming:** results are compacted before the model sees them (see [token saving](caching.md#caching-and-token-saving)).

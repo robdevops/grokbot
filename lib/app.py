@@ -119,7 +119,7 @@ def _drop_protocol_line(record: logging.LogRecord) -> bool:
 
 
 async def alert_down(ctx: Ctx, server: MCPServer) -> None:
-    """Tell ADMIN_CHAT_IDS that an MCP server died (and log it, so the model sees it in history)."""
+    """Tell TELEGRAM_ADMIN_CHAT_IDS that an MCP server died (and log it, so the model sees it in history)."""
     if not ctx.bot:
         return
     text = (f"⚠️ The <b>{html.escape(server.label)}</b> data source is down. "
@@ -144,7 +144,7 @@ async def log_tool_size(ctx: Ctx) -> None:
 async def register_menu(ctx: Ctx) -> None:
     """The command menu. A scoped menu replaces the default one, so each lists everything for its scope: /segments,
     /narrative, /events and the chat commands of mcp_servers.json for everyone; /clear too in private chats; /usage too for the people who can use it
-    (administrators of every group, and the users in ADMIN_CHAT_IDS in their own chat with the bot)."""
+    (administrators of every group, and the users in TELEGRAM_ADMIN_CHAT_IDS in their own chat with the bot)."""
     everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER"),
                 BotCommand("narrative", "10-K/10-Q narrative: /narrative TICKER [section]"),
                 BotCommand("events", "8-K events: /events TICKER [section]")]
