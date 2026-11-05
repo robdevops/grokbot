@@ -105,7 +105,7 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
 - Replies are Telegram HTML. Markdown the model slips in (`**bold**`, links, backticks) is
   converted; trailing "not advice"/"NFA"/"DYOR" disclaimers are stripped.
 - **Ticker links:** only a ticker written in a marked form is linked to its Yahoo Finance page (or Google Finance,
-  with `FINANCE_LINK_PROVIDER=google`): `$NVDA`,
+  with `FINANCE_LINK_TARGET=google`): `$NVDA`,
   an exchange suffix (`NXT.AX`, `000660.KS`), an exchange prefix (`ASX:NXT`, `NASDAQ: NVDA`, mapped to Yahoo's suffix:
   `ASX:NXT` -> `NXT.AX`), `Name (TICKER)` (bold, name and ticker together, unless already bold), Sharesight's
   `NXT (ASX)`, `^GSPC` and `BTC-USD`. The system prompt asks the model for these forms. A bare word is linked only

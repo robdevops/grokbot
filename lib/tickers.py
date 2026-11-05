@@ -42,7 +42,7 @@ YAHOO_QUOTE = "https://finance.yahoo.com/quote/"
 GOOGLE_QUOTE = "https://www.google.com/finance/quote/"
 GOOGLE_SEARCH = "https://www.google.com/finance?q="
 QUOTE_PREFIXES = (YAHOO_QUOTE, GOOGLE_QUOTE, GOOGLE_SEARCH)  # history.compact and news_codes read these links back
-PROVIDER = ["yahoo"]  # FINANCE_LINK_PROVIDER, set at startup (app.build_ctx)
+TARGET = ["yahoo"]  # FINANCE_LINK_TARGET, set at startup (app.build_ctx)
 # Yahoo's suffix -> Google Finance's exchange code ("NXT.AX" -> "NXT:ASX")
 GOOGLE_EXCHANGES = {
     "AX": "ASX", "NZ": "NZE", "L": "LON", "TO": "TSE", "V": "CVE", "HK": "HKG", "T": "TYO", "KS": "KRX",
@@ -52,8 +52,19 @@ GOOGLE_EXCHANGES = {
 }
 
 
-def set_provider(name: str) -> None:
-    PROVIDER[0] = name
+# A US listing's exchange as Google Finance names it ("JPM": "NYSE"), from features/known_tickers.py; Yahoo needs none.
+US_EXCHANGES: dict[str, str] = {}
+GOOGLE_US = {"NASDAQ": "NASDAQ", "NYSE": "NYSE", "NYSEARCA": "NYSEARCA", "NYSEAMERICAN": "NYSEAMERICAN",
+             "AMEX": "NYSEAMERICAN", "CBOE": "BATS", "BATS": "BATS", "OTC": "OTCMKTS", "OTCMKTS": "OTCMKTS"}
+
+
+def set_target(name: str) -> None:
+    TARGET[0] = name
+
+
+def set_us_exchanges(exchanges: Mapping[str, str]) -> None:
+    US_EXCHANGES.clear()
+    US_EXCHANGES.update(exchanges)
 
 
 def yahoo_url(symbol: str) -> str:
@@ -61,25 +72,29 @@ def yahoo_url(symbol: str) -> str:
     return YAHOO_QUOTE + quote(sym, safe="")
 
 
-def google_url(symbol: str) -> str:
-    """Google Finance's page for a Yahoo symbol: CODE:EXCHANGE where the suffix names it (NXT.AX -> NXT:ASX, 0700.HK ->
-    700:HKG), BTC-USD as is, else a search (a US ticker gives no exchange: NASDAQ or NYSE)."""
+def google_url(symbol: str, market: str = "") -> str:
+    """Google Finance's page for a Yahoo symbol: CODE:EXCHANGE (NXT.AX -> NXT:ASX, 0700.HK -> 700:HKG, BRK-B ->
+    BRK.B:NYSE; a US exchange comes from `market`, as the text wrote it, or US_EXCHANGES), BTC-USD as is, else a
+    search, for a US ticker whose exchange we don't know."""
     base, _, suffix = symbol.rpartition(".")
     if base and suffix in GOOGLE_EXCHANGES:
         code = base.lstrip("0") or "0" if suffix == "HK" else base
         return GOOGLE_QUOTE + quote(f"{code}:{GOOGLE_EXCHANGES[suffix]}", safe=":")
     if symbol in CRYPTO or symbol.endswith("-USD"):
         return GOOGLE_QUOTE + quote(symbol if symbol.endswith("-USD") else f"{symbol}-USD", safe="")
-    return GOOGLE_SEARCH + quote(symbol.replace("-", "."), safe="")  # BRK-B is BRK.B at Google
+    exchange = GOOGLE_US.get(market.upper()) or US_EXCHANGES.get(symbol)
+    if exchange and not symbol.startswith("^"):
+        return GOOGLE_QUOTE + quote(f"{symbol.replace('-', '.')}:{exchange}", safe=":.")  # BRK-B is BRK.B at Google
+    return GOOGLE_SEARCH + quote(symbol.replace("-", "."), safe="")
 
 
-def quote_url(symbol: str) -> str:
-    """The quote page for a Yahoo symbol, at the FINANCE_LINK_PROVIDER."""
-    return google_url(symbol) if PROVIDER[0] == "google" else yahoo_url(symbol)
+def quote_url(symbol: str, market: str = "") -> str:
+    """The quote page for a Yahoo symbol, at the FINANCE_LINK_TARGET (`market`: the exchange the text named)."""
+    return google_url(symbol, market) if TARGET[0] == "google" else yahoo_url(symbol)
 
 
 def quote_labels(html: str) -> set[str]:
-    """The labels of the quote links in a reply (the codes as shown: NXT, 700), whichever provider made them."""
+    """The labels of the quote links in a reply (the codes as shown: NXT, 700), whichever site they point to."""
     starts = "|".join(re.escape(p) for p in QUOTE_PREFIXES)
     return set(re.findall(rf'<a href="(?:{starts})[^"]*">([^<]+)</a>', html))
 
@@ -138,8 +153,8 @@ def _link_re(codes: frozenset[str]) -> re.Pattern:
     return re.compile(_MARKERS.replace("{known}", known))
 
 
-def _link(symbol: str, label: str) -> str:
-    return f'<a href="{quote_url(symbol)}">{label}</a>'
+def _link(symbol: str, label: str, market: str = "") -> str:
+    return f'<a href="{quote_url(symbol, market)}">{label}</a>'
 
 
 def _paren(paren: str, known: Mapping[str, str]) -> str | None:
@@ -173,7 +188,7 @@ def _wrap(m: re.Match, bold: bool, known: Mapping[str, str], pattern: re.Pattern
             symbol = yahoo_symbol(code, paren) if re.fullmatch(_CODE, code) else None
             if symbol is None or (not code.isdigit() and not is_ticker(code) and code not in known):
                 return plain()
-            return " ".join(words[:-1] + [_link(symbol, code)]) + f" ({paren})"
+            return " ".join(words[:-1] + [_link(symbol, code, paren)]) + f" ({paren})"
         symbol = _paren(paren, known)
         if symbol is None:
             return plain()
@@ -182,12 +197,12 @@ def _wrap(m: re.Match, bold: bool, known: Mapping[str, str], pattern: re.Pattern
         while skip < len(words) - 1 and words[skip] in SENTENCE_OPENERS:
             skip += 1
         lead = " ".join(words[:skip]) + " " if skip else ""
-        body = f"{' '.join(words[skip:])} ({_link(symbol, label)})"
+        body = f"{' '.join(words[skip:])} ({_link(symbol, label, paren.partition(':')[0] if ':' in paren else '')})"
         return lead + (body if bold else f"<b>{body}</b>")
     if m.group("exch"):
         code = m.group("ecode")
         symbol = yahoo_symbol(code, m.group("exch"))
-        return _link(symbol, code) if symbol else m.group(0)
+        return _link(symbol, code, m.group("exch")) if symbol else m.group(0)
     if m.group("cash"):
         code = m.group("cash")
         base, _, suffix = code.rpartition(".")

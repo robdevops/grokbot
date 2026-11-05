@@ -154,10 +154,10 @@ def test_link_labelled_with_its_own_url_is_numbered_but_named_links_and_code_are
 def test_google_finance_links_name_the_exchange_where_the_symbol_does(env):
     from lib import config
     from lib.history import compact
-    assert config.load({**env, "FINANCE_LINK_PROVIDER": "Google"}).link_provider == "google"
-    assert config.load(env).link_provider == "yahoo"
+    assert config.load({**env, "FINANCE_LINK_TARGET": "Google"}).link_target == "google"
+    assert config.load(env).link_target == "yahoo"
     try:
-        config.load({**env, "FINANCE_LINK_PROVIDER": "bing"})
+        config.load({**env, "FINANCE_LINK_TARGET": "bing"})
         raise AssertionError("bing accepted")
     except config.ConfigError:
         pass
@@ -166,11 +166,30 @@ def test_google_finance_links_name_the_exchange_where_the_symbol_does(env):
     assert g("0700.HK") == "https://www.google.com/finance/quote/700:HKG" and g("7203.T").endswith("/7203:TYO")
     assert g("BTC") == g("BTC-USD") == "https://www.google.com/finance/quote/BTC-USD"
     assert g("NVDA") == "https://www.google.com/finance?q=NVDA" and g("BRK-B").endswith("?q=BRK.B")
-    tickers.set_provider("google")
+    tickers.set_target("google")
     try:
         out = link_tickers("ASX:NXT and $NVDA")
         assert out == ('<a href="https://www.google.com/finance/quote/NXT:ASX">NXT</a> and '
                        '<a href="https://www.google.com/finance?q=NVDA">NVDA</a>')
         assert compact(out) == "NXT and NVDA" and tickers.quote_labels(out) == {"NXT", "NVDA"}
     finally:
-        tickers.set_provider("yahoo")
+        tickers.set_target("yahoo")
+
+
+def test_google_links_take_the_us_exchange_from_the_text_or_the_known_lists():
+    g = tickers.google_url
+    before = dict(tickers.US_EXCHANGES)
+    try:
+        tickers.set_us_exchanges({"JPM": "NYSE", "SPCX": "NASDAQ", "BRK-B": "NYSE"})
+        assert g("JPM") == "https://www.google.com/finance/quote/JPM:NYSE"
+        assert g("SPCX") == "https://www.google.com/finance/quote/SPCX:NASDAQ"
+        assert g("BRK-B") == "https://www.google.com/finance/quote/BRK.B:NYSE"
+        assert g("CBA.AX") == "https://www.google.com/finance/quote/CBA:ASX"
+        assert g("ACME", "NYSE") == "https://www.google.com/finance/quote/ACME:NYSE"  # NYSE:ACME, ACME (NYSE)
+        assert g("ACME") == "https://www.google.com/finance?q=ACME"  # no exchange known: a search
+        tickers.set_target("google")
+        assert 'quote/NVDA:NASDAQ"' in link_tickers("NASDAQ: NVDA and NVDA (NASDAQ) and Nvidia (NASDAQ:NVDA)")
+        assert 'quote/JPM:NYSE">JPM</a>' in link_tickers("$JPM")
+    finally:
+        tickers.set_target("yahoo")
+        tickers.set_us_exchanges(before)

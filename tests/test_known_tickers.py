@@ -12,7 +12,8 @@ from .fakes import FakeMcp, ScriptedBackend, registry
 
 
 def page(rows, table_id="constituents", header="Symbol"):
-    body = "".join(f"<tr><td><a href='/wiki/{s}'>{s}</a></td><td>Co {s}</td></tr>" for s in rows)
+    site = {"JPM": "https://www.nyse.com/quote/XNYS:JPM", "NVDA": "https://www.nasdaq.com/market-activity/stocks/nvda"}
+    body = "".join(f"<tr><td><a href='{site.get(s, '/wiki/' + s)}'>{s}</a></td><td>Co {s}</td></tr>" for s in rows)
     return (f"<table class='infobox'><tr><th>Founded</th></tr></table><table id='{table_id}'>"
             f"<tr><th>{header}</th><th>Security</th></tr>{body}</table>")
 
@@ -57,18 +58,22 @@ async def test_refresh_reads_the_api_with_a_contact_and_links_asx_codes_to_ax(en
     sp, ndx, asx = small_lists(monkeypatch)
     st = config.load({**env, "PORTFOLIO_NAMES": "Bob"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(Sharesight("sharesight", gate="portfolio")), FakeBot())
-    pages = {sp: page(["NVDA", "BRK.B", "QBE", "ALL"]), ndx: page(["NVDA", "AMD"]),
+    pages = {sp: page(["NVDA", "BRK.B", "QBE", "ALL", "JPM"]), ndx: page(["NVDA", "AMD"]),
              asx: page(["BHP", "A2M", "ALL", "QBE"], header="Code")}
     seen: list = []
     before = dict(tickers.KNOWN)
     try:
         saved = await kt.refresh(ctx, {}, wikipedia(pages, seen))
         assert seen[0].url.params["action"] == "parse" and "https://" in seen[0].headers["user-agent"]
-        assert saved["indexes"]["ASX 200"] == ["BHP", "A2M", "ALL", "QBE"]
+        assert saved["indexes"]["ASX 200"] == ["BHP", "A2M", "ALL", "QBE"] and saved["exchanges"]["JPM"] == "NYSE"
         assert saved["held"] == {"GM": "GM", "NXT": "NXT.AX", "QBE": "QBE.AX"}  # MOON is no exchange we know
         k = tickers.KNOWN
         assert k["BHP"] == "BHP.AX" and k["A2M"] == "A2M.AX" and k["NVDA"] == "NVDA" and k["BRK.B"] == "BRK-B"
         assert "ALL" not in k and k["QBE"] == "QBE.AX"  # on both exchanges: left out, unless a holding settles it
+        # the US exchanges, for Google Finance links: the S&P list's ticker links, the NASDAQ-100, the holdings
+        assert saved["exchanges"]["NVDA"] == "NASDAQ" and saved["exchanges"]["AMD"] == "NASDAQ"
+        assert saved["exchanges"]["GM"] == "NYSE" and tickers.US_EXCHANGES["JPM"] == "NYSE"
+        assert "BRK-B" not in saved["exchanges"]  # its test link points nowhere: no exchange, a Google search
         assert saved["ts"] > time.time() - 5  # every part worked: due tomorrow
         # the next day the S&P page refuses and the NASDAQ page looks wrong: both keep yesterday's list
         again = await kt.refresh(ctx, saved, wikipedia({ndx: page(["ONLY"]), asx: pages[asx]}))
@@ -89,6 +94,10 @@ def test_lists_saved_by_the_earlier_version_still_load():
 async def test_without_sharesight_the_held_list_stays_as_it_was(env, store):
     ctx = Ctx(config.load(env), store, ScriptedBackend([]), registry(), FakeBot())
     assert await kt.held_symbols(ctx) is None
+
+
+def test_the_exchange_comes_from_where_a_ticker_links():
+    assert kt.listings(page(["JPM", "NVDA", "MMM"])) == {"JPM": "NYSE", "NVDA": "NASDAQ", "MMM": ""}
 
 
 async def test_the_loop_waits_for_the_mcp_when_overdue_and_otherwise_until_due(env, store, monkeypatch):
