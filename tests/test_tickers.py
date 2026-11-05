@@ -1,5 +1,6 @@
-from lib import tickers
-from lib.tickers import link_tickers, ticker_label, yahoo_symbol, yahoo_url
+from lib import quote_links, tickers
+from lib.quote_links import yahoo_url
+from lib.tickers import link_tickers, ticker_label, yahoo_symbol
 
 Y = "https://finance.yahoo.com/quote/"
 
@@ -161,35 +162,57 @@ def test_google_finance_links_name_the_exchange_where_the_symbol_does(env):
         raise AssertionError("bing accepted")
     except config.ConfigError:
         pass
-    g = tickers.google_url
+    g = quote_links.google_url
     assert g("NXT.AX") == "https://www.google.com/finance/quote/NXT:ASX"
     assert g("0700.HK") == "https://www.google.com/finance/quote/700:HKG" and g("7203.T").endswith("/7203:TYO")
     assert g("BTC") == g("BTC-USD") == "https://www.google.com/finance/quote/BTC-USD"
     assert g("NVDA") == "https://www.google.com/finance?q=NVDA" and g("BRK-B").endswith("?q=BRK.B")
-    tickers.set_target("google")
+    quote_links.set_target("google")
     try:
         out = link_tickers("ASX:NXT and $NVDA")
         assert out == ('<a href="https://www.google.com/finance/quote/NXT:ASX">NXT</a> and '
                        '<a href="https://www.google.com/finance?q=NVDA">NVDA</a>')
-        assert compact(out) == "NXT and NVDA" and tickers.quote_labels(out) == {"NXT", "NVDA"}
+        assert compact(out) == "NXT and NVDA" and quote_links.quote_labels(out) == {"NXT", "NVDA"}
     finally:
-        tickers.set_target("yahoo")
+        quote_links.set_target("yahoo")
 
 
 def test_google_links_take_the_us_exchange_from_the_text_or_the_known_lists():
-    g = tickers.google_url
-    before = dict(tickers.US_EXCHANGES)
+    g = quote_links.google_url
+    before = dict(quote_links.US_EXCHANGES)
     try:
-        tickers.set_us_exchanges({"JPM": "NYSE", "SPCX": "NASDAQ", "BRK-B": "NYSE"})
+        quote_links.set_us_exchanges({"JPM": "NYSE", "SPCX": "NASDAQ", "BRK-B": "NYSE"})
         assert g("JPM") == "https://www.google.com/finance/quote/JPM:NYSE"
         assert g("SPCX") == "https://www.google.com/finance/quote/SPCX:NASDAQ"
         assert g("BRK-B") == "https://www.google.com/finance/quote/BRK.B:NYSE"
         assert g("CBA.AX") == "https://www.google.com/finance/quote/CBA:ASX"
         assert g("ACME", "NYSE") == "https://www.google.com/finance/quote/ACME:NYSE"  # NYSE:ACME, ACME (NYSE)
         assert g("ACME") == "https://www.google.com/finance?q=ACME"  # no exchange known: a search
-        tickers.set_target("google")
+        quote_links.set_target("google")
         assert 'quote/NVDA:NASDAQ"' in link_tickers("NASDAQ: NVDA and NVDA (NASDAQ) and Nvidia (NASDAQ:NVDA)")
         assert 'quote/JPM:NYSE">JPM</a>' in link_tickers("$JPM")
     finally:
-        tickers.set_target("yahoo")
-        tickers.set_us_exchanges(before)
+        quote_links.set_target("yahoo")
+        quote_links.set_us_exchanges(before)
+
+
+def test_tradingview_links_are_exchange_dash_code():
+    tv = quote_links.tradingview_url
+    before = dict(quote_links.US_EXCHANGES)
+    try:
+        quote_links.set_us_exchanges({"BRK-A": "NYSE", "SPCX": "NASDAQ", "SPY": "NYSEARCA"})
+        assert tv("NXT.AX") == "https://www.tradingview.com/symbols/ASX-NXT/"
+        assert tv("BRK-A") == "https://www.tradingview.com/symbols/NYSE-BRK.A/"
+        assert tv("SPCX") == "https://www.tradingview.com/symbols/NASDAQ-SPCX/"
+        assert tv("SPY") == "https://www.tradingview.com/symbols/AMEX-SPY/"  # TradingView files NYSE Arca under AMEX
+        assert tv("0700.HK").endswith("/HKEX-700/") and tv("7203.T").endswith("/TSE-7203/")
+        assert tv("ACME", "NYSE").endswith("/NYSE-ACME/") and tv("ACME").endswith("/symbols/ACME/")  # its main listing
+        assert tv("BTC-USD").endswith("/BTCUSD/") and tv("^GSPC").endswith("/SP-SPX/")
+        quote_links.set_target("tradingview")
+        out = link_tickers("ASX:NXT and $SPCX")
+        assert out == ('<a href="https://www.tradingview.com/symbols/ASX-NXT/">NXT</a> and '
+                       '<a href="https://www.tradingview.com/symbols/NASDAQ-SPCX/">SPCX</a>')
+        assert quote_links.quote_labels(out) == {"NXT", "SPCX"}
+    finally:
+        quote_links.set_target("yahoo")
+        quote_links.set_us_exchanges(before)

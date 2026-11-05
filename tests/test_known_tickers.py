@@ -3,7 +3,7 @@ import time
 
 import httpx
 
-from lib import config, tickers
+from lib import config, quote_links, tickers
 from lib.context import Ctx
 from lib.features import known_tickers as kt
 
@@ -72,7 +72,7 @@ async def test_refresh_reads_the_api_with_a_contact_and_links_asx_codes_to_ax(en
         assert "ALL" not in k and k["QBE"] == "QBE.AX"  # on both exchanges: left out, unless a holding settles it
         # the US exchanges, for Google Finance links: the S&P list's ticker links, the NASDAQ-100, the holdings
         assert saved["exchanges"]["NVDA"] == "NASDAQ" and saved["exchanges"]["AMD"] == "NASDAQ"
-        assert saved["exchanges"]["GM"] == "NYSE" and tickers.US_EXCHANGES["JPM"] == "NYSE"
+        assert saved["exchanges"]["GM"] == "NYSE" and quote_links.US_EXCHANGES["JPM"] == "NYSE"
         assert "BRK-B" not in saved["exchanges"]  # its test link points nowhere: no exchange, a Google search
         assert saved["ts"] > time.time() - 5  # every part worked: due tomorrow
         # the next day the S&P page refuses and the NASDAQ page looks wrong: both keep yesterday's list

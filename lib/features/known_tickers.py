@@ -14,7 +14,7 @@ from html.parser import HTMLParser
 
 import httpx
 
-from .. import config, tickers
+from .. import config, quote_links, tickers
 from ..context import Ctx
 from ..holdings import code_and_market, current_holdings
 
@@ -171,7 +171,7 @@ def apply(saved: dict) -> set[str]:
     codes, ambiguous = known(saved)
     tickers.set_known(codes)
     exchanges = {c: x for c, x in saved.get("exchanges", {}).items() if x}
-    tickers.set_us_exchanges({**exchanges, **{c.replace("-", "."): x for c, x in exchanges.items() if "-" in c}})
+    quote_links.set_us_exchanges({**exchanges, **{c.replace("-", "."): x for c, x in exchanges.items() if "-" in c}})
     return ambiguous
 
 

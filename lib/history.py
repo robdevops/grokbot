@@ -7,9 +7,9 @@ import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from .quote_links import QUOTE_PREFIXES
 from .store import HistoryRow
 from .textfmt import ANY_TAG_RE
-from .tickers import QUOTE_PREFIXES
 
 LAST_REPLY_MAX = 6000  # characters of the bot's latest reply kept in the prompt (~1,500 tokens)
 _LINK = re.compile(r'<a href="([^"]*)">(.*?)</a>', re.DOTALL)

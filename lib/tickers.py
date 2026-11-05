@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from functools import lru_cache
-from urllib.parse import quote
 
-from .tickers_data import CRYPTO, EXCHANGE_PREFIXES, EXCHANGE_SUFFIXES, NOT_TICKERS, WORD_TICKERS
+from .quote_links import quote_url
+from .tickers_data import EXCHANGE_PREFIXES, EXCHANGE_SUFFIXES, NOT_TICKERS, WORD_TICKERS
 
 # TICKER_RE, ONE_LETTER_RE and is_ticker read the user's text (llm/gate.py, charts/breakdown.py); replies link
 # only the marked forms below and known tickers.
@@ -36,67 +36,6 @@ def is_ticker(word: str) -> bool:
     if suffix in EXCHANGE_SUFFIXES and base not in NOT_TICKERS:
         return True  # an exchange suffix settles it, even for numeric codes like 9988.HK
     return not (word in NOT_TICKERS or NOT_TICKER_RE.match(word))
-
-
-YAHOO_QUOTE = "https://finance.yahoo.com/quote/"
-GOOGLE_QUOTE = "https://www.google.com/finance/quote/"
-GOOGLE_SEARCH = "https://www.google.com/finance?q="
-QUOTE_PREFIXES = (YAHOO_QUOTE, GOOGLE_QUOTE, GOOGLE_SEARCH)  # history.compact and news_codes read these links back
-TARGET = ["yahoo"]  # FINANCE_LINK_TARGET, set at startup (app.build_ctx)
-# Yahoo's suffix -> Google Finance's exchange code ("NXT.AX" -> "NXT:ASX")
-GOOGLE_EXCHANGES = {
-    "AX": "ASX", "NZ": "NZE", "L": "LON", "TO": "TSE", "V": "CVE", "HK": "HKG", "T": "TYO", "KS": "KRX",
-    "KQ": "KOSDAQ", "DE": "ETR", "F": "FRA", "PA": "EPA", "AS": "AMS", "BR": "EBR", "SW": "SWX", "MI": "BIT",
-    "MC": "BME", "ST": "STO", "OL": "OSL", "CO": "CPH", "HE": "HEL", "SI": "SGX", "SS": "SHA", "SZ": "SHE",
-    "TW": "TPE", "BO": "BOM", "NS": "NSE", "SA": "BVMF", "MX": "BMV", "JO": "JSE", "TA": "TLV",
-}
-
-
-# A US listing's exchange as Google Finance names it ("JPM": "NYSE"), from features/known_tickers.py; Yahoo needs none.
-US_EXCHANGES: dict[str, str] = {}
-GOOGLE_US = {"NASDAQ": "NASDAQ", "NYSE": "NYSE", "NYSEARCA": "NYSEARCA", "NYSEAMERICAN": "NYSEAMERICAN",
-             "AMEX": "NYSEAMERICAN", "CBOE": "BATS", "BATS": "BATS", "OTC": "OTCMKTS", "OTCMKTS": "OTCMKTS"}
-
-
-def set_target(name: str) -> None:
-    TARGET[0] = name
-
-
-def set_us_exchanges(exchanges: Mapping[str, str]) -> None:
-    US_EXCHANGES.clear()
-    US_EXCHANGES.update(exchanges)
-
-
-def yahoo_url(symbol: str) -> str:
-    sym = f"{symbol}-USD" if symbol in CRYPTO else symbol
-    return YAHOO_QUOTE + quote(sym, safe="")
-
-
-def google_url(symbol: str, market: str = "") -> str:
-    """Google Finance's page for a Yahoo symbol: CODE:EXCHANGE (NXT.AX -> NXT:ASX, 0700.HK -> 700:HKG, BRK-B ->
-    BRK.B:NYSE; a US exchange comes from `market`, as the text wrote it, or US_EXCHANGES), BTC-USD as is, else a
-    search, for a US ticker whose exchange we don't know."""
-    base, _, suffix = symbol.rpartition(".")
-    if base and suffix in GOOGLE_EXCHANGES:
-        code = base.lstrip("0") or "0" if suffix == "HK" else base
-        return GOOGLE_QUOTE + quote(f"{code}:{GOOGLE_EXCHANGES[suffix]}", safe=":")
-    if symbol in CRYPTO or symbol.endswith("-USD"):
-        return GOOGLE_QUOTE + quote(symbol if symbol.endswith("-USD") else f"{symbol}-USD", safe="")
-    exchange = GOOGLE_US.get(market.upper()) or US_EXCHANGES.get(symbol)
-    if exchange and not symbol.startswith("^"):
-        return GOOGLE_QUOTE + quote(f"{symbol.replace('-', '.')}:{exchange}", safe=":.")  # BRK-B is BRK.B at Google
-    return GOOGLE_SEARCH + quote(symbol.replace("-", "."), safe="")
-
-
-def quote_url(symbol: str, market: str = "") -> str:
-    """The quote page for a Yahoo symbol, at the FINANCE_LINK_TARGET (`market`: the exchange the text named)."""
-    return google_url(symbol, market) if TARGET[0] == "google" else yahoo_url(symbol)
-
-
-def quote_labels(html: str) -> set[str]:
-    """The labels of the quote links in a reply (the codes as shown: NXT, 700), whichever site they point to."""
-    starts = "|".join(re.escape(p) for p in QUOTE_PREFIXES)
-    return set(re.findall(rf'<a href="(?:{starts})[^"]*">([^<]+)</a>', html))
 
 
 def ticker_label(symbol: str) -> str:

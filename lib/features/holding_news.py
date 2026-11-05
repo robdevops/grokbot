@@ -21,10 +21,11 @@ from ..holdings import code_and_market, current_holdings
 from ..llm.base import BUSY_REPLY, is_busy
 from ..llm.gate import Route
 from ..prompts import HOLDING_NEWS_PROMPT
+from ..quote_links import quote_labels
 from ..telegram.draft import Draft
 from ..telegram.send import send_html
 from ..textfmt import ANY_TAG_RE, md_to_html, split_html, strip_disclaimer
-from ..tickers import link_tickers, quote_labels, yahoo_symbol
+from ..tickers import link_tickers, yahoo_symbol
 
 log = logging.getLogger("bot")
 UNSUBSCRIBE_BUTTON = InlineKeyboardMarkup([[InlineKeyboardButton("🔕 Unsubscribe…", callback_data="hn:menu")]])
