@@ -7,20 +7,20 @@ import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from .quote_links import QUOTE_PREFIXES
 from .store import HistoryRow
 from .textfmt import ANY_TAG_RE
 
 LAST_REPLY_MAX = 6000  # characters of the bot's latest reply kept in the prompt (~1,500 tokens)
 _LINK = re.compile(r'<a href="([^"]*)">(.*?)</a>', re.DOTALL)
-_YAHOO = "https://finance.yahoo.com/quote/"
 
 
 def compact(text: str) -> str:
-    """Stored Telegram HTML as cheap plain text: ticker links become the symbol, other links
+    """Stored Telegram HTML as cheap plain text: ticker links (Yahoo or Google) become the symbol, other links
     "label (url)", tags are dropped and whitespace is collapsed."""
     def link(m: re.Match) -> str:
         url, label = m.group(1), m.group(2)
-        return label if url.startswith(_YAHOO) else f"{label} ({url})"
+        return label if url.startswith(QUOTE_PREFIXES) else f"{label} ({url})"
 
     plain = html.unescape(ANY_TAG_RE.sub("", _LINK.sub(link, text)))
     return " ".join(plain.split())

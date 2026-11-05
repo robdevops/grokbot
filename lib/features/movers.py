@@ -6,9 +6,13 @@ import re
 
 from telegram import Message, MessageEntity
 
+from ..tickers import yahoo_symbol
+
 # The bold header, e.g. "≥ 5.0% at close (ASX):" or "≤ -5% at close (NASDAQ, NYSE):"
 HEADER = re.compile(r"(?:≥|≤|>=?|<=?)\s*[-−]?\s*\d+(?:\.\d+)?\s*%.*\bclose\b", re.IGNORECASE)
 PERCENT = re.compile(r"\d+(?:\.\d+)?\s*%")
+EXCHANGES = re.compile(r"\(([A-Z][A-Z ,/]*)\)")  # "(ASX)", "(NASDAQ, NYSE)" in the header
+STOCK_LINE = re.compile(r"^\W*([A-Z][A-Z0-9]{0,5})\b.*\d+(?:\.\d+)?\s*%")
 
 
 def is_movers_list(msg: Message, bots: frozenset[str]) -> bool:
@@ -42,3 +46,17 @@ def strip_summary(text: str) -> str:
     if len(paras) > 1 and "<a " not in paras[-1] and any("<a " in p for p in paras[:-1]):
         return "\n\n".join(paras[:-1])
     return text
+
+
+def listed_codes(listing_html: str) -> dict[str, str]:
+    """The listed codes as Yahoo symbols ({"DRO": "DRO.AX"} under an "(ASX)" header), so the explanation links them
+    bare. A header naming exchanges with different suffixes, or none we know, gives nothing: a guess could be wrong."""
+    lines = re.sub(r"<[^>]+>", "", listing_html).splitlines()
+    head = next((ln for ln in lines if HEADER.search(ln)), "")
+    found = EXCHANGES.search(head)
+    names = [n.strip() for n in re.split(r"[,/]", found.group(1))] if found else []
+    symbols = {yahoo_symbol("X", n) for n in names}
+    if len(symbols) != 1 or None in symbols:
+        return {}
+    codes = (m.group(1) for ln in lines if ln is not head and (m := STOCK_LINE.match(ln)))
+    return {code: yahoo_symbol(code, names[0]) or code for code in codes}

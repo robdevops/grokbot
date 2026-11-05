@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS text_cache (bot_id INTEGER, key TEXT, value TEXT, ts 
 CREATE TABLE IF NOT EXISTS charts (
     bot_id INTEGER, chat_id INTEGER, message_id INTEGER, spec TEXT, caption TEXT, period TEXT, ts INTEGER,
     PRIMARY KEY (bot_id, chat_id, message_id));
--- Chart images already on Telegram (uploaded to TELEGRAM_PRELOAD_CHAT, or sent as the reply): reused by the period buttons.
+-- Chart images already on Telegram (uploaded to TELEGRAM_IMAGE_PRELOAD_CHATID, or sent as the reply): reused by the period buttons.
 CREATE TABLE IF NOT EXISTS chart_files (
     bot_id INTEGER, chat_id INTEGER, message_id INTEGER, period TEXT, file_id TEXT, caption TEXT, ts INTEGER,
     PRIMARY KEY (bot_id, chat_id, message_id, period));
@@ -128,20 +128,21 @@ class Store:
     def chats(self) -> list[tuple[int, str]]:
         return [(r[0], r[1]) for r in self._run("SELECT chat_id, title FROM chats")]
 
-    def history(self, chat_id: int, limit: int) -> list[HistoryRow]:
-        """Recent messages, oldest first.
+    def history(self, chat_id: int, max_rows: int) -> list[HistoryRow]:
+        """Recent messages, oldest first, never more than `max_rows`.
 
         A plain "last N" window drops its oldest line on every message, changing the start of
-        the prompt and defeating prompt caching. Instead the window's start only moves every
-        limit/2 messages: it holds between `limit` and 1.5 x `limit` messages and in between
-        only grows at the end, so everything before the new messages stays cached."""
+        the prompt and defeating prompt caching. Instead, once the chat is longer than `max_rows`,
+        the window's start only moves every max_rows/2 messages: it holds between max_rows/2 + 1
+        and `max_rows` messages and in between only grows at the end, so everything before the new
+        messages stays cached."""
         if is_dm(chat_id):
             table, where, args = "dm_messages", "bot_id = ? AND chat_id = ?", (self._own_id(), chat_id)
         else:
             table, where, args = "messages", "chat_id = ?", (chat_id,)
         total = self._run(f"SELECT COUNT(*) FROM {table} WHERE {where}", args)[0][0]
-        step = max(1, limit // 2)
-        size = total - max(0, (total - limit) // step * step)
+        step = max(1, max_rows // 2)
+        size = total - max(0, -(-(total - max_rows) // step) * step)
         rows = self._run(
             f"SELECT message_id, sender, text, ts, reply_to FROM {table} "
             f"WHERE {where} ORDER BY message_id DESC LIMIT ?", (*args, size))
@@ -258,6 +259,12 @@ class Store:
             "SELECT model, COUNT(*), SUM(tokens_in), SUM(tokens_cached), SUM(tokens_out), SUM(cost) "
             "FROM usage WHERE bot_id = ? AND ts >= ? GROUP BY model ORDER BY SUM(cost) DESC",
             (self.bot_id or 0, since_ts))
+
+    def usage_by_kind(self, since_ts: int) -> list[tuple]:
+        """(kind, requests, cost) per kind of request (chat, holding-news, ...) since a time."""
+        return self._run(
+            "SELECT kind, COUNT(*), SUM(cost) FROM usage WHERE bot_id = ? AND ts >= ? GROUP BY kind "
+            "ORDER BY SUM(cost) DESC", (self.bot_id or 0, since_ts))
 
     # -- Sharesight period cache -------------------------------------------------------
     def period_get(self, portfolio_id: int, first: str, last: str) -> dict[tuple[str, str], PeriodRow]:

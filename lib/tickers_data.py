@@ -1,6 +1,7 @@
 """Data for ticker linking: words that look like tickers but aren't, exchange suffixes, crypto."""
 
-# Words shaped like tickers that aren't tickers.
+# Words shaped like tickers that aren't tickers. Replies never link a bare word unless it is a known ticker
+# (tickers.KNOWN), so this list only keeps the tool gate, the /segments fast path and "Name (WORD)" honest.
 NOT_TICKERS = {
     "AI", "AM", "PM", "AND", "THE", "NOT", "BUT", "FOR", "ALL", "NEW", "OLD", "OK",
     "US", "USA", "UK", "EU", "AU", "CN", "UTC", "AEST", "AEDT", "GMT",
@@ -13,6 +14,32 @@ NOT_TICKERS = {
     "NOTE", "EDIT", "TLDR", "FYI", "IMO", "IMHO", "AKA", "ETA", "VS", "PS",
     "VR", "AR", "XR", "API", "GPU", "CPU", "TPU", "HBM", "DRAM", "NAND", "EUV", "OS",
     "U.S", "U.K", "P.A", "E.G", "I.E", "SMSF", "SUPER", "PNL",
+    "GAAP", "EBITDA", "CAGR", "ARPU", "AFR", "NAV", "AUM", "DPS", "VWAP", "SMA", "EMA", "MACD", "LLM", "AGI",
+    "WSJ", "NZD", "CAD", "CHF",
+}
+
+# Index tickers that are also everyday words or acronyms in capitals ("IT spending", "GM expanded 200bp", "UPS demand",
+# "HD maps", "GPT models"): never linked bare, only as $GM, NYSE:GM or General Motors (GM). A fixed set: the indexes
+# barely change.
+WORD_TICKERS = {
+    "IT", "ALL", "ON", "NOW", "KEY", "LOW", "ARE", "DAY", "HAS", "WELL", "BALL", "FAST", "CAT", "AMP", "SO", "ED",
+    "GM", "UPS", "IP", "IR", "ICE", "PTC", "RF", "RL", "USB", "HD", "TECH", "EA", "CE", "MAR", "DD", "CF", "MS",
+    "FANG", "MSCI", "COST", "BR", "GE", "HP", "PH", "TT", "CTA",
+    # ASX 200
+    "GPT", "LLC", "WOW", "ZIP", "CAR", "SUN", "WEB", "HUB", "ARB", "ANN", "ORG", "MIN", "BEN", "PRU", "NAN", "IEL",
+    "TNE", "LOV", "IPL", "SGR", "CHC", "EVN", "DOW", "VEA", "NEC", "PNI", "IFT", "BOE", "DEG",
+}
+
+# An exchange as the model, the press or Sharesight writes it ("ASX:NXT", "NXT (ASX)") -> Yahoo's suffix ("" = US,
+# none). TSE is Toronto for letters and Tokyo for numbers (tickers.yahoo_symbol); HK numbers are padded to 4 digits.
+EXCHANGE_PREFIXES = {
+    "ASX": "AX", "NZX": "NZ", "LSE": "L", "LON": "L", "TSX": "TO", "TSE": "TO", "TSXV": "V", "CVE": "V",
+    "HKEX": "HK", "HKG": "HK", "SEHK": "HK", "TYO": "T", "JPX": "T", "KRX": "KS", "KOSDAQ": "KQ",
+    "XETRA": "DE", "ETR": "DE", "FRA": "F", "EPA": "PA", "AMS": "AS", "EBR": "BR", "SWX": "SW", "SIX": "SW",
+    "BIT": "MI", "BME": "MC", "STO": "ST", "OSL": "OL", "CPH": "CO", "HEL": "HE", "SGX": "SI", "SHA": "SS",
+    "SHE": "SZ", "TPE": "TW", "BOM": "BO", "NSE": "NS", "BVMF": "SA", "BMV": "MX", "JSE": "JO", "TLV": "TA",
+    "NYSE": "", "NASDAQ": "", "NYSEARCA": "", "NYSEAMERICAN": "", "AMEX": "", "OTC": "", "OTCMKTS": "",
+    "CBOE": "", "BATS": "",
 }
 
 # Yahoo needs the exchange suffix in the URL, but it's noise in the chat: link SQX.AX, show SQX.
@@ -20,7 +47,7 @@ NOT_TICKERS = {
 EXCHANGE_SUFFIXES = {
     "AX", "L", "TO", "V", "NZ", "HK", "SS", "SZ", "T", "KS", "DE",
     "PA", "AS", "MI", "MC", "ST", "OL", "SI", "BO", "NS", "SA", "MX",
-}
+} | {suffix for suffix in EXCHANGE_PREFIXES.values() if suffix}
 
 # Yahoo quotes crypto as BTC-USD, not BTC.
 CRYPTO = {

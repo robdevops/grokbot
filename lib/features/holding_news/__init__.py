@@ -4,10 +4,8 @@ with per-ticker mute/undo buttons, plus the /holdingnews on-demand check."""
 from __future__ import annotations
 
 import asyncio
-import html
-import json
 import logging
-import re
+import time
 from datetime import datetime, timedelta
 from itertools import batched
 
@@ -15,44 +13,30 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.error import Forbidden
 from telegram.ext import ContextTypes
 
-from .. import config
-from ..ask import ask
-from ..context import Ctx
-from ..llm.base import BUSY_REPLY, is_busy
-from ..llm.gate import Route
-from ..mcp.results import table_records
-from ..prompts import HOLDING_NEWS_PROMPT
-from ..telegram.draft import Draft
-from ..telegram.send import send_html
-from ..textfmt import ANY_TAG_RE, md_to_html, split_html, strip_disclaimer
-from ..tickers import link_tickers
+from ... import config
+from ...ask import ask
+from ...context import Ctx
+from ...holdings import current_holdings
+from ...llm.base import BUSY_REPLY, is_busy
+from ...llm.gate import Route
+from ...prompts import HOLDING_NEWS_PROMPT
+from ...telegram.draft import Draft
+from ...telegram.send import send_html
+from ...textfmt import md_to_html, split_html, strip_disclaimer
+from ...tickers import link_tickers
+from .text import (
+    WINDOW_DEFAULT,
+    as_bullets,
+    drop_repeats,
+    is_nothing,
+    known_symbols,
+    news_codes,
+    window_hours,
+)
 
 log = logging.getLogger("bot")
+LAST_RUN_KEY = "holding_news_last_run"  # kv: when the daily check last got an answer (its next window starts there)
 UNSUBSCRIBE_BUTTON = InlineKeyboardMarkup([[InlineKeyboardButton("🔕 Unsubscribe…", callback_data="hn:menu")]])
-
-
-def is_nothing(raw: str) -> bool:
-    """True for the model's "nothing to report" answer, however it's dressed up ("NOTHING",
-    "• NOTHING", "**Nothing.**", "None") or an empty reply."""
-    plain = html.unescape(ANY_TAG_RE.sub("", raw or ""))
-    words = re.sub(r"[^A-Za-z ]", " ", plain).split()
-    # A real item is longer, even one about a company called "Nothing ...".
-    return not words or (words[0].upper() in ("NOTHING", "NONE") and len(words) <= 5)
-
-
-def as_bullets(text: str) -> str:
-    """One "• " bullet per non-empty line, whatever bullet style (if any) the model used."""
-    lines = (re.sub(r"^\s*(?:[•\-*–·]|\d+[.)])\s+", "", ln).strip() for ln in text.splitlines())
-    return "\n".join(f"• {ln}" for ln in lines if ln)
-
-
-def news_codes(news: str, holdings: dict[str, str]) -> list[str]:
-    """Holding codes that appear as bold tickers or Yahoo links in a news message."""
-    held = {k.split(" ")[0].upper() for k in holdings}
-    found = {m.upper() for m in re.findall(r"<b>([^<]{1,12})</b>", news)}
-    found |= {m.split(".")[0].upper()
-              for m in re.findall(r"finance\.yahoo\.com/quote/([\w.\-^]+)", news)}
-    return sorted(held & found)
 
 
 def unsubscribe_menu(codes: list[str]) -> InlineKeyboardMarkup:
@@ -68,45 +52,33 @@ def undo_button(code: str) -> InlineKeyboardMarkup:
         [[InlineKeyboardButton(f"↩️ Undo (unsubscribed from {what})", callback_data=f"hn:undo:{code}")]])
 
 
-async def current_holdings(server, portfolio_names: list[str]) -> dict[str, str]:
-    """Current holdings across the named portfolios, as {"CODE (MARKET)": name}."""
-    data = json.loads(await server.call("list_portfolios", {}))
-    portfolios = {p["name"].lower(): p for p in data.get("portfolios", [])}
-    holdings: dict[str, str] = {}
-    for name in portfolio_names:
-        p = portfolios.get(name)
-        if not p:
-            log.warning("Holding news: no Sharesight portfolio called %r (have: %s)",
-                        name, ", ".join(sorted(portfolios)))
-            continue
-        report = json.loads(await server.call(
-            "get_performance_report", {"portfolio_id": p["id"], "include_sales": False})).get("report") or {}
-        for h in table_records(report.get("holdings")):
-            if h.get("code"):
-                holdings[f"{h['code']} ({h.get('market', '?')})"] = h.get("name") or h["code"]
-    return holdings
-
-
-async def holding_news_text(ctx: Ctx, username: str, holdings: dict[str, str]) -> str | None:
-    """Ask the model for major news about these holdings; None if there's nothing."""
-    since = int((datetime.now() - timedelta(days=3)).timestamp())
-    recent = await asyncio.to_thread(ctx.store.recent_news, username, since)
+async def holding_news_text(ctx: Ctx, usernames: list[str], holdings: dict[str, str],
+                            hours: int = WINDOW_DEFAULT) -> str | None:
+    """Ask the model for major news about these holdings (of these people) in the past `hours`; None if there's
+    nothing. Items already sent recently are listed in the prompt as not to repeat, and an item that cites the same
+    articles as one already sent is dropped whatever the model says."""
+    since = int(time.time()) - max(3 * 24, hours + 24) * 3600  # always reaching past the last check
+    digests = [news for name in usernames for news in await asyncio.to_thread(ctx.store.recent_news, name, since)]
+    recent = dict.fromkeys(line for news in digests for line in news.splitlines() if line.strip())
     already = ("\nAlready reported in the last few days; don't repeat these unless there's a "
                "genuinely new development:\n" + "\n".join(recent) + "\n") if recent else ""
     prompt = HOLDING_NEWS_PROMPT.format(
-        now=ctx.now(), what=ctx.backend.search_what, already=already,
+        now=ctx.now(), what=ctx.backend.search_what, already=already, hours=hours,
         holdings="\n".join(f"- {k}: {v}" for k, v in sorted(holdings.items())))
     answer = await ask(ctx, [{"type": "text", "text": prompt}], Route(), must_search=True,
-                       cache_key=f"holding-news-{username}", kind="holding-news")
+                       cache_key="holding-news", kind="holding-news")
     raw = strip_disclaimer(answer.text)
     if is_nothing(raw):
         return None
-    return link_tickers(as_bullets(md_to_html(raw)))
+    news, dropped = drop_repeats(link_tickers(as_bullets(md_to_html(raw)), known=known_symbols(holdings)), digests)
+    for item in dropped:
+        log.debug("Holding news: dropped a repeat of an article already sent: %s", item[:120])
+    return news or None
 
 
-async def send_holding_news(ctx: Ctx, chat_id: int, news: str, codes: list[str]) -> None:
+async def send_holding_news(ctx: Ctx, chat_id: int, news: str, codes: list[str], hours: int = WINDOW_DEFAULT) -> None:
     """Send a holding-news message with its Unsubscribe button on the last part."""
-    chunks = split_html(f"📰 <b>Holding news</b> (past 24h)\n\n{news}")
+    chunks = split_html(f"📰 <b>Holding news</b> (past {hours}h)\n\n{news}")
     for i, chunk in enumerate(chunks):
         last = i == len(chunks) - 1
         sent = await send_html(ctx.bot, chat_id, chunk, UNSUBSCRIBE_BUTTON if last else None)
@@ -129,24 +101,64 @@ async def run_holding_news(ctx: Ctx, only_username: str | None = None, *, userna
         if ((only_username is None or username == only_username)
                 and (usernames is None or username in usernames)):
             people.setdefault(username, []).append(portfolio)
+    if only_username:  # /holdingnews: that person's holdings, answered by the caller
+        return {} if not people else await _check_person(ctx, server, only_username, people[only_username], True, busy)
+    return await _check_together(ctx, server, people, busy)
+
+
+async def _held(ctx: Ctx, server, username: str, portfolio_names: list[str]) -> dict[str, str] | None:
+    """A person's holdings without the ones they muted; None if they muted it all."""
+    muted = await asyncio.to_thread(ctx.store.muted_codes, username)
+    if "*" in muted:
+        log.info("Holding news: @%s has unsubscribed from all of it", username)
+        return None
+    holdings = await current_holdings(server, portfolio_names)
+    return {k: v for k, v in holdings.items() if k.split(" ")[0].upper() not in muted}
+
+
+async def _check_together(ctx: Ctx, server, people: dict[str, list[str]], busy: list[str] | None) -> dict:
+    """One search for everyone's holdings at once (a stock two people hold is searched once), then each person gets
+    the items about their own holdings. An item naming no holding goes to everyone rather than being lost."""
+    held: dict[str, dict[str, str]] = {}
+    try:
+        for username, portfolio_names in people.items():
+            if (h := await _held(ctx, server, username, portfolio_names)):
+                held[username] = h
+        if not held:
+            return {}
+        together = {k: v for h in held.values() for k, v in h.items()}
+        last = await asyncio.to_thread(ctx.store.kv_get, LAST_RUN_KEY)
+        hours = window_hours(time.time(), float(last) if last else None)
+        log.info("Holding news: one check of %d holdings for %d people, past %d hours", len(together), len(held), hours)
+        news = await holding_news_text(ctx, list(held), together, hours)
+        await asyncio.to_thread(ctx.store.kv_set, LAST_RUN_KEY, str(int(time.time())))  # it got an answer
+    except Exception as e:
+        if is_busy(e):  # automated, so no chat message; one log line is enough
+            log.warning("Holding news check failed for %s, the provider is busy: %s",
+                        ", ".join(f"@{u}" for u in people), " ".join(str(e).split()))
+            if busy is not None:
+                busy.extend(people)
+        else:
+            log.exception("Holding news check failed")
+        return {}
+    items = news.splitlines() if news else []
     results: dict[str, tuple[str, list[str]] | None] = {}
-    for username, portfolio_names in people.items():
-        results.update(await _check_person(ctx, server, username, portfolio_names, only_username, busy))
+    for username, holdings in held.items():
+        mine = "\n".join(ln for ln in items if news_codes(ln, holdings) or not news_codes(ln, together))
+        results[username] = (mine, news_codes(mine, holdings)) if mine else None
+        log.info("Holding news for @%s: %s", username, "found" if mine else "nothing major")
+        if mine:
+            await _deliver(ctx, username, mine, results[username][1], hours)
     return results
 
 
 async def _check_person(ctx: Ctx, server, username: str, portfolio_names: list[str],
                         only_username: str | None, busy: list[str] | None = None) -> dict:
-    muted = await asyncio.to_thread(ctx.store.muted_codes, username)
-    if "*" in muted:
-        log.info("Holding news: @%s has unsubscribed from all of it", username)
-        return {}
     try:
-        holdings = await current_holdings(server, portfolio_names)
-        holdings = {k: v for k, v in holdings.items() if k.split(" ")[0].upper() not in muted}
+        holdings = await _held(ctx, server, username, portfolio_names)
         if not holdings:
             return {}
-        news = await holding_news_text(ctx, username, holdings)
+        news = await holding_news_text(ctx, [username], holdings)
     except Exception as e:
         if is_busy(e):  # automated, so no chat message; one log line is enough
             log.warning("Holding news check failed for @%s, the provider is busy: %s",
@@ -163,14 +175,14 @@ async def _check_person(ctx: Ctx, server, username: str, portfolio_names: list[s
     return {username: result}
 
 
-async def _deliver(ctx: Ctx, username: str, news: str, codes: list[str]) -> None:
+async def _deliver(ctx: Ctx, username: str, news: str, codes: list[str], hours: int = WINDOW_DEFAULT) -> None:
     chat_id = await asyncio.to_thread(ctx.store.user_id_for, username)
     if not chat_id:
         log.warning("Holding news: don't know @%s's user ID yet; they need to message the bot "
                     "or a group it's in", username)
         return
     try:
-        await send_holding_news(ctx, chat_id, news, codes)
+        await send_holding_news(ctx, chat_id, news, codes, hours)
         await asyncio.to_thread(ctx.store.add_news, username, news)
     except Forbidden:
         log.warning("Holding news: @%s hasn't started a private chat with the bot", username)
@@ -189,6 +201,11 @@ async def daily_loop(ctx: Ctx) -> None:
         wait = seconds_until(ctx.st.holding_news_time, datetime.now(ctx.st.tz))
         log.info("Next holding news check in %.1f hours", wait / 3600)
         await asyncio.sleep(wait)
+        today = datetime.now(ctx.st.tz)
+        if today.weekday() in ctx.st.holding_news_skip:  # the next check covers it: its window starts at the last
+            log.info("Holding news: skipped (%s)", today.strftime("%A"))
+            await asyncio.sleep(1)
+            continue
         busy: list[str] = []
         try:
             await run_holding_news(ctx, busy=busy)

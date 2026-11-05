@@ -4,10 +4,15 @@
 ## Optional features (off by default)
 Each is off by default. The holding-news DM and the movers reply are switched on by setting the names they need (recipients, bots); the DM buttons have a flag.
 - **Daily holding-news DM** (switched on by listing recipients in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`, at `SHARESIGHT_HOLDING_NEWS_TIME` in
-  `BOT_TZ`, `portfolio:username` pairs such as
+  `TZ`, `portfolio:username` pairs such as
   `MyPortfolio:alice,MySMSF:alice`; empty, the default, means off):
   reads each person's current Sharesight holdings, searches for *major* news from the past 24 hours
-  (a forced search), and DMs only what qualifies (most days: nothing). Stories already reported in
+  (a forced search), and DMs only what qualifies (most days: nothing). The daily check is one search for everyone's
+  holdings together, so a stock two people hold costs one search; each person then gets the items about their own
+  holdings (an item that names none goes to everyone). Each check searches back to the last one (at least 24 hours,
+  at most 7 days), so days skipped with `SHARESIGHT_HOLDING_NEWS_SKIP_DAYS` (say `sun,mon`, after the US weekend), an
+  outage or a restart leave no gap; the message says how far back it looked (`past 72h`). An item that cites the same
+  article as one already sent is dropped, even if the model repeats it. Stories already reported in
   the last 3 days are not repeated. Each message has an **Unsubscribe** button: per ticker, or all
   holding news, with an **Undo** button afterwards. People must have messaged the bot (or a group it
   is in) once so it knows their user ID. `/holdingnews` in a DM runs the check now and always replies.
@@ -43,7 +48,7 @@ for its definition.
   light weight (the one at zero too), short strokes above the x labels, and grey axis text. The subtitle says what
   the chart shows and when, like "% change over the past month, 30 Sep - 28 Oct 2026". Tick labels share their
   decimals, shorten big numbers (120M, 1.5B) and show % for % changes. A single y axis has no title (an inverted
-  one says "inverted"); two axes keep theirs. The theme follows `DARKMODE`: light (`off`, the default), dark (`on`), or dark from 9 pm to 7 am in `BOT_TZ` (`auto`).
+  one says "inverted"); two axes keep theirs. The theme follows `DARKMODE`: light (`off`, the default), dark (`on`), or dark from 9 pm to 7 am in `TZ` (`auto`).
 - **Line labels:** with lines on one axis, each line ends in a small square and a label with its name and total
   ("NVDA  -5.7%"), nudged apart where they would overlap, and there is no legend. Two axes, bars or points keep
   a legend, with the totals in it.
@@ -62,12 +67,12 @@ for its definition.
 - **Several charts, one image:** when a reply has 2 to 5 charts (for example a breakdown by segment, platform and
   region), the first is the image and each chart has a button under it, labelled with the part of its title that
   differs ("Segment", "Platform", "Region"). A tap swaps the image in place and keeps the answer as the caption; the one
-  shown is shaded. With `TELEGRAM_PRELOAD_CHAT` the other charts are uploaded in the background, so even the first tap
+  shown is shaded. With `TELEGRAM_IMAGE_PRELOAD_CHATID` the other charts are uploaded in the background, so even the first tap
   is instant; without it the first tap draws the chart (about half a second) and later taps reuse it.
 - **Period buttons:** a single chart whose series are all tickers comes with buttons: 1D, 1M, 1Y, 5Y and 🔄 (reload); the period shown is shaded.
   A tap fetches the prices again and redraws the chart in place, without asking the model. Another period gets a
   plain title, repeated as the caption; the chart's own period brings back the model's caption.
-  Set `TELEGRAM_PRELOAD_CHAT` to a private chat the bot can post in (a private group, or a DM with you) and the
+  Set `TELEGRAM_IMAGE_PRELOAD_CHATID` to a private chat the bot can post in (a private group, or a DM with you) and the
   other periods are drawn and uploaded there in the background right after the reply; a tap then swaps in the
   uploaded picture without fetching or drawing, and so does going back to the chart's own period. A picture older
   than an hour (15 minutes for 1D) is drawn again with fresh prices, and 🔄 always is. Without the variable every tap draws.
@@ -94,7 +99,7 @@ for its definition.
 |---|---|---|
 | `/start` | DM | Greeting (and the buttons if enabled) |
 | `/holdingnews` | DM, if holding news is on | Run the holding-news check now |
-| `/tokens` (or `/usage`, `/credits`) | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI has none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days |
+| `/usage` (or `/tokens`, `/credits`) | an admin (see below), in a group or a DM | Provider balance (OpenRouter; xAI has none to show), then requests, tokens (and % cached) and cost per model for the last 24 h and 7 days, and the requests and cost per kind (chat, the daily holding-news check, movers, DM buttons, chat commands, filings) |
 | `/<name> [text]` from `chat_commands` | anyone (admins only for a `gate: portfolio` server) | Commands configured per MCP server in `mcp_servers.json`: the model answers with only that server tool, which it has to call. See [How it works](how-it-works.md#mcp-data-tools). In the command menu |
 | `/clear` | anyone, in a private chat | The bot forgets its stored history of that chat (clearing the chat on your own screen doesn't tell the bot anything, so use this too). Neither the command nor its reply is stored. Not in groups, whose history is shared by everyone and every bot in them. In the command menu of private chats |
 | `/segments TICKER` | anyone, in a group or a DM | The latest quarter's revenue breakdown pies from TickerScout `get_segments`, drawn without the model (the same as a plain "TICKER revenue breakdown" message; see Charts). In the command menu |
@@ -102,10 +107,10 @@ for its definition.
 | `/events TICKER [section]` | anyone, in a group or a DM | TickerScout's 8-K event digest from `get_events`. Default `earnings`; sections: earnings, management changes, capital returns, debt and financing, m&a, governance, restructuring, legal. A section that fits one message is shown as TickerScout wrote it (kept 24 hours too), with no model, except that its dated items are put in ascending order (oldest first; a text whose items aren't all dated is left as it is); a longer one is shortened by the model as for `/narrative`. Buttons as for `/narrative`. In the command menu |
 | `/flushcache [portfolio_id] [year or month or day]` | an admin | Forget cached Sharesight period returns: all, or of one portfolio, or those overlapping a year (`2024`), month (`2024-05`) or day (`2024-05-17`), e.g. `/flushcache 684141 2024`; see [Caching Sharesight history](caching.md#caching-sharesight-history) |
 
-**Admins** are the user IDs in `ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with
+**Admins** are the user IDs in `TELEGRAM_ADMIN_CHAT_IDS` plus anyone who administers a group the bot is in (checked with
 Telegram, cached for five minutes). The bot only knows a group once someone has written in it, or it was added, since
 it started tracking groups. Admins who post anonymously (as the group) can't be recognised. With `ADMIN_ONLY` on (the
 default), only admins can DM the bot, and Sharesight data is for admins only: anyone else asking about a portfolio
 gets "Portfolio data is for admins only." Holding-news DMs, buttons and down-server messages the bot sends itself are
-unaffected. With nobody in `ADMIN_CHAT_IDS` and no known group, nobody can DM the bot or reach Sharesight: set
+unaffected. With nobody in `TELEGRAM_ADMIN_CHAT_IDS` and no known group, nobody can DM the bot or reach Sharesight: set
 `ADMIN_ONLY=off` to allow everyone.

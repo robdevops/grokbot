@@ -10,6 +10,12 @@ MEDIA_KINDS = (
 )
 
 
+def log_preview(text: str, words: int = 2) -> str:
+    """User input for the log: its first `words` words, then "…" (one character) if there were more."""
+    parts = (text or "").split()
+    return " ".join(parts[:words]) + ("…" if len(parts) > words else "")
+
+
 def sender_name(msg: Message) -> str:
     """'Full Name (@username)'; must match how a bot's own replies are labelled in history."""
     if msg.from_user:

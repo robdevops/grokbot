@@ -8,8 +8,8 @@
 - **Private chats:** every message is answered, and the reply streams into a Telegram message
   draft ("Thinking..." then the text as it arrives). Replies are not quoted in DMs.
 - **History:** the prompt carries a window of the chat's recent messages, oldest first. The window
-  is `HISTORY_LIMIT` to 1.5x that many messages (20-29 by default): its start only moves every
-  `HISTORY_LIMIT/2` messages, so the start of the prompt stays identical between requests and the
+  is at most `HISTORY_MAX` messages (6 to 10 by default, once the chat is longer than that): its start only moves every
+  `HISTORY_MAX/2` messages, so the start of the prompt stays identical between requests and the
   provider's prompt cache keeps working. The bot's own earlier replies appear as "You" (its latest reply in full, so follow-up questions about it
   work; older ones shortened); a replied-to
   message is quoted even if it is older than the window.
@@ -33,7 +33,7 @@
   do" is answered from the actual tool list (about 400 tokens in the prompt, no tool offered): the data sources and
   their tools, web search, charts, and the other local tools. Tools the asker may not use (Sharesight for a
   non-admin, posting to groups when it is off) are left out.
-- **Time:** the current date and time (in `BOT_TZ`) is included in every prompt.
+- **Time:** the current date and time (in `TZ`) is included in every prompt.
 - **Replies are final:** the prompt tells the model never to say it will "check later"; it makes its
   tool calls first (several at once) and answers in one go.
 - **Errors:** a failed request replies with the error text; the bot never goes silent.
@@ -41,8 +41,14 @@
 ## Search
 - **xAI:** server-side `web_search` and `x_search` (X/Twitter) tools.
 - **OpenRouter:** OpenRouter's `web_search` tool; when it hands a search call back, the bot runs the
-  query through `SEARCH_MODEL` (default `xiaomi/mimo-v2.6-flash:online`) and returns the write-up; that call's cost is added to the answer's cost.
+  query through `SEARCH_MODEL` (default: `MODEL` with `:online` added) and returns the write-up; that call's cost is added to the answer's cost.
   Some models print a search call as text instead of making it; the bot recovers those queries too.
+  In a chat answer the model is told to cite a sentence that rests on a search result as `[1]`, the number linking to the
+  page (its exact URL from the results). The bot keeps only links to pages the search really returned. OpenRouter's
+  `url_citation` annotations say which pages were used but not which sentence each backs (the positions are 0), so each
+  page the model did not cite gets a `[n]` after the sentence its snippet fits best: the figures and distinctive words
+  of the sentence also appear in the snippet. A sentence that fits no snippet, such as an opinion, gets none. All the
+  numbers follow the order they appear in; there is no list of sources at the end. `DEBUG` logs show each page's best score.
 - At most 5 searches per round; extras get a "skipped" note.
 - `SEARCH=off` turns search off (the prompt then says the model has no web search).
 - **Forced search:** movers lists, DM preset buttons and the holding-news digest *require* a
@@ -79,7 +85,7 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
   "Usage: /forecast <what to look up>" without asking the model. A command whose server is down, or whose tool isn't
   enabled (blocked, or not read-only and missing from `allowed_tools`), says so. A command on a `gate: portfolio`
   server is for admins only. Names follow Telegram's rules (lowercase letters, digits and `_`, at most 32). A name the
-  bot already uses (`/tokens`, `/clear`, …), a name used twice, or an entry without a `tool` is skipped, and the startup
+  bot already uses (`/usage`, `/clear`, …), a name used twice, or an entry without a `tool` is skipped, and the startup
   log warns about each, and about a tool that isn't enabled.
 - **Tool names are exact:** `blocked_tools` and `allowed_tools` take the server's real tool names, as
   printed in the startup log (`get_analyst_estimates`, not `analyst_estimates`). An entry that matches
@@ -90,7 +96,7 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
 - **Everyone who can reach the bot can use every enabled tool**, including Sharesight portfolio
   data (there is no per-user tool restriction; Telegram/BotFather
   controls who may use the bot). Restrict the bot in BotFather, or leave Sharesight out.
-- **Down servers:** if a server dies, chats in `ADMIN_CHAT_IDS` get a message with the error, and the
+- **Down servers:** if a server dies, chats in `TELEGRAM_ADMIN_CHAT_IDS` get a message with the error, and the
   model is told the source is down (and quotes the error) instead of claiming it has no access. A
   dead server is not restarted until the bot restarts.
 - **Slimming:** results are compacted before the model sees them (see [token saving](caching.md#caching-and-token-saving)).
@@ -98,12 +104,23 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
 ## Formatting and ticker links
 - Replies are Telegram HTML. Markdown the model slips in (`**bold**`, links, backticks) is
   converted; trailing "not advice"/"NFA"/"DYOR" disclaimers are stripped.
-- **Yahoo Finance links:** the model writes plain tickers (with the exchange suffix for non-US
-  listings: `SQX.AX`, `000660.KS`) and the bot links each one to its Yahoo Finance page. The visible text drops the suffix (`SQX.AX` shows as `SQX`, `BRK.B` stays) while the URL
-  keeps it; crypto gets `-USD` in the URL (`BTC` -> `BTC-USD`). Words like CEO, ETF, FY26 and Q3 are
-  not linked, a lone letter only counts next to a price or move (`F 5.2`), and text already inside a
-  link, `<code>` or `<pre>` is left alone. A company name written as `Name (TICKER)` is bold,
-  name and ticker together (`Micron (MU)`), unless it is already bold.
+- **Ticker links:** only a ticker written in a marked form is linked to its Yahoo Finance page (or Google Finance or TradingView,
+  with `FINANCE_LINK_TARGET`): `$NVDA`,
+  an exchange suffix (`NXT.AX`, `000660.KS`), an exchange prefix (`ASX:NXT`, `NASDAQ: NVDA`, mapped to Yahoo's suffix:
+  `ASX:NXT` -> `NXT.AX`), `Name (TICKER)` (bold, name and ticker together, unless already bold), Sharesight's
+  `NXT (ASX)`, `^GSPC` and `BTC-USD`. The system prompt asks the model for these forms. A bare word is linked only
+  when it is a known ticker: the S&P 500, NASDAQ-100 and S&P/ASX 200 constituents (read through Wikipedia's API) and
+  the Sharesight holdings, refreshed once a day in the background and kept in the database, so a reply never waits for
+  them. An ASX code links with its suffix (`BHP` -> `BHP.AX`); a code in a US index and in the ASX 200 names two
+  companies, so it isn't linked bare unless a holding says which. Any other capitalised word stays plain (`GAAP`, `EBITDA`, `AFR`, `M3`), so there is no stoplist to maintain. An
+  exchange suffix settles it on its own (`ALL.AX` is Aristocrat);
+  single letters and index tickers that are also everyday words or acronyms (`IT`, `ALL`, `GM`, `UPS`, `HD`) need `$`,
+  an exchange prefix or `Name (TICKER)`. A part of the refresh that fails is tried again in half an hour. A bare
+  code in brackets names no exchange, so `Goodman Group (GMG)` is linked only if `GMG` is known (it is `GMG.AX`).
+  A holding-news digest also links the holdings' own codes, and a movers explanation the listed codes with the list's
+  exchange. The visible text drops `$`, the exchange prefix and the suffix (`NXT.AX` shows as `NXT`; `BRK.B` and
+  number codes such as `9988` stay as they are) while the URL keeps it; crypto gets `-USD` in the URL. Text inside a
+  link, `<code>` or `<pre>` is left alone.
 - **Citations:** a raw link in a reply (a bare URL, or a link labelled with its own URL) becomes a
   numbered link, `[1]`, `[2]`, in order of appearance, the same URL keeping its number. Links with a
   real label, and anything in `<code>` or `<pre>`, are left alone.

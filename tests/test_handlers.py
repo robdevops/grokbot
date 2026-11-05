@@ -26,13 +26,14 @@ async def run(h, msg, edited=False):
 
 
 async def test_group_mention_is_answered_with_linked_tickers_and_logged(env, store):
-    ctx, backend, h = make_ctx(env, store, [step("NVDA looks <b>strong</b>, SQX.AX too")])
+    ctx, backend, h = make_ctx(env, store, [step("$NVDA looks <b>strong</b>, SQX.AX too, GAAP not")])
     m = user_msg(ctx.bot, "@stockbot how is NVDA?")
     await run(h, m)
     assert len(m.replies) == 1
     text = m.replies[0]["text"]
     assert '<a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>' in text
     assert '<a href="https://finance.yahoo.com/quote/SQX.AX">SQX</a>' in text and "<b>NVDA" not in text
+    assert "quote/GAAP" not in text  # a bare acronym is never linked
     assert m.replies[0]["do_quote"] is True and m.replies[0]["disable_notification"] is True
     rows = store.history(-100, 20)
     assert [r.text for r in rows][0] == "@stockbot how is NVDA?" and len(rows) == 2
@@ -222,12 +223,15 @@ async def test_movers_list_off_by_default_then_answered_once_without_tagging(env
         assert len(m.replies) == expect
     assert backend.seen[0]["tools"] == [] and backend.seen[0]["search"] is True  # forced search only
     assert "Small caps" not in m.replies[0]["text"]  # closing wrap-up paragraph dropped
+    assert 'quote/NVDA.AX"' in m.replies[0]["text"]  # the list's "(ASX)" header gives the codes their suffix
 
 
 def test_format_answer():
-    out = format_answer("**NVDA** up, ping @finbotibot", movers_bots=frozenset({"finbotibot"}), summary=False)
+    out = format_answer("**$NVDA** up, ping @finbotibot", movers_bots=frozenset({"finbotibot"}), summary=False)
     assert "@finbotibot" not in out and "finbotibot" in out and 'quote/NVDA"' in out
     assert format_answer("", movers_bots=frozenset(), summary=False) == "(no response)"
+    assert "quote/" not in format_answer("NVDA up", movers_bots=frozenset(), summary=False)
+    assert 'quote/NVDA"' in format_answer("NVDA up", movers_bots=frozenset(), summary=False, known={"NVDA": "NVDA"})
 
 
 def test_mentions():
@@ -270,7 +274,7 @@ def test_dm_buttons_hash_changes_with_presets(monkeypatch):
 
 # ---- admin-only (the default) ---------------------------------------------------------
 async def test_dm_from_a_non_admin_is_logged_but_ignored(env, store):
-    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", ADMIN_CHAT_IDS="5")
+    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", TELEGRAM_ADMIN_CHAT_IDS="5")
     stranger = user_msg(ctx.bot, "hello", chat_id=9, user_id=9)
     await run(h, stranger)
     assert stranger.replies == [] and backend.seen == [] and store.history(9, 20)
@@ -295,7 +299,7 @@ async def test_group_admin_can_dm_but_admin_only_off_lets_everyone_in(env, store
 async def test_non_admin_gets_no_portfolio_data_in_a_group(env, store):
     sharesight = FakeMcp("sharesight", gate="portfolio", tools=("list_portfolios",))
     ctx, backend, h = make_ctx(env, store, [step("ok")], servers=[sharesight], ADMIN_ONLY="on",
-                               ADMIN_CHAT_IDS="5")
+                               TELEGRAM_ADMIN_CHAT_IDS="5")
     asked = user_msg(ctx.bot, "@stockbot how is my portfolio doing?", user_id=9)
     await run(h, asked)
     assert asked.replies[0]["text"] == "Portfolio data is for admins only." and backend.seen == []
@@ -455,7 +459,7 @@ async def test_clear_only_touches_this_chat_and_this_bot(env, store):
 
 
 async def test_typing_starts_before_the_bot_logs_the_message_or_checks_who_sent_it(env, store, monkeypatch):
-    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", ADMIN_CHAT_IDS="5")
+    ctx, backend, h = make_ctx(env, store, [step("hi")], ADMIN_ONLY="on", TELEGRAM_ADMIN_CHAT_IDS="5")
     seen = {}
 
     async def is_admin(msg):
@@ -480,3 +484,41 @@ async def test_segments_shows_typing_while_it_works(env, store):
     m = user_msg(ctx.bot, "/segments", chat_id=-100)
     await h.segments(update_for(m), N(args=[]))
     assert ctx.bot.actions[:1] == ["typing"] and m.replies[0]["text"] == "Usage: /segments TICKER"
+
+
+def test_numbered_source_links_survive_the_reply_formatting():
+    from lib.telegram.handlers import format_answer
+    text = 'NVDA rose 3%.[<a href="https://a.example/x?p=1&amp;q=2">1</a>] **Strong.**[<a href="https://b.example/">2</a>]'
+    out = format_answer(text, movers_bots=frozenset(), summary=False)
+    assert '[<a href="https://a.example/x?p=1&amp;q=2">1</a>]' in out and '[<a href="https://b.example/">2</a>]' in out
+    assert "<b>Strong.</b>" in out and "Sources:" not in out
+
+
+def test_log_preview_keeps_two_words_and_one_ellipsis_character():
+    from lib.msgtext import log_preview
+    assert log_preview("") == "" and log_preview("hi") == "hi" and log_preview("/segments $nvda") == "/segments $nvda"
+    assert log_preview("@stockbot how is NVDA?") == "@stockbot how…"
+    assert log_preview("  @stockbot \n how  is\tit ") == "@stockbot how…"
+    assert log_preview("one two three four", words=3) == "one two three…"
+
+
+async def test_the_log_shows_only_the_first_two_words_of_a_message(env, store, caplog):
+    import logging
+    ctx, backend, h = make_ctx(env, store, [step("ok")])
+    m = user_msg(ctx.bot, "@stockbot my secret portfolio plan is to buy NVDA")
+    with caplog.at_level(logging.INFO, logger="bot"):
+        await run(h, m)
+    lines = [r.getMessage() for r in caplog.records]
+    assert any(line.endswith("@stockbot my…") for line in lines)
+    assert not any("secret" in line or "portfolio" in line for line in lines)
+
+
+async def test_only_chat_answers_get_the_citation_instruction(env, store):
+    from lib.ask import ask
+    from lib.llm.gate import Route
+    ctx, backend, h = make_ctx(env, store, [step("a"), step("b")])
+    backend.source_note = "CITE-LIKE-THIS"
+    await ask(ctx, [{"type": "text", "text": "q"}], Route([], True))
+    await ask(ctx, [{"type": "text", "text": "q"}], Route([], True), kind="holding-news")
+    assert "CITE-LIKE-THIS" in backend.seen[0]["system"] and "CITE-LIKE-THIS" not in backend.seen[1]["system"]
+    assert "one link at most" in backend.seen[1]["system"]

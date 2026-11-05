@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from lib import config
-from lib.features import holding_news
+from lib import holdings as sharesight_holdings
 from lib.mcp.results import slim_result, table_records
 from lib.mcp.schema import compact_description, compact_schema
 
@@ -67,12 +67,12 @@ class SharesightFixtures(FakeMcp):
 
 
 async def test_holding_news_reads_current_holdings_from_real_shaped_reports():
-    holdings = await holding_news.current_holdings(
+    holdings = await sharesight_holdings.current_holdings(
         SharesightFixtures("sharesight", tools=("list_portfolios",)), ["bobsmsf", "alicesmsf"])
     assert holdings["GNP (ASX)"] == "Genusplus Group" and "NVDA (NASDAQ)" in holdings
-    only_alice = await holding_news.current_holdings(SharesightFixtures("sharesight"), ["alicesmsf"])
+    only_alice = await sharesight_holdings.current_holdings(SharesightFixtures("sharesight"), ["alicesmsf"])
     assert set(only_alice) < set(holdings) and "GNP (ASX)" not in only_alice
-    assert await holding_news.current_holdings(SharesightFixtures("sharesight"), ["no such portfolio"]) == {}
+    assert await sharesight_holdings.current_holdings(SharesightFixtures("sharesight"), ["no such portfolio"]) == {}
 
 
 def test_sharesight_tool_definitions_hide_the_parameters_the_model_never_needs():

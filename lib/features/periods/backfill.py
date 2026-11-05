@@ -110,11 +110,11 @@ async def fill_portfolio(ctx: Ctx, server, pid: int, name: str, todo: list[Windo
                 BAD.add((pid, *key(w)))
                 nodata += 1
                 if nodata <= SAMPLE_NODATA:  # enough of them to see what Sharesight says, not one line per empty day
-                    log.debug("Period backfill: %s %s..%s has no data: %s", name, w[1], w[2], got.text[:150])
+                    log.debug("Period backfill: %s %s..%s has no data: %s", name, w[1], w[2], " ".join(got.text.split()))
             else:  # a blip says nothing about the window itself, so it is tried again next pass
                 streak[0] += 1
                 transient += 1
-                log.warning("Period backfill: %s %s..%s failed: %s", name, w[1], w[2], got.text[:150])
+                log.warning("Period backfill: %s %s..%s failed: %s", name, w[1], w[2], " ".join(got.text.split()))
                 if streak[0] >= MAX_FAILS and not stopped:
                     stopped = True
                     log.warning("Period backfill: %d fetches in a row failed; stopping this pass", streak[0])

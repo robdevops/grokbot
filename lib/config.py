@@ -17,30 +17,31 @@ ENV_VARS: dict[str, str] = {
     "TELEGRAM_BOT_TOKEN": "Bot token from @BotFather (required).",
     "XAI_API_KEY": "xAI key; selects the xAI provider. Set exactly one of the three keys.",
     # Common settings
-    "BOT_TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
-    "MODEL": "Model ID (default grok-4.3 on xAI, z-ai/glm-5.3-flash on OpenRouter).",
+    "TZ": "Time zone for timestamps, e.g. Australia/Melbourne (default UTC).",
+    "MODEL": "Model ID (default grok-4.3 on xAI, deepseek/deepseek-v4.1-flash-1017 on OpenRouter).",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
     "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
-    "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in BOT_TZ).",
+    "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in TZ).",
     # Advanced and optional
-    "ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /tokens; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
-    "ADMIN_ONLY": "on|off. Only admins may DM the bot or get Sharesight data (default on).",
+    "ADMIN_ONLY": "on|off. On (default): only admins may DM the bot or get Sharesight data. Off: everyone may. /usage and /flushcache stay admin-only.",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
-    "HISTORY_LIMIT": "Messages of chat history in the prompt; the window is HISTORY_LIMIT to 1.5x (default 20).",
-    "LOG_WIDTH": "Longest line (characters) for the MCP tool lists in the log; longer lists end in \"…\" (default 80, 0 = no limit).",
+    "FINANCE_LINK_TARGET": "Where ticker links go: yahoo (default, Yahoo Finance), google (Google Finance) or tradingview.",
+    "HISTORY_MAX": "At most this many messages of chat history in the prompt (default 10); the window's start moves every half of it, so the prompt cache keeps working.",
     "MAX_TOKENS": "Reply cap in tokens, reasoning included (default 3000).",
     "MOVERS_BOTS": "Usernames of bots whose end-of-day big-movers lists get explained. Empty (default) = feature off.",
     "PORTFOLIO_NAMES": "Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names).",
     "PERIOD_BACKFILL": "Comma list of Sharesight portfolio names (or all) whose daily/weekly/monthly/quarterly/yearly returns are fetched into the local cache in the background, so period questions answer instantly. Default all; list names to limit it, or off to disable.",
     "POST_TO_GROUPS_FROM_DM": "on|off. Lets an admin of a group the bot is in make it post there from a DM (default off).",
-    "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default xiaomi/mimo-v2.6-flash:online).",
+    "SEARCH_MODEL": "OpenRouter only: model that runs the searches (default: MODEL with :online added).",
     "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Comma list of portfolio:telegram_username pairs to notify. Empty (default) = daily holding-news DM off.",
-    "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (BOT_TZ) for the daily holding-news check (default 08:00).",
+    "SHARESIGHT_HOLDING_NEWS_TIME": "HH:MM (TZ) for the daily holding-news check (default 08:00).",
+    "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS": "Weekdays (in TZ) with no holding-news check, e.g. sun,mon; the next check covers them. Empty (default) = every day.",
+    "TELEGRAM_ADMIN_CHAT_IDS": "Telegram IDs of the bot's admins (comma/space separated). Your user ID gets MCP-down alerts and may use /usage; a group's chat ID gets the alerts only. Admins of the groups the bot is in count as admins too.",
     "TELEGRAM_DM_BUTTONS": "on|off. Preset-prompt buttons in private chats (default off).",
-    "TELEGRAM_PRELOAD_CHAT": "Chat ID of a private chat the bot can post in. Chart periods are uploaded there ahead of time and reused when a period button is tapped. Empty (default) = off.",
+    "TELEGRAM_IMAGE_PRELOAD_CHATID": "Chat ID of a private chat the bot can post in. Chart periods are uploaded there ahead of time and reused when a period button is tapped. Empty (default) = off.",
 }
 
-DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "z-ai/glm-5.3-flash"}
+DEFAULT_MODELS = {"xai": "grok-4.3", "openrouter": "deepseek/deepseek-v4.1-flash-1017"}
 
 # Tuning constants (not configurable).
 MAX_TOOL_ROUNDS = 6  # model <-> tool round trips per answer
@@ -57,7 +58,19 @@ SEARCH_ENGINE = "auto"
 SEARCH_RESULTS = 20
 SEARCH_TOKENS = 400  # cap on each search write-up (OpenRouter search runner)
 MAX_SEARCHES = 5  # search calls run per round
+# Index constituents linked bare in replies (features/known_tickers.py): (name, Wikipedia page, Yahoo suffix, fewest
+# and most rows that look right). Fetched in the background once a day, never while answering.
+INDEX_LISTS = (
+    ("S&P 500", "List of S&P 500 companies", "", 450, 550),
+    ("NASDAQ-100", "List of NASDAQ-100 companies", "", 90, 110),
+    ("ASX 200", "S&P/ASX 200", "AX", 190, 210),
+)
+KNOWN_TICKERS_REFRESH = 24 * 3600  # seconds between refreshes of the indexes and the US holdings
+KNOWN_TICKERS_RETRY = 30 * 60  # seconds before a failed part (a page down, Sharesight not up yet) is tried again
+KNOWN_TICKERS_START_DELAY = 60  # seconds after startup before a due refresh, so the MCP servers are up
+SOURCES_MAX = 3  # links to a search result the model is handed back as text (OpenRouter run_search)
 MAX_TG_MESSAGE = 4000  # Telegram's limit is 4096
+HOLDING_NEWS_MAX_WINDOW = 7 * 24  # hours: the longest a check looks back, after skipped days or an outage
 HOLDING_NEWS_RETRY_EVERY = 30 * 60  # seconds between retries of a holding-news check the provider was too busy for
 HOLDING_NEWS_RETRY_FOR = 12 * 3600  # seconds after which it gives up
 
@@ -76,9 +89,9 @@ class Settings:
     search: bool
     search_model: str
     max_tokens: int
-    history_limit: int
-    log_width: int
+    history_max: int
     darkmode: str  # "off" | "on" | "auto": the charts' theme
+    link_target: str  # "yahoo" | "google" | "tradingview": where ticker links go
     db_path: str
     tz: ZoneInfo
     admin_chats: frozenset[int]  # user IDs (alerts + admin commands) and group chat IDs (alerts only)
@@ -88,6 +101,7 @@ class Settings:
     post_to_groups: bool
     preload_chat: int | None  # where chart periods are pre-uploaded
     holding_news_time: str
+    holding_news_skip: frozenset[int]  # weekdays with no check, Monday = 0
     holding_news_recipients: dict[str, str]
     portfolio_names: frozenset[str]
     period_backfill: frozenset[str]
@@ -143,6 +157,20 @@ def _pairs(text: str) -> dict[str, str]:
     }
 
 
+WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def _weekdays(env: Mapping[str, str], name: str) -> frozenset[int]:
+    """"sun, Monday" -> {6, 0}: day names or their first three letters."""
+    days = set()
+    for word in env.get(name, "").replace(",", " ").lower().split():
+        day = next((i for i, d in enumerate(WEEKDAYS) if word in (d, d[:3])), None)
+        if day is None:
+            raise ConfigError(f"{name}: {word!r} isn't a weekday (use mon, tue, ... or the full name).")
+        days.add(day)
+    return frozenset(days)
+
+
 def _names(text: str) -> frozenset[str]:
     return frozenset(n.strip().lower() for n in re.split(r"[,\n]", text) if n.strip())
 
@@ -150,6 +178,11 @@ def _names(text: str) -> frozenset[str]:
 def _backfill(text: str) -> frozenset[str]:
     names = _names(text)
     return frozenset() if names & {"off", "none", "false", "0"} else names
+
+
+def online(model: str) -> str:
+    """The model with OpenRouter's ":online" suffix, which gives it web search."""
+    return model if model.endswith(":online") else f"{model}:online"
 
 
 def load(env: Mapping[str, str] | None = None) -> Settings:
@@ -168,10 +201,13 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError("Set XAI_API_KEY (xAI) or OPENROUTER_API_KEY (OpenRouter).")
     provider = given[0]
     model = env.get("MODEL", "").strip() or DEFAULT_MODELS[provider]
-    search_model = env.get("SEARCH_MODEL", "xiaomi/mimo-v2.6-flash:online").strip()
+    search_model = env.get("SEARCH_MODEL", online(model)).strip()  # set but empty = no search model, so no search
     search = env.get("SEARCH", "on").strip().lower() != "off"
     if provider == "openrouter" and not search_model:
         search = False  # nothing to run the searches with
+    link_target = env.get("FINANCE_LINK_TARGET", "").strip().lower() or "yahoo"
+    if link_target not in ("yahoo", "google", "tradingview"):
+        raise ConfigError(f"FINANCE_LINK_TARGET must be yahoo, google or tradingview, not {link_target!r}.")
     darkmode = env.get("DARKMODE", "").strip().lower() or "off"
     if darkmode not in ("off", "on", "auto"):
         raise ConfigError(f"DARKMODE must be off, on or auto, not {darkmode!r}.")
@@ -185,20 +221,21 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         search=search,
         search_model=search_model,
         max_tokens=int(env.get("MAX_TOKENS") or 3000),
-        history_limit=int(env.get("HISTORY_LIMIT") or 20),
-        log_width=int(env.get("LOG_WIDTH") or 80),
+        history_max=int(env.get("HISTORY_MAX") or 10),
         darkmode=darkmode,
+        link_target=link_target,
         db_path=database_path(env),
-        tz=ZoneInfo(env.get("BOT_TZ", "UTC")),
-        admin_chats=_ids(env.get("ADMIN_CHAT_IDS", "")),
+        tz=ZoneInfo(env.get("TZ", "UTC")),
+        admin_chats=_ids(env.get("TELEGRAM_ADMIN_CHAT_IDS", "")),
         admin_only=_flag(env, "ADMIN_ONLY", default=True),
         movers_bots=frozenset(
             u.lower().lstrip("@") for u in env.get("MOVERS_BOTS", "").replace(",", " ").split()
         ),
         dm_buttons=_flag(env, "TELEGRAM_DM_BUTTONS"),
         post_to_groups=_flag(env, "POST_TO_GROUPS_FROM_DM"),
-        preload_chat=_chat_id(env, "TELEGRAM_PRELOAD_CHAT"),
+        preload_chat=_chat_id(env, "TELEGRAM_IMAGE_PRELOAD_CHATID"),
         holding_news_time=env.get("SHARESIGHT_HOLDING_NEWS_TIME", "08:00"),
+        holding_news_skip=_weekdays(env, "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS"),
         holding_news_recipients=recipients,
         portfolio_names=_names(env.get("PORTFOLIO_NAMES", "")) or frozenset(recipients),
         period_backfill=_backfill(env.get("PERIOD_BACKFILL", "all")),

@@ -26,7 +26,7 @@ from ..features.chat_commands import ChatCommand
 from ..history import compact, format_rows
 from ..llm.base import BUSY_REPLY, is_busy
 from ..llm.gate import Route, asks_tools, is_portfolio_question, route
-from ..msgtext import describe, sender_name
+from ..msgtext import describe, log_preview, sender_name
 from ..prompts import MOVERS_EXPLAIN, PRESET_PROMPT, capabilities_note, chat_prompt, down_note
 from ..store import is_dm
 from ..textfmt import md_to_html, strip_disclaimer
@@ -158,7 +158,7 @@ class Handlers:
         return Trigger(text, private, is_movers, reply_target, replied_to_bot, nocontext)
 
     async def _command(self, msg: Message, trig: Trigger) -> bool:
-        """Private-chat commands handled here (/tokens has its own handler)."""
+        """Private-chat commands handled here (/usage has its own handler)."""
         if not trig.private or not trig.text.startswith("/"):
             return False
         command = trig.text.split()[0].split("@")[0].lower()
@@ -215,7 +215,7 @@ class Handlers:
     async def _chat_text(self, msg: Message, trig: Trigger, middle: str = "", fresh: bool = False,
                          no_history: bool = False) -> str:
         ctx, st = self.ctx, self.ctx.st
-        rows = [] if no_history else await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_limit)
+        rows = [] if no_history else await asyncio.to_thread(ctx.store.history, msg.chat_id, st.history_max)
         if trig.nocontext:  # only the message that tagged the bot
             rows = [r._replace(text=NO_CONTEXT.sub("", r.text).strip(), reply_to=None)
                     for r in rows if r.message_id == msg.message_id]
@@ -231,8 +231,7 @@ class Handlers:
         ctx, st = self.ctx, self.ctx.st
         who = f"{sender_name(msg)} {msg.from_user.id if msg.from_user else None}"
         where = "" if trig.private else f" @ {msg.chat_id}"
-        preview = " ".join(trig.text.split())
-        preview = preview[:60].rstrip() + " ..." if len(preview) > 60 else preview
+        preview = log_preview(trig.text)
         log.info("[%s%s]%s %s", who, where, " (movers list)" if trig.movers else "",
                  preview or f"[{describe(msg) or 'no text'}]")
 
@@ -369,6 +368,7 @@ class Handlers:
         preset = dm_buttons.preset_for(trig.text) if trig.private and st.dm_buttons else None
         on_text = draft.update if draft else None
         chat_id = msg.chat_id
+        known = None
         if preset:  # a standalone request: no transcript, which would only add tokens
             prompt = PRESET_PROMPT.format(sender=sender_name(msg), label=trig.text.strip(), ask=preset,
                                           now=ctx.now(), what=ctx.backend.search_what)
@@ -378,6 +378,7 @@ class Handlers:
                                kind="preset", chat_id=chat_id)
         elif trig.movers:
             listing = msg.text_html if msg.text else (msg.caption_html or "")
+            known = movers.listed_codes(listing)
             text = await self._chat_text(msg, trig, MOVERS_EXPLAIN.format(listing=listing), no_history=True)
             parts = [{"type": "text", "text": text}]
             answer = await ask(ctx, parts, route("", st, ctx.registry, force_full=True),
@@ -414,13 +415,15 @@ class Handlers:
             answer = await ask(ctx, parts, chosen,
                                cache_key=f"chat-{chat_id}", on_text=on_text, chat_id=chat_id, extra_tools=extra,
                                admin=admin)
-        return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers)
+        return format_answer(answer.text, movers_bots=st.movers_bots, summary=trig.movers, known=known)
 
 
-def format_answer(text: str, *, movers_bots: frozenset[str], summary: bool) -> str:
+def format_answer(text: str, *, movers_bots: frozenset[str], summary: bool,
+                  known: dict[str, str] | None = None) -> str:
     """The model's text as Telegram HTML: Markdown fallback, no disclaimer, no tags of movers
-    bots, Yahoo links on tickers (and, for a movers list, no closing wrap-up paragraph)."""
-    out = link_tickers(movers.untag(md_to_html(strip_disclaimer(text)), movers_bots))
+    bots, Yahoo links on tickers (`known`: codes to link bare as well, such as a movers list's;
+    and, for a movers list, no closing wrap-up paragraph)."""
+    out = link_tickers(movers.untag(md_to_html(strip_disclaimer(text)), movers_bots), known)
     if summary:
         out = movers.strip_summary(out)
     return out or NO_RESPONSE

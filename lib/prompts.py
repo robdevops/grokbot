@@ -12,16 +12,16 @@ You get a transcript, oldest first, lines like "[#id] time Sender (replying to #
 
 {tools_note}Each reply is final: never say you'll check later. Do the whole job in one go, with all lookups made first (several at once), and only ask a question if the request is genuinely ambiguous.{refresh}
 
-Format as Telegram HTML, never Markdown: <b> <i> <u> <s> <code> <a href="..."> <blockquote> <tg-spoiler>; plain newlines, no headings or list tags; write & < > as &amp; &lt; &gt;. If you mention a listed company, write its ticker as plain text, with the exchange suffix for non-US listings (SQX.AX, 000660.KS): links are added automatically. In a list, one company per line: Name (TICKER) metric. Shorten company names: drop Ltd, Inc, Corp, Co, plc, ADR, Holdings and a trailing Technology/Technologies (Micron Technology is Micron, DUG Technology is DUG Tech).
+Format as Telegram HTML, never Markdown: <b> <i> <u> <s> <code> <a href="..."> <blockquote> <tg-spoiler>; plain newlines, no headings or list tags; write & < > as &amp; &lt; &gt;. Write a listed company as Name (TICKER), or a bare ticker as $NVDA, with the Yahoo suffix for non-US listings (DUG Tech (DUG.AX), $SQX.AX, 000660.KS): only these forms get links, acronyms stay plain. In a list, one company per line: Name (TICKER) metric. Shorten company names: drop Ltd, Inc, Corp, Co, plc, ADR, Holdings and a trailing Technology/Technologies (Micron Technology is Micron, DUG Technology is DUG Tech).
 
 No disclaimers, no moralising. If your confidence is low, say so."""
 
 REFRESH = (" Earlier replies of yours may be incomplete or out of date: don't imitate them, fetch "
            "fresh data instead of reusing their numbers, and follow these formatting rules.")
 
+SOURCE_NOTE = "Mention a source briefly if you like, one link at most."
 SEARCH_NOTE = ("You can search {what}: use it for news, prices, current events and what "
-               "people are saying instead of claiming you lack live data. Mention a source "
-               "briefly if you like, one link at most.\n")
+               "people are saying instead of claiming you lack live data. {source}\n")
 NO_SEARCH_NOTE = "You have no web search: say plainly what you can't check instead of guessing.\n"
 SIMPLE_NOTE = ("You have no live data tools for this message. If answering needs live data "
                f"or news, reply with exactly {NEEDS_TOOLS} and nothing else. Never claim "
@@ -44,11 +44,11 @@ def tools_note(servers: list[MCPServer]) -> str:
             "which and quote the error briefly.\n")
 
 
-def system_prompt(bot_name: str, route: Route, search_what: str) -> str:
+def system_prompt(bot_name: str, route: Route, search_what: str, source_note: str = SOURCE_NOTE) -> str:
     if route.simple:
         note = SIMPLE_NOTE
     else:
-        note = (SEARCH_NOTE.format(what=search_what) if route.search else NO_SEARCH_NOTE) \
+        note = (SEARCH_NOTE.format(what=search_what, source=source_note) if route.search else NO_SEARCH_NOTE) \
             + tools_note(route.servers) + (PARTIAL_NOTE if route.partial else "")
     return SYSTEM.format(bot_name=bot_name, tools_note=note + "\n", refresh=REFRESH)
 
@@ -125,8 +125,8 @@ HOLDING_NEWS_PROMPT = """This is an automated daily check, not a chat message.
 Holdings:
 {holdings}
 
-Search {what} for MAJOR news about these companies published in the past 24 hours.
-The bar is high. Only material, price-moving events count: results or earnings, guidance changes, takeover or merger news, capital raisings, major contract wins or losses, regulatory or clinical-trial decisions, trading halts or suspensions, CEO or CFO departures, dividend cuts or suspensions, delistings, serious legal action. Ignore routine filings (director share dealings, buy-back updates, AGM notices, presentations with nothing new), general market or sector moves, analyst price-target changes, opinion pieces, and anything older than 24 hours or that you can't date. When in doubt, leave it out. Most days the answer is nothing.
+Search {what} for MAJOR news about these companies published in the past {hours} hours.
+The bar is high. Only material, price-moving events count: results or earnings, guidance changes, takeover or merger news, capital raisings, major contract wins or losses, regulatory or clinical-trial decisions, trading halts or suspensions, CEO or CFO departures, dividend cuts or suspensions, delistings, serious legal action. Ignore routine filings (director share dealings, buy-back updates, AGM notices, presentations with nothing new), general market or sector moves, analyst price-target changes, opinion pieces, and anything older than {hours} hours or that you can't date. When in doubt, leave it out. Most days the answer is nothing.
 
 If nothing qualifies, reply with exactly the word NOTHING, with no bullet or anything else. Otherwise reply with only the qualifying items as bullet points, one item per line, no intro and no blank lines between them. Start each line with "• ":
 • Name (TICKER): what happened, with one source link.

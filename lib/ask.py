@@ -11,7 +11,7 @@ from .context import Ctx
 from .llm import policy
 from .llm.base import Answer, Request
 from .llm.gate import NEEDS_TOOLS, Route, wants_tools
-from .prompts import no_tools_system, system_prompt
+from .prompts import SOURCE_NOTE, no_tools_system, system_prompt
 
 log = logging.getLogger("bot")
 
@@ -37,6 +37,11 @@ def _hide_needs_tools(on_text):
     return forward
 
 
+def _source_note(ctx: Ctx, kind: str) -> str:
+    """How to cite search results: only in chat answers, and only where the provider gives the model their URLs."""
+    return (ctx.backend.source_note or SOURCE_NOTE) if kind == "chat" else SOURCE_NOTE
+
+
 def _public(servers: list) -> list:
     """The MCP servers anyone may use: not the ones gated on portfolio questions (Sharesight)."""
     return [s for s in servers if s.cfg.get("gate") != "portfolio"]
@@ -59,7 +64,7 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
     elif not admin:
         route = dataclasses.replace(route, servers=_public(route.servers))
     req = Request(
-        system=system_prompt(ctx.first_name, route, ctx.backend.search_what),
+        system=system_prompt(ctx.first_name, route, ctx.backend.search_what, _source_note(ctx, kind)),
         parts=parts,
         model=st.model,
         tools=[t for s in route.servers for t in s.tools if only_tools is None or t.name in only_tools]
@@ -70,6 +75,7 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         on_text=_hide_needs_tools(on_text) if (route.simple or route.partial) else on_text,
         no_tools_system=no_tools_system(ctx.first_name),
         max_tokens=max_tokens or st.max_tokens,
+        cite=kind == "chat",  # other kinds parse or format their own text
     )
     answer = await policy.ask(ctx.backend, ctx.registry, req)
     await _record(ctx, req.model, kind, chat_id, answer)
@@ -77,7 +83,7 @@ async def ask(ctx: Ctx, parts: list[dict], route: Route, *, must_search: bool = 
         log.info("Gate offered fewer tools, the model asked for more: asking again with everything on")
         full = Route(ctx.registry.up() if admin else _public(ctx.registry.up()), st.search)
         req = dataclasses.replace(
-            req, system=system_prompt(ctx.first_name, full, ctx.backend.search_what),
+            req, system=system_prompt(ctx.first_name, full, ctx.backend.search_what, _source_note(ctx, kind)),
             tools=[t for s in full.servers for t in s.tools] + [t for t, _ in extra_tools],
             search=full.search,
             on_text=on_text)

@@ -67,6 +67,55 @@ async def test_daily_digest_dms_news_with_links_and_records_it(env, store):
     assert ctx.backend.seen[0]["tools"] == [] and ctx.backend.seen[0]["search"] is True  # forced search only
 
 
+async def test_digest_links_held_codes_however_the_model_writes_them(env, store):
+    ctx = holding_ctx(env, store, [step("• Nvidia (NVDA): beat estimates\n• AMD fell, GAAP loss")])
+    text, codes = (await holding_news.run_holding_news(ctx))["bob_llama"]
+    assert '<b>Nvidia (<a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>)</b>' in text
+    assert 'quote/AMD"' in text and "quote/GAAP" not in text and codes == ["AMD", "NVDA"]
+
+
+def test_known_symbols_and_listed_codes_give_yahoo_symbols():
+    held = {"NXT (ASX)": "NextDC", "NVDA (NASDAQ)": "Nvidia", "X (MOON)": "x"}
+    assert holding_news.known_symbols(held) == {"NXT": "NXT.AX", "NVDA": "NVDA", "X": "X"}
+    hk = {"700 (HKG)": "Tencent"}
+    news = holding_news.link_tickers("• Tencent (700): profit up; 1,700 staff", known=holding_news.known_symbols(hk))
+    assert news.count("quote/0700.HK") == 1 and holding_news.news_codes(news, hk) == ["700"]  # not "1,700"
+    assert movers.listed_codes("<b>≥ 5.0% at close (ASX):</b>\nDRO +12.1%\nNXT +5.5%") == {"DRO": "DRO.AX", "NXT": "NXT.AX"}
+    assert movers.listed_codes("<b>≤ -5% at close (NASDAQ, NYSE):</b>\nNVDA -6.1%") == {"NVDA": "NVDA"}
+    assert movers.listed_codes("<b>≥ 5% at close (ASX, NYSE):</b>\nBHP +6%") == {}  # which exchange? no guess
+    assert movers.listed_codes("<b>≥ 5% at close:</b>\nBHP +6%") == {}
+
+
+class TwoPortfolios(FakeMcp):
+    async def call(self, tool, args):
+        if tool == "list_portfolios":
+            return json.dumps({"portfolios": [{"name": "Bob", "id": 1}, {"name": "Alice", "id": 2}]})
+        rows = {1: [["NVDA", "NASDAQ", "Nvidia"], ["AMD", "NASDAQ", "AMD"]],
+                2: [["NVDA", "NASDAQ", "Nvidia"], ["BHP", "ASX", "BHP Group"]]}[args["portfolio_id"]]
+        return json.dumps({"report": {"holdings": {"columns": ["code", "market", "name"], "rows": rows}}})
+
+
+async def test_one_search_covers_everyone_and_each_person_gets_their_own_items(env, store):
+    st = config.load({**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:bob_llama,Alice:alice_llama"})
+    news = ("• Nvidia (NVDA): beat estimates\n• AMD fell on a guidance cut\n• BHP (ASX): trading halt\n"
+            "• Chip export rules tightened")
+    ctx = Ctx(st, store, ScriptedBackend([step(news)]), registry(TwoPortfolios("sharesight", tools=("x",))), FakeBot())
+    store.remember_user(make_msg(1, "x", username="bob_llama", chat_id=5))
+    store.remember_user(make_msg(2, "x", username="alice_llama", chat_id=6))
+    store.add_news("alice_llama", "• BHP (ASX): an older item")
+    results = await holding_news.run_holding_news(ctx)
+    assert len(ctx.backend.seen) == 1  # NVDA, which both hold, is searched once, in one request
+    prompt = ctx.backend.seen[0]["prompt"]
+    assert prompt.count("NVDA (NASDAQ)") == 1 and "AMD (NASDAQ)" in prompt and "BHP (ASX)" in prompt
+    assert "an older item" in prompt  # anyone's recent items aren't repeated
+    bob, bob_codes = results["bob_llama"]
+    alice, alice_codes = results["alice_llama"]
+    assert "NVDA" in bob and "AMD" in bob and "BHP" not in bob and bob_codes == ["AMD", "NVDA"]
+    assert "NVDA" in alice and "AMD fell" not in alice and "BHP" in alice and alice_codes == ["BHP", "NVDA"]
+    assert "export rules" in bob and "export rules" in alice  # names no holding: everyone gets it
+    assert {m["chat_id"] for m in ctx.bot.sent} == {5, 6}
+
+
 async def test_digest_says_nothing_when_nothing_and_respects_mutes(env, store):
     ctx = holding_ctx(env, store, [step("NOTHING")])
     assert (await holding_news.run_holding_news(ctx)) == {"bob_llama": None} and ctx.bot.sent == []
@@ -89,6 +138,74 @@ async def test_busy_provider_is_retried_for_just_that_person_then_delivered(env,
     await holding_news.retry_busy(ctx, busy)  # still busy once, then works
     assert len(ctx.backend.seen) == 3 and "Holding news" in ctx.bot.sent[-1]["text"]
     assert not any(r.exc_info for r in caplog.records)
+
+
+def test_the_window_reaches_back_to_the_last_check():
+    from lib.features.holding_news.text import window_hours
+    now = 1_000_000_000
+    assert window_hours(now, None) == 24 and window_hours(now, now - 2 * 3600) == 24  # a day at least
+    assert window_hours(now, now - 24 * 3600) == 24 and window_hours(now, now - 72 * 3600 + 60) == 72
+    assert window_hours(now, now - 30 * 86400) == config.HOLDING_NEWS_MAX_WINDOW == 168
+
+
+def test_an_item_citing_an_article_already_sent_is_dropped():
+    from lib.features.holding_news.text import drop_repeats
+    sent = ['• <a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>: beat <a href="https://x.com/a">[1]</a>']
+    new = ('• <a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>: beat again <a href="https://x.com/a">[1]</a>\n'
+           '• <a href="https://finance.yahoo.com/quote/NVDA">NVDA</a>: guidance raised <a href="https://x.com/b">[2]</a>\n'
+           '• AMD fell')
+    kept, dropped = drop_repeats(new, sent)
+    assert "x.com/a" not in kept and "x.com/b" in kept and "AMD fell" in kept and len(dropped) == 1
+    assert drop_repeats(new, []) == (new, [])  # the quote link on NVDA doesn't count as an article
+
+
+def test_skip_days_parse_names_and_abbreviations(env):
+    assert config.load({**env, "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS": "sun, Monday"}).holding_news_skip == {6, 0}
+    assert config.load(env).holding_news_skip == frozenset()
+    with pytest.raises(config.ConfigError, match="funday"):
+        config.load({**env, "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS": "funday"})
+
+
+async def test_after_skipped_days_the_check_covers_them_and_a_busy_one_keeps_the_window(env, store):
+    import time
+    ctx = holding_ctx(env, store, [Overloaded("at capacity"), step("• NVDA (NASDAQ): halted https://x.com/h")])
+    store.kv_set(holding_news.LAST_RUN_KEY, str(int(time.time()) - 72 * 3600 + 60))  # Saturday's, now it's Tuesday
+    await holding_news.run_holding_news(ctx, busy=[])
+    assert int(store.kv_get(holding_news.LAST_RUN_KEY)) < time.time() - 71 * 3600  # busy: the window stays open
+    await holding_news.run_holding_news(ctx)
+    assert "past 72 hours" in ctx.backend.seen[-1]["prompt"] and "(past 72h)" in ctx.bot.sent[-1]["text"]
+    assert int(store.kv_get(holding_news.LAST_RUN_KEY)) >= time.time() - 5  # answered: the next window starts now
+
+
+async def test_the_daily_loop_skips_its_days(env, store, monkeypatch, caplog):
+    import asyncio
+    import logging
+    st = config.load({**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:bob_llama",
+                      "SHARESIGHT_HOLDING_NEWS_SKIP_DAYS": "sun"})
+    ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
+    sunday = datetime(2026, 11, 8, 8, 0, tzinfo=st.tz)
+    ran, sleeps = [], []
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return sunday
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) > 2:
+            raise asyncio.CancelledError
+
+    async def run(ctx, **kw):
+        ran.append(kw)
+        return {}
+
+    monkeypatch.setattr(holding_news, "datetime", Clock)
+    monkeypatch.setattr(holding_news.asyncio, "sleep", sleep)
+    monkeypatch.setattr(holding_news, "run_holding_news", run)
+    with caplog.at_level(logging.INFO, logger="bot"), pytest.raises(asyncio.CancelledError):
+        await holding_news.daily_loop(ctx)
+    assert ran == [] and "Holding news: skipped (Sunday)" in caplog.text
 
 
 async def test_busy_provider_is_given_up_on_after_the_retry_window(env, store, monkeypatch, caplog):
@@ -193,7 +310,7 @@ def test_movers_helpers():
 
 # ---- commands --------------------------------------------------------------------------
 async def test_credits_shows_balance_and_usage_to_admins_only(env, store):
-    st = config.load({**env, "ADMIN_CHAT_IDS": "5, -100"})
+    st = config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "5, -100"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
     store.add_usage(-1, "m", "chat", 1, 1000, 500, 20, 0.5)
     stranger = user_msg(ctx.bot, "/credits", user_id=9, mid=1)
@@ -204,6 +321,11 @@ async def test_credits_shows_balance_and_usage_to_admins_only(env, store):
     text = owner.replies[0]["text"]
     assert "no credit balance" in text and "m: 1 requests, in 1,000 (50% cached)" in text
     assert commands.usage_text([], "last 24 hours") == "No usage recorded in the last 24 hours."
+    assert "By kind" not in text  # one kind only: nothing to split
+    store.add_usage(5, "m", "holding-news", 1, 100, 0, 10, 0.25)
+    again = user_msg(ctx.bot, "/credits", user_id=5, mid=3)
+    await commands.credits(ctx, update_for(again), None)
+    assert "By kind: chat 1 ($0.5000), holding news (daily) 1 ($0.2500)" in again.replies[0]["text"]
 
 
 async def test_credits_still_shows_usage_when_the_balance_fails(env, store):
@@ -211,7 +333,7 @@ async def test_credits_still_shows_usage_when_the_balance_fails(env, store):
         async def credits(self):
             raise RuntimeError("boom")
 
-    ctx = Ctx(config.load({**env, "ADMIN_CHAT_IDS": "5"}), store, Broken([]), registry(), FakeBot())
+    ctx = Ctx(config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "5"}), store, Broken([]), registry(), FakeBot())
     store.add_usage(-1, "m", "chat", 1, 10, 0, 2, 0.1)
     msg = user_msg(ctx.bot, "/credits", user_id=5)
     await commands.credits(ctx, update_for(msg), None)
@@ -240,7 +362,7 @@ async def test_flushcache_command_is_admin_only_and_flushes_by_portfolio_and_per
     from lib.features.periods import backfill
     from lib.store import PeriodRow
 
-    st = config.load({**env, "ADMIN_CHAT_IDS": "5", "PERIOD_BACKFILL": "x"})
+    st = config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "5", "PERIOD_BACKFILL": "x"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
     store.period_put([PeriodRow(p, f"{y}-0{m}-01", f"{y}-0{m}-28", 1.0, 1.0, "AUD", [])
                       for p in (70007, 80008) for y in (2024, 2025) for m in (1, 2)])

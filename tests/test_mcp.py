@@ -105,31 +105,15 @@ def test_log_names_keeps_exact_names(caplog):
     assert "get_analyst_estimates" in caplog.text and "get_stock_quote" in caplog.text
 
 
-def test_log_names_is_one_line_cut_at_a_whole_name(caplog):
+def test_log_names_is_one_line_and_never_cut(caplog):
     import logging
 
     from lib.mcp.server import log_names
-    names = ["compare_companies", "get_company", "get_company_metrics", "get_data_notes", "get_events"]
-    head = "MCP t: 5 tools:"
+    names = [f"get_a_rather_long_tool_name_{i}" for i in range(12)]
     with caplog.at_level(logging.INFO, logger="bot"):
-        log_names(head, names, 95)
-        log_names(head, names, 60)
-        log_names(head, names, 0)
-        log_names(head, names, 5)
-    short, cut, unlimited, tiny = (r.getMessage() for r in caplog.records)
-    assert short == f"{head} {', '.join(names)}" and len(short) <= 95
-    assert cut == f"{head} compare_companies, get_company, …" and len(cut) <= 60
-    assert unlimited == short
-    assert tiny == f"{head} compare_companies, …"  # the first name is always shown
-
-
-def test_the_ellipsis_is_one_character_so_it_costs_one_character_of_the_width(caplog):
-    import logging
-
-    from lib.mcp.server import log_names
-    with caplog.at_level(logging.INFO, logger="bot"):
-        log_names("H:", ["aaaa", "bbbb", "cccc"], 17)
-    assert caplog.records[0].getMessage() == "H: aaaa, bbbb, …"  # "..." would have room for one name only
+        log_names("MCP t: 12 tools:", names)
+    [line] = [r.getMessage() for r in caplog.records]
+    assert line == f"MCP t: 12 tools: {', '.join(names)}" and len(line) > 300 and "…" not in line
 
 
 async def test_call_slims_and_caches_identical_concurrent_calls():

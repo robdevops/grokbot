@@ -52,3 +52,10 @@ def test_system_prompt_explains_cut_lines():
 
 def test_compact_text_helper():
     assert compact('<a href="https://finance.yahoo.com/quote/PME.AX"><b>PME</b></a>') == "PME"
+
+
+def test_the_openrouter_citation_note_is_short():
+    from lib.llm.openrouter import OpenRouterBackend
+    plain = report.tokens(system_prompt("Stock", Route([], True), "the web"))
+    cited = report.tokens(system_prompt("Stock", Route([], True), "the web", OpenRouterBackend.source_note))
+    assert cited - plain < 60, cited - plain

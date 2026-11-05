@@ -79,7 +79,7 @@ async def fetch(ctx: Ctx, kind: Kind, ticker: str, section: str) -> str | None:
         return None
     out = await server.call(kind.tool, {"ticker": ticker, "section": section})
     if out.startswith(("Tool error", "Error")):
-        log.warning("%s %s %s: %s", kind.tool, ticker, section, " ".join(out.split())[:200])
+        log.warning("%s %s %s: %s", kind.tool, ticker, section, " ".join(out.split()))
         return None
     try:
         data = json.loads(out)
@@ -87,7 +87,7 @@ async def fetch(ctx: Ctx, kind: Kind, ticker: str, section: str) -> str | None:
         return out  # markdown, the usual answer
     if isinstance(data, dict) and data.get("available") is False:
         return str(data.get("message") or "") or None
-    log.warning("%s %s %s: unexpected JSON result: %s", kind.tool, ticker, section, " ".join(out.split())[:200])
+    log.warning("%s %s %s: unexpected JSON result: %s", kind.tool, ticker, section, " ".join(out.split()))
     return None
 
 

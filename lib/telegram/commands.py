@@ -1,4 +1,4 @@
-"""Commands: /tokens (also /usage, /credits; admins) and /narrative and /events (anyone), and the admin cache flush."""
+"""Commands: /usage (also /tokens, /credits; admins) and /narrative and /events (anyone), and the admin cache flush."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from ..context import Ctx
 from ..features import filings
 from ..features.periods import backfill
 from ..features.periods.windows import describe_scope, flush_scope
+from ..msgtext import log_preview
 from ..store import is_dm
 from ..textfmt import is_parse_error, plain_text
 from .access import is_admin
@@ -32,7 +33,7 @@ async def _gate(ctx: Ctx, update: Update) -> bool:
     user = update.effective_user
     if user and await is_admin(ctx, user.id):
         return True
-    log.info("Ignored %s from user %s: not an admin", update.effective_message.text, user and user.id)
+    log.info("Ignored %s from user %s: not an admin", log_preview(update.effective_message.text), user and user.id)
     return False
 
 
@@ -41,7 +42,12 @@ async def _reply(ctx: Ctx, update: Update, text: str) -> None:
     await asyncio.to_thread(ctx.store.save, sent)
 
 
-def usage_text(rows: list[tuple], label: str) -> str:
+KIND_NAMES = {"chat": "chat", "holding-news": "holding news (daily)", "movers": "movers", "preset": "DM buttons",
+              "command": "chat commands", "filing": "filings"}  # the `kind` ask() records each request under
+
+
+def usage_text(rows: list[tuple], label: str, kinds: list[tuple] = ()) -> str:
+    """One line per model, then (with more than one kind) the requests and cost per kind."""
     if not rows:
         return f"No usage recorded in the {label}."
     lines = [f"Usage, {label}:"]
@@ -49,12 +55,14 @@ def usage_text(rows: list[tuple], label: str) -> str:
         pct = 100 * (cached or 0) / tin if tin else 0
         lines.append(f"{model}: {n} requests, in {tin or 0:,} ({pct:.0f}% cached), "
                      f"out {tout or 0:,}, ${cost or 0:.4f}")
+    if len(kinds) > 1:
+        lines.append("By kind: " + ", ".join(f"{KIND_NAMES.get(k, k)} {n} (${c or 0:.4f})" for k, n, c in kinds))
     return "\n".join(lines)
 
 
 async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/tokens - admins only: the provider balance (OpenRouter has one), then tokens and cost per
-    model for the last 24 hours and 7 days."""
+    """/usage (or /tokens, /credits) - admins only: the provider balance (OpenRouter has one), then tokens and cost per
+    model for the last 24 hours and 7 days, and the requests and cost per kind (chat, the daily holding news...)."""
     if not await _gate(ctx, update):
         return
     try:
@@ -66,7 +74,8 @@ async def credits(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE) 
     parts = [balance]
     for label, secs in (("last 24 hours", 86_400), ("last 7 days", 7 * 86_400)):
         rows = await asyncio.to_thread(ctx.store.usage_summary, now - secs)
-        parts.append(usage_text(rows, label))
+        kinds = await asyncio.to_thread(ctx.store.usage_by_kind, now - secs)
+        parts.append(usage_text(rows, label, kinds))
     await _reply(ctx, update, "\n\n".join(parts))
 
 

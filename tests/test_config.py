@@ -48,7 +48,7 @@ def test_provider_defaults():
     x = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"})
     assert (x.provider, x.model, x.api_key) == ("xai", "grok-4.3", "a")
     o = config.load({"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "b"})
-    assert (o.provider, o.model) == ("openrouter", "z-ai/glm-5.3-flash")
+    assert (o.provider, o.model) == ("openrouter", "deepseek/deepseek-v4.1-flash-1017")
 
 
 def test_model_and_reasoning(env):
@@ -67,13 +67,6 @@ def test_holding_news_and_movers_switch_on_by_listing_names(env):
     assert not config.load({**env, "MOVERS_BOTS": ","}).movers_explain
 
 
-def test_log_width_defaults_to_80(env):
-    assert config.load(env).log_width == 80
-    assert config.load({**env, "LOG_WIDTH": "120"}).log_width == 120
-    assert config.load({**env, "LOG_WIDTH": "0"}).log_width == 0  # 0 = no limit
-    assert config.load({**env, "LOG_WIDTH": ""}).log_width == 80
-
-
 def test_token_limits():
     assert config.load({"TELEGRAM_BOT_TOKEN": "1:x", "XAI_API_KEY": "a"}).max_tokens == 3000
     assert config.MAX_TOOL_OUTPUT == 12_000 and config.HISTORY_OWN_LINE_MAX < config.HISTORY_LINE_MAX
@@ -86,7 +79,7 @@ def test_search_off_without_search_model(env):
 
 
 def test_admin_chats_and_recipients(env):
-    s = config.load({**env, "ADMIN_CHAT_IDS": "-1, -2 3", "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:@Me"})
+    s = config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "-1, -2 3", "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:@Me"})
     assert s.admin_chats == {-1, -2, 3} and s.holding_news_recipients == {"bob": "me"}
 
 
@@ -127,3 +120,11 @@ def test_darkmode_defaults_to_off_and_takes_on_and_auto_in_any_case():
     assert [config.load({**base, "DARKMODE": v}).darkmode for v in ("on", "AUTO", " Off ", "")] == ["on", "auto", "off", "off"]
     with pytest.raises(config.ConfigError, match="DARKMODE must be off, on or auto"):
         config.load({**base, "DARKMODE": "night"})
+
+
+def test_the_search_model_defaults_to_the_model_with_online_added(env):
+    base = {"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "b"}
+    assert config.load(base).search_model == "deepseek/deepseek-v4.1-flash-1017:online"
+    assert config.load({**base, "MODEL": "a/b"}).search_model == "a/b:online"
+    assert config.load({**base, "MODEL": "a/b:online"}).search_model == "a/b:online"  # not added twice
+    assert config.load({**base, "MODEL": "a/b", "SEARCH_MODEL": "c/d:online"}).search_model == "c/d:online"

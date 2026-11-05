@@ -32,9 +32,9 @@ from telegram.ext import (
     filters,
 )
 
-from . import config
+from . import config, quote_links
 from .context import Ctx
-from .features import chat_commands, dm_buttons, holding_news, post
+from .features import chat_commands, dm_buttons, holding_news, known_tickers, post
 from .features.charts import buttons as chart_buttons
 from .features.charts import pages as chart_pages
 from .features.periods import backfill
@@ -119,7 +119,7 @@ def _drop_protocol_line(record: logging.LogRecord) -> bool:
 
 
 async def alert_down(ctx: Ctx, server: MCPServer) -> None:
-    """Tell ADMIN_CHAT_IDS that an MCP server died (and log it, so the model sees it in history)."""
+    """Tell TELEGRAM_ADMIN_CHAT_IDS that an MCP server died (and log it, so the model sees it in history)."""
     if not ctx.bot:
         return
     text = (f"⚠️ The <b>{html.escape(server.label)}</b> data source is down. "
@@ -143,33 +143,33 @@ async def log_tool_size(ctx: Ctx) -> None:
 
 async def register_menu(ctx: Ctx) -> None:
     """The command menu. A scoped menu replaces the default one, so each lists everything for its scope: /segments,
-    /narrative, /events and the chat commands of mcp_servers.json for everyone; /clear too in private chats; /tokens too for the people who can use it
-    (administrators of every group, and the users in ADMIN_CHAT_IDS in their own chat with the bot)."""
+    /narrative, /events and the chat commands of mcp_servers.json for everyone; /clear too in private chats; /usage too for the people who can use it
+    (administrators of every group, and the users in TELEGRAM_ADMIN_CHAT_IDS in their own chat with the bot)."""
     everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER"),
                 BotCommand("narrative", "10-K/10-Q narrative: /narrative TICKER [section]"),
                 BotCommand("events", "8-K events: /events TICKER [section]")]
     everyone += [BotCommand(c.name, c.description) for c in ctx.chat_commands]  # from mcp_servers.json
     private = everyone + [BotCommand("clear", "Forget our earlier messages")]
-    tokens = BotCommand("tokens", "Provider balance, token use and cost")
+    usage = BotCommand("usage", "Provider balance, token use and cost")
     try:
         await ctx.bot.set_my_commands(everyone)
         await ctx.bot.set_my_commands(private, scope=BotCommandScopeAllPrivateChats())
-        await ctx.bot.set_my_commands(everyone + [tokens], scope=BotCommandScopeAllChatAdministrators())
+        await ctx.bot.set_my_commands(everyone + [usage], scope=BotCommandScopeAllChatAdministrators())
         for chat_id in ctx.st.admin_chats:
-            await ctx.bot.set_my_commands(private + [tokens], scope=BotCommandScopeChat(chat_id))
+            await ctx.bot.set_my_commands(private + [usage], scope=BotCommandScopeChat(chat_id))
     except TelegramError as e:
         log.warning("Couldn't register the command menu: %s", e)
 
 
 def build_ctx(st: config.Settings) -> Ctx:
     ctx = Ctx(st, Store(st.db_path), build_backend(st), Registry([]))
+    quote_links.set_target(st.link_target)
 
     async def on_down(server: MCPServer) -> None:
         await alert_down(ctx, server)
 
     ctx.registry = Registry.load(str(config.MCP_CONFIG), timeout=config.MCP_TIMEOUT,
-                                 max_output=config.MAX_TOOL_OUTPUT, on_down=on_down,
-                                 log_width=st.log_width)
+                                 max_output=config.MAX_TOOL_OUTPUT, on_down=on_down)
     ctx.chat_commands = chat_commands.load({label: s.cfg for label, s in ctx.registry.servers.items()},
                                            BUILT_IN_COMMANDS)
     return ctx
@@ -185,6 +185,7 @@ def build_app(ctx: Ctx) -> Application:
         await register_menu(ctx)
         ctx.registry.start()  # connects in the background; requests see whichever servers are up
         background.append(asyncio.create_task(log_tool_size(ctx)))
+        background.append(asyncio.create_task(known_tickers.loop(ctx)))
         if st.holding_news:
             background.append(asyncio.create_task(holding_news.daily_loop(ctx)))
         if st.dm_buttons:

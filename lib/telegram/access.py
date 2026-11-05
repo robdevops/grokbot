@@ -1,4 +1,4 @@
-"""Who counts as an admin: a user in ADMIN_CHAT_IDS, or an admin of a group the bot has seen."""
+"""Who counts as an admin: a user in TELEGRAM_ADMIN_CHAT_IDS, or an admin of a group the bot has seen."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ async def _group_admins(ctx: Ctx, chat_id: int) -> frozenset[int]:
 
 
 async def is_admin(ctx: Ctx, user_id: int) -> bool:
-    """True for a user in ADMIN_CHAT_IDS or an administrator of any group the bot knows. Anonymous
+    """True for a user in TELEGRAM_ADMIN_CHAT_IDS or an administrator of any group the bot knows. Anonymous
     admins post as the group itself, so they can't be recognised."""
     if user_id in ctx.st.admin_chats:
         return True

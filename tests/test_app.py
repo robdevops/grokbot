@@ -35,7 +35,7 @@ def test_handlers_follow_the_flags(env, store):
     assert handler_kinds(plain) == ["CommandHandler"] * 6 + ["MessageHandler",
                                     "CallbackQueryHandler", "CallbackQueryHandler", "CallbackQueryHandler"]  # chart periods, charts, sections
     assert app.allowed_updates(st) == ["message", "edited_message", "callback_query"]  # chart buttons
-    full, st = build(ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
+    full, st = build(TELEGRAM_ADMIN_CHAT_IDS="5", SHARESIGHT_HOLDING_NEWS_RECIPIENTS="Pf:alice")
     kinds = handler_kinds(full)
     assert kinds == ["CommandHandler"] * 6 + ["MessageHandler"] + ["CallbackQueryHandler"] * 4
     assert "callback_query" in app.allowed_updates(st)
@@ -128,7 +128,7 @@ def test_git_hash_follows_a_linked_worktree(tmp_path):
 
 
 async def test_alert_down_notifies_admin_chats_only(env, store):
-    st = config.load({**env, "ADMIN_CHAT_IDS": "-10 -11"})
+    st = config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "-10 -11"})
     ctx = Ctx(st, store, ScriptedBackend([]), registry(), FakeBot())
     server = MCPServer("yahoo", {}, timeout=1, max_output=10)
     server.error = "boom <x>"
@@ -193,14 +193,14 @@ async def test_the_menu_lists_commands_by_who_can_use_them(env, store):
     async def set_my_commands(commands, scope=None):
         calls.append(([c.command for c in commands], type(scope).__name__, getattr(scope, "chat_id", None)))
 
-    ctx = Ctx(config.load({**env, "ADMIN_CHAT_IDS": "5"}), store, ScriptedBackend([]), registry(), FakeBot())
+    ctx = Ctx(config.load({**env, "TELEGRAM_ADMIN_CHAT_IDS": "5"}), store, ScriptedBackend([]), registry(), FakeBot())
     ctx.bot = SimpleNamespace(set_my_commands=set_my_commands)
     await app.register_menu(ctx)
     everyone = ["segments", "narrative", "events"]
     assert calls == [(everyone, "NoneType", None),
                      (everyone + ["clear"], "BotCommandScopeAllPrivateChats", None),
-                     (everyone + ["tokens"], "BotCommandScopeAllChatAdministrators", None),
-                     (everyone + ["clear", "tokens"], "BotCommandScopeChat", 5)]
+                     (everyone + ["usage"], "BotCommandScopeAllChatAdministrators", None),
+                     (everyone + ["clear", "usage"], "BotCommandScopeChat", 5)]
 
 
 def test_the_mcp_librarys_unlabelled_protocol_and_ping_lines_are_dropped(monkeypatch):

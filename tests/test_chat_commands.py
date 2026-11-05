@@ -95,14 +95,14 @@ async def test_a_command_that_cannot_run_says_why_without_the_model(env, store, 
 async def test_a_portfolio_command_is_for_admins_only(env, store):
     holdings = ChatCommand("holdings", "sharesight", "list_portfolios")
     server = FakeMcp("sharesight", tools=("list_portfolios",), gate="portfolio")
-    ctx, backend, h = chat(env, store, [], server, holdings, ADMIN_ONLY="on", ADMIN_CHAT_IDS="99")
+    ctx, backend, h = chat(env, store, [], server, holdings, ADMIN_ONLY="on", TELEGRAM_ADMIN_CHAT_IDS="99")
     m = user_msg(ctx.bot, "/holdings", chat_id=-100, user_id=5)
     await run_command(h, holdings, m)
     assert backend.seen == [] and m.replies[0]["text"] == "Portfolio data is for admins only."
 
 
 async def test_a_non_admin_dm_is_ignored_in_admin_only_mode(env, store):
-    ctx, backend, h = chat(env, store, [], weather(), ALERTS, ADMIN_ONLY="on", ADMIN_CHAT_IDS="99")
+    ctx, backend, h = chat(env, store, [], weather(), ALERTS, ADMIN_ONLY="on", TELEGRAM_ADMIN_CHAT_IDS="99")
     m = user_msg(ctx.bot, "/alerts", chat_id=5, user_id=5)
     await run_command(h, ALERTS, m)
     assert backend.seen == [] and m.replies == []

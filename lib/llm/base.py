@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..mcp.schema import ToolDef
 
@@ -48,6 +48,14 @@ class Call:
     arguments: str
 
 
+class Source(NamedTuple):
+    """A web page a search used: its title, URL and the snippet of it the model was given."""
+
+    title: str
+    url: str
+    content: str = ""
+
+
 @dataclass
 class Step:
     """One model response."""
@@ -58,6 +66,7 @@ class Step:
     finish: str | None = None
     searches: int = 0  # server-side searches the provider ran for this step
     raw: Any = None  # provider payload add_results() needs to replay this step
+    sources: list[Source] = field(default_factory=list)  # the pages the search cited
 
 
 @dataclass
@@ -78,6 +87,7 @@ class Request:
     no_tools_system: str = ""  # system prompt for the retry without tools
     local: dict[str, Callable[[dict], Awaitable[str]]] = field(default_factory=dict)  # tools run in the bot
     max_tokens: int | None = None  # reply cap incl. reasoning; None = the provider's setting
+    cite: bool = False  # put [n] links to the pages a search used after the sentences they back
 
 
 @dataclass
@@ -86,6 +96,7 @@ class Answer:
     usage: Usage
     rounds: int
     tool_calls: int
+    sources: list[Source] = field(default_factory=list)  # the pages the search cited
 
 
 class Backend:
@@ -93,6 +104,7 @@ class Backend:
 
     name = ""
     search_what = ""  # how prompts name the search ("the web and X (Twitter)")
+    source_note = ""  # prompt text on how to cite search results, where the provider's results carry URLs
 
     def start(self, req: Request) -> Any:
         """The opaque conversation state for a new request."""

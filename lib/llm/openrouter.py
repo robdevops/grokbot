@@ -9,7 +9,7 @@ from openai import AsyncOpenAI
 
 from .. import config
 from ..config import Settings
-from .base import Request, Usage
+from .base import Request, Source, Usage
 from .chat import ChatBackend
 
 log = logging.getLogger("bot")
@@ -20,6 +20,19 @@ SEARCH_PROMPT = (
     "source and date in brackets. No sentences, no preamble, no advice, no repetition. If the "
     "results don't cover it, reply exactly: NOT FOUND."
 )
+
+
+def citations(annotations: list) -> list[Source]:
+    """The web pages a message cites, in order, http(s) only, one per URL."""
+    out: dict[str, Source] = {}
+    for a in annotations or []:
+        if not isinstance(a, dict) or a.get("type") != "url_citation":
+            continue
+        c = a.get("url_citation") or {}
+        url = str(c.get("url") or "")
+        if url.startswith(("http://", "https://")):
+            out.setdefault(url, Source(str(c.get("title") or "").strip(), url, str(c.get("content") or "")))
+    return list(out.values())
 
 
 def merge_reasoning(details: list[dict], new: list) -> None:
@@ -39,6 +52,8 @@ def merge_reasoning(details: list[dict], new: list) -> None:
 class OpenRouterBackend(ChatBackend):
     name = "openrouter"
     search_what = "the web"
+    source_note = ("After a sentence that rests on a search result, cite it as [<a href=\"URL\">1</a>], numbering the pages "
+                   "you cite 1, 2, ... and using the page's exact URL from the results, never one you didn't get.")
 
     def __init__(self, st: Settings, client: AsyncOpenAI | None = None):
         super().__init__(st, client or AsyncOpenAI(
@@ -76,6 +91,12 @@ class OpenRouterBackend(ChatBackend):
         fields = getattr(delta, "model_extra", None) or {}
         merge_reasoning(extra.setdefault("details", []), fields.get("reasoning_details") or [])
         extra["searches"] = extra.get("searches", 0) + len(fields.get("annotations") or [])
+        if fields.get("annotations"):
+            log.debug("OpenRouter citations: %s", [
+                (a.get("type"), {k: (len(v) if k == "content" else v) for k, v in (a.get("url_citation") or {}).items()})
+                if isinstance(a, dict) else repr(a) for a in fields["annotations"]])
+        have = extra.setdefault("sources", [])
+        have += [c for c in citations(fields.get("annotations") or []) if c.url not in {h.url for h in have}]
 
     def _assistant_fields(self, extra: dict) -> dict:
         return {"reasoning_details": extra["details"]} if extra.get("details") else {}
@@ -98,6 +119,9 @@ class OpenRouterBackend(ChatBackend):
             log.warning("Search model returned no text for %r (finish_reason=%s)",
                         query, resp.choices[0].finish_reason)
             return "The search returned no text (the search model may have run out of tokens)."
+        links = citations(getattr(resp.choices[0].message, "annotations", None) or [])
+        if links:  # the model only sees this text: hand it the URLs so it can cite them
+            text += "\nLinks: " + " ".join(link.url for link in links[:config.SOURCES_MAX])
         return text
 
     async def credits(self) -> str | None:

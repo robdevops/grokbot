@@ -244,3 +244,35 @@ async def test_xai_failed_stream_raises():
     r = req()
     with pytest.raises(RuntimeError, match="failed"):
         await b.step(b.start(r), r, tool_choice=None)
+
+
+def cite(url, title="", content=""):
+    return {"type": "url_citation", "url_citation": {"url": url, "title": title, "content": content,
+                                                      "start_index": 0, "end_index": 0}}
+
+
+async def test_openrouter_collects_web_search_citations_with_their_snippets(env, caplog):
+    import logging
+
+    from lib.llm.base import Source
+    chunks = [chat_chunk("a", extra={"annotations": [cite("https://a.example/x", "A", "x" * 500), cite("ftp://no", "N")]}),
+              chat_chunk("b", extra={"annotations": [cite("https://a.example/x", "A"), cite("https://b.example/y")]}),
+              chat_chunk(finish="stop")]
+    b = OpenRouterBackend(config.load(env), FakeChatClient(Stream(chunks)))
+    r = req(search=True)
+    with caplog.at_level(logging.DEBUG, logger="bot"):
+        step = await b.step(b.start(r), r, tool_choice=None)
+    assert step.sources == [Source("A", "https://a.example/x", "x" * 500), Source("", "https://b.example/y")]
+    assert "'content': 500" in caplog.text and "x" * 50 not in caplog.text  # the log has the snippet's length only
+
+
+async def test_openrouter_run_search_hands_the_model_the_links(env):
+    from types import SimpleNamespace as N
+    msg = N(content="- NVDA 100 [Reuters]", annotations=[cite("https://r.example/n", "R")])
+    reply = N(choices=[N(message=msg, finish_reason="stop")], usage=N(cost=0.001))
+
+    async def create(**kw):
+        return reply
+
+    b = OpenRouterBackend(config.load(env), N(chat=N(completions=N(create=create))))
+    assert await b.run_search("nvda", Usage(), {}) == "- NVDA 100 [Reuters]\nLinks: https://r.example/n"
