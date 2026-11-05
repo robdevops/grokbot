@@ -118,3 +118,15 @@ async def test_the_loop_waits_for_the_mcp_when_overdue_and_otherwise_until_due(e
         tickers.set_known(before)
     assert waits[0] == config.KNOWN_TICKERS_START_DELAY and refreshed == [{}]  # nothing saved yet: refresh soon
     assert config.KNOWN_TICKERS_REFRESH - 5 < waits[1] <= config.KNOWN_TICKERS_REFRESH  # then a day later
+
+
+def test_the_asx_200_page_layout_reads_number_codes_too():
+    html = ('<p>As of 5 April 2026, the constituent stocks of the ASX 200</p><table class="wikitable sortable"><tbody>'
+            '<tr><th>Code</th><th>Company</th><th>Sector</th></tr>'
+            '<tr><td>360</td><td><a href="/wiki/Life360">Life360</a></td><td>Information Technology</td></tr>'
+            '<tr><td>4DX</td><td><a href="/wiki/4DMedical">4DMedical</a></td><td>Healthcare</td></tr>'
+            '<tr><td>A2M</td><td><a>a2 Milk Company</a></td><td>Consumer Staples</td></tr></tbody></table>')
+    codes = kt.symbols_from_html(html, "AX")
+    assert codes == ["360", "4DX", "A2M"]
+    out = tickers.link_tickers("Life360 (360) and 4DX up; 360 degrees", {c: f"{c}.AX" for c in codes})
+    assert 'quote/360.AX">360</a>)</b> and <a href' in out and out.endswith("; 360 degrees")  # a bare number never links
