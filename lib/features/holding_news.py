@@ -79,17 +79,20 @@ def undo_button(code: str) -> InlineKeyboardMarkup:
         [[InlineKeyboardButton(f"↩️ Undo (unsubscribed from {what})", callback_data=f"hn:undo:{code}")]])
 
 
-async def holding_news_text(ctx: Ctx, username: str, holdings: dict[str, str]) -> str | None:
-    """Ask the model for major news about these holdings; None if there's nothing."""
+async def holding_news_text(ctx: Ctx, usernames: list[str], holdings: dict[str, str]) -> str | None:
+    """Ask the model for major news about these holdings (of these people); None if there's nothing."""
     since = int((datetime.now() - timedelta(days=3)).timestamp())
-    recent = await asyncio.to_thread(ctx.store.recent_news, username, since)
+    recent: dict[str, None] = {}  # every person's recent items, each once
+    for name in usernames:
+        for news in await asyncio.to_thread(ctx.store.recent_news, name, since):
+            recent.update(dict.fromkeys(line for line in news.splitlines() if line.strip()))
     already = ("\nAlready reported in the last few days; don't repeat these unless there's a "
                "genuinely new development:\n" + "\n".join(recent) + "\n") if recent else ""
     prompt = HOLDING_NEWS_PROMPT.format(
         now=ctx.now(), what=ctx.backend.search_what, already=already,
         holdings="\n".join(f"- {k}: {v}" for k, v in sorted(holdings.items())))
     answer = await ask(ctx, [{"type": "text", "text": prompt}], Route(), must_search=True,
-                       cache_key=f"holding-news-{username}", kind="holding-news")
+                       cache_key="holding-news", kind="holding-news")
     raw = strip_disclaimer(answer.text)
     if is_nothing(raw):
         return None
@@ -121,24 +124,61 @@ async def run_holding_news(ctx: Ctx, only_username: str | None = None, *, userna
         if ((only_username is None or username == only_username)
                 and (usernames is None or username in usernames)):
             people.setdefault(username, []).append(portfolio)
+    if only_username:  # /holdingnews: that person's holdings, answered by the caller
+        return {} if not people else await _check_person(ctx, server, only_username, people[only_username], True, busy)
+    return await _check_together(ctx, server, people, busy)
+
+
+async def _held(ctx: Ctx, server, username: str, portfolio_names: list[str]) -> dict[str, str] | None:
+    """A person's holdings without the ones they muted; None if they muted it all."""
+    muted = await asyncio.to_thread(ctx.store.muted_codes, username)
+    if "*" in muted:
+        log.info("Holding news: @%s has unsubscribed from all of it", username)
+        return None
+    holdings = await current_holdings(server, portfolio_names)
+    return {k: v for k, v in holdings.items() if k.split(" ")[0].upper() not in muted}
+
+
+async def _check_together(ctx: Ctx, server, people: dict[str, list[str]], busy: list[str] | None) -> dict:
+    """One search for everyone's holdings at once (a stock two people hold is searched once), then each person gets
+    the items about their own holdings. An item naming no holding goes to everyone rather than being lost."""
+    held: dict[str, dict[str, str]] = {}
+    try:
+        for username, portfolio_names in people.items():
+            if (h := await _held(ctx, server, username, portfolio_names)):
+                held[username] = h
+        if not held:
+            return {}
+        together = {k: v for h in held.values() for k, v in h.items()}
+        log.info("Holding news: one check of %d holdings for %d people", len(together), len(held))
+        news = await holding_news_text(ctx, list(held), together)
+    except Exception as e:
+        if is_busy(e):  # automated, so no chat message; one log line is enough
+            log.warning("Holding news check failed for %s, the provider is busy: %s",
+                        ", ".join(f"@{u}" for u in people), " ".join(str(e).split()))
+            if busy is not None:
+                busy.extend(people)
+        else:
+            log.exception("Holding news check failed")
+        return {}
+    items = news.splitlines() if news else []
     results: dict[str, tuple[str, list[str]] | None] = {}
-    for username, portfolio_names in people.items():
-        results.update(await _check_person(ctx, server, username, portfolio_names, only_username, busy))
+    for username, holdings in held.items():
+        mine = "\n".join(ln for ln in items if news_codes(ln, holdings) or not news_codes(ln, together))
+        results[username] = (mine, news_codes(mine, holdings)) if mine else None
+        log.info("Holding news for @%s: %s", username, "found" if mine else "nothing major")
+        if mine:
+            await _deliver(ctx, username, mine, results[username][1])
     return results
 
 
 async def _check_person(ctx: Ctx, server, username: str, portfolio_names: list[str],
                         only_username: str | None, busy: list[str] | None = None) -> dict:
-    muted = await asyncio.to_thread(ctx.store.muted_codes, username)
-    if "*" in muted:
-        log.info("Holding news: @%s has unsubscribed from all of it", username)
-        return {}
     try:
-        holdings = await current_holdings(server, portfolio_names)
-        holdings = {k: v for k, v in holdings.items() if k.split(" ")[0].upper() not in muted}
+        holdings = await _held(ctx, server, username, portfolio_names)
         if not holdings:
             return {}
-        news = await holding_news_text(ctx, username, holdings)
+        news = await holding_news_text(ctx, [username], holdings)
     except Exception as e:
         if is_busy(e):  # automated, so no chat message; one log line is enough
             log.warning("Holding news check failed for @%s, the provider is busy: %s",

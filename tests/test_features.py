@@ -86,6 +86,36 @@ def test_known_symbols_and_listed_codes_give_yahoo_symbols():
     assert movers.listed_codes("<b>≥ 5% at close:</b>\nBHP +6%") == {}
 
 
+class TwoPortfolios(FakeMcp):
+    async def call(self, tool, args):
+        if tool == "list_portfolios":
+            return json.dumps({"portfolios": [{"name": "Bob", "id": 1}, {"name": "Alice", "id": 2}]})
+        rows = {1: [["NVDA", "NASDAQ", "Nvidia"], ["AMD", "NASDAQ", "AMD"]],
+                2: [["NVDA", "NASDAQ", "Nvidia"], ["BHP", "ASX", "BHP Group"]]}[args["portfolio_id"]]
+        return json.dumps({"report": {"holdings": {"columns": ["code", "market", "name"], "rows": rows}}})
+
+
+async def test_one_search_covers_everyone_and_each_person_gets_their_own_items(env, store):
+    st = config.load({**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:bob_llama,Alice:alice_llama"})
+    news = ("• Nvidia (NVDA): beat estimates\n• AMD fell on a guidance cut\n• BHP (ASX): trading halt\n"
+            "• Chip export rules tightened")
+    ctx = Ctx(st, store, ScriptedBackend([step(news)]), registry(TwoPortfolios("sharesight", tools=("x",))), FakeBot())
+    store.remember_user(make_msg(1, "x", username="bob_llama", chat_id=5))
+    store.remember_user(make_msg(2, "x", username="alice_llama", chat_id=6))
+    store.add_news("alice_llama", "• BHP (ASX): an older item")
+    results = await holding_news.run_holding_news(ctx)
+    assert len(ctx.backend.seen) == 1  # NVDA, which both hold, is searched once, in one request
+    prompt = ctx.backend.seen[0]["prompt"]
+    assert prompt.count("NVDA (NASDAQ)") == 1 and "AMD (NASDAQ)" in prompt and "BHP (ASX)" in prompt
+    assert "an older item" in prompt  # anyone's recent items aren't repeated
+    bob, bob_codes = results["bob_llama"]
+    alice, alice_codes = results["alice_llama"]
+    assert "NVDA" in bob and "AMD" in bob and "BHP" not in bob and bob_codes == ["AMD", "NVDA"]
+    assert "NVDA" in alice and "AMD fell" not in alice and "BHP" in alice and alice_codes == ["BHP", "NVDA"]
+    assert "export rules" in bob and "export rules" in alice  # names no holding: everyone gets it
+    assert {m["chat_id"] for m in ctx.bot.sent} == {5, 6}
+
+
 async def test_digest_says_nothing_when_nothing_and_respects_mutes(env, store):
     ctx = holding_ctx(env, store, [step("NOTHING")])
     assert (await holding_news.run_holding_news(ctx)) == {"bob_llama": None} and ctx.bot.sent == []

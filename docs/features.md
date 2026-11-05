@@ -7,7 +7,9 @@ Each is off by default. The holding-news DM and the movers reply are switched on
   `TZ`, `portfolio:username` pairs such as
   `MyPortfolio:alice,MySMSF:alice`; empty, the default, means off):
   reads each person's current Sharesight holdings, searches for *major* news from the past 24 hours
-  (a forced search), and DMs only what qualifies (most days: nothing). Stories already reported in
+  (a forced search), and DMs only what qualifies (most days: nothing). The daily check is one search for everyone's
+  holdings together, so a stock two people hold costs one search; each person then gets the items about their own
+  holdings (an item that names none goes to everyone). Stories already reported in
   the last 3 days are not repeated. Each message has an **Unsubscribe** button: per ticker, or all
   holding news, with an **Undo** button afterwards. People must have messaged the bot (or a group it
   is in) once so it knows their user ID. `/holdingnews` in a DM runs the check now and always replies.
