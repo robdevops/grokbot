@@ -79,6 +79,10 @@ def test_kv_users_news_and_usage(store):
     assert store.recent_news("bob", 0) == ["• A: thing happened"]
     store.add_usage(-1, "m", "chat", 2, 1000, 400, 50, 0.01)
     assert store.usage_summary(0)[0][:5] == ("m", 1, 1000, 400, 50)
+    store.add_usage(-1, "m", "holding-news", 1, 10, 0, 5, 0.25)
+    store.add_usage(-1, "m", "chat", 1, 10, 0, 5, 0.02)
+    assert store.usage_by_kind(0) == [("holding-news", 1, 0.25), ("chat", 2, 0.03)]  # dearest first
+    assert store.usage_by_kind(2**40) == []  # only the window asked for
 
 
 def test_writes_are_committed_immediately(tmp_path):

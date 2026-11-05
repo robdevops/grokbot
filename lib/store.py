@@ -260,6 +260,12 @@ class Store:
             "FROM usage WHERE bot_id = ? AND ts >= ? GROUP BY model ORDER BY SUM(cost) DESC",
             (self.bot_id or 0, since_ts))
 
+    def usage_by_kind(self, since_ts: int) -> list[tuple]:
+        """(kind, requests, cost) per kind of request (chat, holding-news, ...) since a time."""
+        return self._run(
+            "SELECT kind, COUNT(*), SUM(cost) FROM usage WHERE bot_id = ? AND ts >= ? GROUP BY kind "
+            "ORDER BY SUM(cost) DESC", (self.bot_id or 0, since_ts))
+
     # -- Sharesight period cache -------------------------------------------------------
     def period_get(self, portfolio_id: int, first: str, last: str) -> dict[tuple[str, str], PeriodRow]:
         """Cached windows of a portfolio lying within first..last (ISO dates), by (start, end)."""

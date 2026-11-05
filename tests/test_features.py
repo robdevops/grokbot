@@ -223,6 +223,11 @@ async def test_credits_shows_balance_and_usage_to_admins_only(env, store):
     text = owner.replies[0]["text"]
     assert "no credit balance" in text and "m: 1 requests, in 1,000 (50% cached)" in text
     assert commands.usage_text([], "last 24 hours") == "No usage recorded in the last 24 hours."
+    assert "By kind" not in text  # one kind only: nothing to split
+    store.add_usage(5, "m", "holding-news", 1, 100, 0, 10, 0.25)
+    again = user_msg(ctx.bot, "/credits", user_id=5, mid=3)
+    await commands.credits(ctx, update_for(again), None)
+    assert "By kind: chat 1 ($0.5000), holding news (daily) 1 ($0.2500)" in again.replies[0]["text"]
 
 
 async def test_credits_still_shows_usage_when_the_balance_fails(env, store):
