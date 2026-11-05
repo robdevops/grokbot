@@ -51,7 +51,7 @@ log = logging.getLogger("bot")
 
 
 # The bot's own commands: a chat command in mcp_servers.json can't take one of these names.
-BUILT_IN_COMMANDS = {"start", "tokens", "usage", "credits", "flushcache", "clear", "segments", "narrative", "events",
+BUILT_IN_COMMANDS = {"start", "tokens", "usage", "credits", "flushcache", "clear", "segments", "future", "narrative", "events",
                      "holdingnews"}
 
 
@@ -142,10 +142,11 @@ async def log_tool_size(ctx: Ctx) -> None:
 
 
 async def register_menu(ctx: Ctx) -> None:
-    """The command menu. A scoped menu replaces the default one, so each lists everything for its scope: /segments,
+    """The command menu. A scoped menu replaces the default one, so each lists everything for its scope: /segments, /future,
     /narrative, /events and the chat commands of mcp_servers.json for everyone; /clear too in private chats; /usage too for the people who can use it
     (administrators of every group, and the users in TELEGRAM_ADMIN_CHAT_IDS in their own chat with the bot)."""
     everyone = [BotCommand("segments", "Revenue breakdown pies: /segments TICKER"),
+                BotCommand("future", "Analyst revenue and EPS forecasts: /future TICKER"),
                 BotCommand("narrative", "10-K/10-Q narrative: /narrative TICKER [section]"),
                 BotCommand("events", "8-K events: /events TICKER [section]")]
     everyone += [BotCommand(c.name, c.description) for c in ctx.chat_commands]  # from mcp_servers.json
@@ -218,6 +219,7 @@ def build_app(ctx: Ctx) -> Application:
     app.add_handler(CommandHandler("flushcache", command(commands.flush_cache)))
     app.add_handler(CommandHandler("clear", command(commands.clear)))
     app.add_handler(CommandHandler("segments", handlers.segments))
+    app.add_handler(CommandHandler("future", handlers.future))
     app.add_handler(CommandHandler("narrative", command(commands.narrative)))
     app.add_handler(CommandHandler("events", command(commands.events)))
     for c in ctx.chat_commands:  # chat_commands in mcp_servers.json

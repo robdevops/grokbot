@@ -20,6 +20,7 @@ from ..features.charts import TOOL as CHART_TOOL
 from ..features.charts import Charts, asks_pie, chart_hint, wants_chart
 from ..features.charts import breakdown as chart_breakdown
 from ..features.charts import buttons as chart_buttons
+from ..features.charts import future as chart_future
 from ..features.charts import pages as chart_pages
 from ..features.charts import tool as chart_tool
 from ..features.chat_commands import ChatCommand
@@ -300,6 +301,26 @@ class Handlers:
             await reply_chunks(msg, text, ctx.store, quote=not private)
             return
         await self._send_charts(msg, charts, caption, quote=not private)
+
+    async def future(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """/future TICKER: analysts' low, average and high revenue and EPS for this and next fiscal year, as line
+        charts drawn without the model."""
+        msg, ctx = update.effective_message, self.ctx
+        typing = keep_typing(ctx.bot, msg.chat_id)
+        try:
+            await asyncio.to_thread(ctx.store.save, msg)
+            ticker = context.args[0] if context and context.args else ""
+            charts = Charts()
+            caption = await chart_future.fast(ctx, ticker, charts) if ticker else None
+            private = is_dm(msg.chat_id)
+            if not caption:
+                text = (f"No analyst forecasts found for {html.escape(chart_future.symbol_of(ticker))}." if ticker
+                        else "Usage: /future TICKER (e.g. /future NVDA, /future NXT.AX)")
+                await reply_chunks(msg, text, ctx.store, quote=not private)
+                return
+            await self._send_charts(msg, charts, caption, quote=not private)
+        finally:
+            typing.cancel()
 
     def chat_command(self, cmd: ChatCommand):
         """The handler of a chat command: the message is answered like a mention, the model offered only the command's
