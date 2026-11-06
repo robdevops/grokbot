@@ -251,6 +251,14 @@ async def test_bots_own_tools_are_not_truncated_but_the_models_are():
     assert "truncated" not in whole and len(whole) > 20
 
 
+async def test_a_result_the_bot_reads_itself_is_neither_slimmed_nor_cut():
+    s = MCPServer("yahoo", {}, timeout=5, max_output=20)
+    s.session = FakeSession()
+    raw = await s.call("chart", {"symbol": "NVDA", "_raw": True})
+    assert s.session.calls == [("chart", {"symbol": "NVDA"})]
+    assert json.loads(raw)["p"] == 1.23456789  # not rounded, and not truncated at 20 characters
+
+
 async def test_user_calls_describe_what_is_running_but_not_background_work():
     s = MCPServer("sharesight", {"max_concurrent": 2}, timeout=5, max_output=1000)
     gate = asyncio.Event()

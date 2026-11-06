@@ -264,7 +264,8 @@ class MCPServer:
         holdings_only = bool(self.cfg.get("current_holdings_only"))
         keep_sales = args.get("_keep_sales")  # set by the bot's own tools (history), never by the model
         background = bool(args.get("_bg"))  # the period backfill, which must not hold up a user's request
-        args = {k: v for k, v in args.items() if k not in ("_keep_sales", "_bg")}
+        raw = bool(args.get("_raw"))  # the bot reads the result itself (a chart's prices): no slimming, no cap
+        args = {k: v for k, v in args.items() if k not in ("_keep_sales", "_bg", "_raw")}
         if holdings_only and tool == "get_performance_report":
             args = {**args, "include_sales": bool(keep_sales)}  # Sharesight's own switch for sold holdings
         if keep_sales:
@@ -282,9 +283,9 @@ class MCPServer:
         out = "\n".join(parts) or "(empty result)"
         if result.isError:
             out = "Tool error: " + out
-        else:
+        elif not raw:
             out = slim_result(out, self.cfg.get("slim", self.label), drop_closed=holdings_only)
-        if len(out) > self.max_output and not keep_sales:  # the cap protects the model's context; the bot's own tools aren't sent to it
+        if len(out) > self.max_output and not (keep_sales or raw):  # the cap protects the model's context; the bot's own tools aren't sent to it
             log.warning("MCP %s.%s result truncated (%d chars)", self.label, tool, len(out))
             out = out[:self.max_output] + f"\n...[truncated; {len(out)} chars total]"
         return out

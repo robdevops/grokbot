@@ -62,9 +62,9 @@ reachable from the internet and credentials stay on the machine. Servers connect
 background: the bot starts immediately, and a message that arrives while a server is still connecting
 waits for it (up to 30 s) so it isn't answered without its tools.
 ```json
-{"mcpServers": {"yahoo": {"command": "npx", "args": ["-y", "yahoo-finance-mcp-server@1.3.1"],
+{"mcpServers": {"yahoo": {"command": "npx", "args": ["-y", "-p", "yahoo-finance2", "yahoo-finance-mcp"],
    "description": "what it is and how to use it (goes into the prompt)",
-   "blocked_tools": ["get_options_chain"], "cache_ttl": 30}}}
+   "allowed_tools": ["quote", "quoteSummary", "chart"], "hide_params": ["moduleOptions"], "cache_ttl": 30}}}
 ```
 Per-server keys: `command`/`args`/`env` (local, stdio) or `url`/`headers` (remote HTTP);
 `${VAR}` in `env`/`headers` is taken from the environment; `description`; `blocked_tools`;
@@ -72,7 +72,7 @@ Per-server keys: `command`/`args`/`env` (local, stdio) or `url`/`headers` (remot
 request hammering Yahoo); `cache_ttl` seconds during which identical calls share one result (0 =
 off); `keep_warm` (tools whose cached results are refetched just before they expire, while people keep asking: a list of
 tool names, or `{name: longest start_date..end_date window in days, 0 = a single day}` for tools with dates, so a longer or undated
-call is cached but not refreshed); `slim` (result slimming, defaults to the server's name; `sharesight` flattens holdings);
+call is cached but not refreshed); `slim` (result slimming, defaults to the server's name; `sharesight` flattens holdings, `yahoo` keeps a quote's useful fields so ten fit in one result);
 `hide_params` (optional parameters kept out of the tool definition because the model never needs them,
 saving tokens every round; a required parameter is never hidden); `gate` (`portfolio` = only offered when the question is about portfolios/holdings);
 `current_holdings_only` (Sharesight: never include sold holdings);
@@ -88,7 +88,7 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
   bot already uses (`/usage`, `/clear`, …), a name used twice, or an entry without a `tool` is skipped, and the startup
   log warns about each, and about a tool that isn't enabled.
 - **Tool names are exact:** `blocked_tools` and `allowed_tools` take the server's real tool names, as
-  printed in the startup log (`get_analyst_estimates`, not `analyst_estimates`). An entry that matches
+  printed in the startup log (`quoteSummary`, not `quote_summary`). An entry that matches
   no tool is ignored, with a warning that suggests the closest real name.
 - **Read-only by default:** tools are only offered if the server marks them read-only or their name
   starts with get/list/search/fetch/find/lookup/show/read, so nobody in the group can talk the bot

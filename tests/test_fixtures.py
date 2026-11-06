@@ -8,6 +8,8 @@ import pytest
 
 from lib import config
 from lib import holdings as sharesight_holdings
+from lib.features import charts
+from lib.features.charts import future
 from lib.mcp.results import slim_result, table_records
 from lib.mcp.schema import compact_description, compact_schema
 
@@ -100,27 +102,54 @@ def test_real_tool_definitions_survive_the_schema_diet(server):
         assert 0 < len(compact_description(t["description"])) <= len(t["description"])
 
 
-def test_real_yahoo_results_are_markdown_tables_squeezed_and_other_text_left_alone():
-    files = sorted((FIX / "yahoo").glob("*.txt"))
-    assert len(files) >= 8
-    for f in files:
-        text = f.read_text().rstrip("\n")
-        slim = slim_result(text, "yahoo")
-        assert (len(slim) < len(text)) if "\n|" in text else (slim == text)
+def yahoo(name: str) -> str:
+    return (FIX / "yahoo" / name).read_text().rstrip("\n")
 
 
-def test_nvda_financial_statements_fit_the_tool_result_cap_with_margin():
-    text = (FIX / "yahoo" / "get_financial_statements__NVDA.txt").read_text().rstrip("\n")
-    slim = slim_result(text, "yahoo")
-    assert len(text) > config.MAX_TOOL_OUTPUT  # as captured it would be cut off mid-table
-    assert len(slim) < config.MAX_TOOL_OUTPUT * 0.6  # squeezed: whole statements fit, with room to spare
-    assert "|Net Income|120.067B|72.88B|29.76B|4.368B|-|" in slim
-    assert not any(bad in slim for bad in ("00:00:00", "|nan|", "---", "  "))
-    assert [h for h in slim.splitlines() if h.startswith("## ")] == [
-        "## Income Statement (Annual)", "## Balance Sheet (Annual)", "## Cash Flow Statement (Annual)"]
+def test_yahoo_tool_definitions_hide_module_options_and_allow_only_what_the_bot_needs():
+    cfg = json.loads((FIX.parent.parent / "mcp_servers.json").read_text())["mcpServers"]["yahoo"]
+    tools = {t["name"]: t for t in json.loads(yahoo("tools.json"))}
+    # Names like quote and chart don't look read-only, so they are listed (which also leaves the rest out).
+    assert set(cfg["allowed_tools"]) <= set(tools)  # names the server really has
+    assert {charts.HISTORY_TOOL, future.ESTIMATES} <= set(cfg["allowed_tools"])
+    hide = frozenset(cfg["hide_params"])
+    assert set(compact_schema(tools["chart"]["inputSchema"], hide=hide)["properties"]) == {"symbol", "queryOptions"}
 
 
-def test_real_yahoo_error_and_empty_news_results():
-    error = (FIX / "yahoo" / "get_stock_quote__ZZZZNOTREAL.txt").read_text()
-    assert error.startswith("Tool error: ") and "validation error" in error
-    assert "No recent news" in (FIX / "yahoo" / "get_market_news__NVDA.txt").read_text()
+def test_real_yahoo_json_results_are_slimmed():
+    for name in ("chart__NXT-AX.txt", "quote__CBA-AX.txt", "quoteSummary__AMD.txt"):
+        text = yahoo(name)
+        assert len(slim_result(text, "yahoo")) < len(text) < config.MAX_TOOL_OUTPUT
+
+
+def test_ten_real_quotes_fit_one_result_with_what_the_model_needs():
+    one = json.loads(yahoo("quote__CBA-AX.txt"))["result"]
+    many = json.dumps({"result": [{**one, "symbol": f"S{i}"} for i in range(10)]})
+    assert len(many) > config.MAX_TOOL_OUTPUT * 2  # as sent, ten quotes would be cut after three
+    slim = slim_result(many, "yahoo")
+    assert len(slim) < config.MAX_TOOL_OUTPUT * 0.8
+    first = json.loads(slim)["result"][0]
+    assert {"regularMarketPrice", "trailingPE", "marketCap", "currency"} <= set(first)
+    assert "messageBoardId" not in first and "corporateActions" not in first  # empty ones go too
+    assert json.loads(slim_result(yahoo("quoteSummary__AMD.txt"), "yahoo"))["result"]["earningsTrend"]  # left alone
+
+
+def test_a_real_chart_result_gives_a_price_series_in_sydney_time():
+    x, y = charts.closes(json.loads(yahoo("chart__NXT-AX.txt")), "1y")
+    assert len(x) == len(y) == 7 and x[0] == "2026-09-28T00:00:00+10:00" and y[-1] == pytest.approx(10.4)
+    assert charts.as_date(x[0]).date().isoformat() == "2026-09-28"
+
+
+@pytest.mark.parametrize("name, years, revenue", [
+    ("quoteSummary__AMD.txt", ["FY2025", "FY2026", "FY2027"], (34_639_000_000, 61_257_000_000, "USD")),
+    ("quoteSummary__NXT-AX.txt", ["FY2026", "FY2027", "FY2028"], (496_500_000, 889_400_000, "AUD"))])
+def test_real_earnings_trends_give_both_years_estimates(name, years, revenue):
+    payload = json.loads(slim_result(yahoo(name), "yahoo"))  # as the bot gets it
+    assert future.fiscal_years(payload) == years
+    actual, (this, nxt) = future.metric(future.rows(payload, "revenueEstimate"), "yearAgoRevenue")
+    assert (actual, nxt["low"], this["currency"]) == revenue
+    assert future.metric(future.rows(payload, "earningsEstimate"), "yearAgoEps") is not None
+
+
+def test_a_real_yahoo_error_for_a_symbol_that_doesnt_exist():
+    assert yahoo("chart__ZZZZNOTREAL.txt").startswith("Tool error: ")

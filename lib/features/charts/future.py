@@ -1,4 +1,6 @@
-"""/future TICKER: analysts' low, average and high revenue and EPS for this and next fiscal year, drawn without the model."""
+"""/future TICKER: analysts' low, average and high revenue and EPS for this and next fiscal year, drawn without the model.
+
+The estimates come from yahoo-finance2's MCP server: quoteSummary's earningsTrend module."""
 
 from __future__ import annotations
 
@@ -9,18 +11,17 @@ import math
 import re
 
 from ...context import Ctx
-from ...mcp.results import table_records
 from ...tickers import yahoo_symbol
 from . import Charts, tool
 
 log = logging.getLogger("bot")
 
-ESTIMATES = "get_analyst_estimates"  # Yahoo tools, found by name on whichever MCP server has them
-STATEMENTS = "get_financial_statements"
+ESTIMATES = "quoteSummary"  # found by name on whichever MCP server has it
+MODULE = "earningsTrend"
 SOURCE = "Yahoo Finance consensus"
 SYMBOLS = {"USD": "$", "AUD": "A$", "NZD": "NZ$", "CAD": "C$", "HKD": "HK$", "EUR": "€", "GBP": "£", "JPY": "¥"}
 STEPS = ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K"))
-DATE_RE = re.compile(r"\b(\d{4})-\d{2}-\d{2}\b")
+YEAR_RE = re.compile(r"^(\d{4})-\d{2}-\d{2}")
 LINES = (("Low", "low"), ("Average", "avg"), ("High", "high"))
 
 
@@ -35,20 +36,33 @@ def _num(x) -> float | None:
     return float(x) if isinstance(x, (int, float)) and not math.isnan(x) else None
 
 
+def trend(payload: dict) -> list[dict]:
+    """earningsTrend's rows (one per period: "0q", "+1q", "0y", "+1y")."""
+    found = ((payload.get("result") or payload).get(MODULE) or {}).get("trend")
+    return [r for r in found if isinstance(r, dict)] if isinstance(found, list) else []
+
+
 def rows(payload: dict, key: str) -> dict[str, dict]:
-    """The estimate rows of one kind ("earningsEstimate", "revenueEstimate") by period ("0y", "+1y")."""
-    return {str(r.get("period")): r for r in table_records(payload.get(key))}
+    """The estimates of one kind ("earningsEstimate", "revenueEstimate") by period ("0y", "+1y"), each with its
+    currency as "currency"."""
+    out = {}
+    for r in trend(payload):
+        est = r.get(key)
+        if isinstance(est, dict):
+            currency = est.get("revenueCurrency") or est.get("earningsCurrency")
+            out[str(r.get("period"))] = {**est, "currency": currency}
+    return out
 
 
-def fiscal_years(statements: str) -> list[str]:
-    """Labels for last, this and next fiscal year: from the latest annual statement's date (2025-12-31 -> FY2025 is
-    the last reported), else plain words."""
-    head = statements.split("## Balance Sheet")[0]
-    years = [int(y) for y in DATE_RE.findall(head)]
-    if not years:
+def fiscal_years(payload: dict) -> list[str]:
+    """Labels for last, this and next fiscal year, from the year this fiscal year ends (2026-12-31: FY2025 is the last
+    reported; an Australian 2027-06-30: FY2026), else plain words."""
+    this = next((r for r in trend(payload) if r.get("period") == "0y"), {})
+    m = YEAR_RE.match(str(this.get("endDate") or ""))
+    if not m:
         return ["Last FY", "This FY", "Next FY"]
-    last = max(years)
-    return [f"FY{last}", f"FY{last + 1}", f"FY{last + 2}"]
+    year = int(m.group(1))
+    return [f"FY{year - 1}", f"FY{year}", f"FY{year + 1}"]
 
 
 def scale(values: list[float]) -> tuple[float, str]:
@@ -87,9 +101,11 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
     ticker = symbol_of(text)
     if not ticker or not server:
         return None
-    out = await server.call(ESTIMATES, {"ticker": ticker, "response_format": "json"})
+    out = await server.call(ESTIMATES, {"symbol": ticker, "queryOptions": {"modules": [MODULE]}})
     try:
         payload = json.loads(out)
+        if not isinstance(payload, dict):
+            raise ValueError
     except ValueError:
         log.warning("/future %s: couldn't read the %s result (%s)", ticker, ESTIMATES, " ".join(out.split())[:300])
         return None
@@ -97,8 +113,7 @@ async def fast(ctx: Ctx, text: str, charts: Charts) -> str | None:
     eps = metric(rows(payload, "earningsEstimate"), "yearAgoEps")
     if not (revenue or eps):
         return None
-    statements = await server.call(STATEMENTS, {"ticker": ticker}) if STATEMENTS in server.fn_names.values() else ""
-    years = fiscal_years(statements)
+    years = fiscal_years(payload)
     currency = str(((revenue or eps)[1][0]).get("currency") or "USD")
     sym = SYMBOLS.get(currency, f"{currency} ")
     _, make = tool(ctx, charts)

@@ -1,4 +1,4 @@
-"""Tool-result slimming: Sharesight holdings flattening plus generic rounding/down-sampling."""
+"""Tool-result slimming: Sharesight holdings flattening, Yahoo quote trimming, plus generic rounding/down-sampling."""
 
 from __future__ import annotations
 
@@ -236,6 +236,38 @@ def squeeze_tables(text: str) -> str:
     return "\n".join(lines)
 
 
+# What a model needs from a yahoo-finance2 quote (about 3.7k characters each as sent): ten stocks fit in a result.
+QUOTE_FIELDS = (
+    "symbol", "longName", "shortName", "currency", "fullExchangeName", "marketState", "regularMarketPrice",
+    "regularMarketChange", "regularMarketChangePercent", "regularMarketTime", "preMarketPrice",
+    "preMarketChangePercent", "postMarketPrice", "postMarketChangePercent", "regularMarketDayLow",
+    "regularMarketDayHigh", "regularMarketVolume", "averageDailyVolume3Month", "fiftyTwoWeekLow", "fiftyTwoWeekHigh",
+    "fiftyTwoWeekChangePercent", "fiftyDayAverage", "twoHundredDayAverage", "marketCap", "trailingPE", "forwardPE",
+    "epsTrailingTwelveMonths", "epsForward", "priceToBook", "dividendYield", "trailingAnnualDividendYield",
+    "earningsTimestamp", "averageAnalystRating", "corporateActions")
+
+
+def _is_quote(x) -> bool:
+    return isinstance(x, dict) and "symbol" in x and "regularMarketPrice" in x and "quoteType" in x
+
+
+def tidy_yahoo(data):
+    """Quotes (one, a list, or a map by symbol, under "result") keep only QUOTE_FIELDS; anything else is unchanged."""
+    def trim(q):
+        return {k: q[k] for k in QUOTE_FIELDS if q.get(k) not in (None, [], "")} if _is_quote(q) else q
+
+    if not isinstance(data, dict) or "result" not in data:
+        return data
+    result = data["result"]
+    if isinstance(result, list):
+        result = [trim(q) for q in result]
+    elif _is_quote(result):
+        result = trim(result)
+    elif isinstance(result, dict) and result and all(_is_quote(q) for q in result.values()):
+        result = {k: trim(q) for k, q in result.items()}
+    return {**data, "result": result}
+
+
 def slim_result(text: str, kind: str | None, drop_closed: bool = False) -> str:
     """Compact a tool result. JSON: server-specific flattening, then rounding/down-sampling. Markdown
     tables are squeezed; any other text is returned unchanged."""
@@ -245,6 +277,8 @@ def slim_result(text: str, kind: str | None, drop_closed: bool = False) -> str:
         return squeeze_tables(text) if "\n|" in text else text
     if kind == "sharesight":
         data = json.loads(tidy_sharesight(json.dumps(data), drop_closed))
+    elif kind == "yahoo":
+        data = tidy_yahoo(data)
     return json.dumps(diet(data), separators=(",", ":"), ensure_ascii=False)
 
 

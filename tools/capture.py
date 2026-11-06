@@ -16,10 +16,11 @@ from lib import config
 from lib.mcp.results import slim_result
 from lib.mcp.server import MCPServer, Registry
 
-TICKER_NAMES, TICKER_LISTS = {"ticker", "symbol"}, {"tickers", "symbols"}
-# Extra Yahoo cases: a non-US listing, and a symbol that doesn't exist (to capture an error).
-YAHOO_EXTRA = [("get_stock_quote", {"ticker": "CBA.AX", "symbol": "CBA.AX"}),
-               ("get_stock_quote", {"ticker": "ZZZZNOTREAL", "symbol": "ZZZZNOTREAL"})]
+TICKER_NAMES, TICKER_LISTS = {"ticker", "symbol", "query"}, {"tickers", "symbols"}
+# Extra Yahoo cases: a non-US listing, analyst estimates, and a symbol that doesn't exist (to capture an error).
+YAHOO_EXTRA = [("quote", {"query": "CBA.AX"}),
+               ("quoteSummary", {"symbol": "NXT.AX", "queryOptions": {"modules": ["earningsTrend"]}}),
+               ("chart", {"symbol": "ZZZZNOTREAL", "queryOptions": {"period1": "2026-01-01"}})]
 
 
 def _kind(prop: dict) -> str:
@@ -52,6 +53,8 @@ def fill_args(schema: dict, today: date, days: int = 30, known: dict | None = No
             args[name] = today.isoformat()
         elif kind == "integer" and low in ("count", "limit", "n"):
             args[name] = 5
+        elif kind == "object" and low == "queryoptions":  # yahoo-finance2: chart and the like need a start
+            args[name] = {"period1": (today - timedelta(days=days)).isoformat()}
         elif kind == "boolean":
             args[name] = False
         else:
