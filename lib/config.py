@@ -21,7 +21,7 @@ ENV_VARS: dict[str, str] = {
     "MODEL": "Model ID (default grok-4.3 on xAI, deepseek/deepseek-v4.1-flash-1017 on OpenRouter).",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
     "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
-    "DARKMODE": "Chart theme: off (default, light), on (dark) or auto (dark from 9 pm to 7 am in TZ).",
+    "DARKMODE": "Chart theme: off (default, light), on (dark), auto (dark from 9 pm to 7 am in TZ) or the dark hours, e.g. 18:00-6:00, 18-6 or 6pm-6am.",
     # Advanced and optional
     "ADMIN_ONLY": "on|off. On (default): only admins may DM the bot or get Sharesight data. Off: everyone may. /usage and /flushcache stay admin-only.",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
@@ -90,7 +90,7 @@ class Settings:
     search_model: str
     max_tokens: int
     history_max: int
-    darkmode: str  # "off" | "on" | "auto": the charts' theme
+    darkmode: tuple[int, int] | None  # the charts' dark hours, as minutes of the day in TZ [from, to); None = never
     link_target: str  # "yahoo" | "google" | "tradingview": where ticker links go
     db_path: str
     tz: ZoneInfo
@@ -179,6 +179,44 @@ def _backfill(text: str) -> frozenset[str]:
     return frozenset() if names & {"off", "none", "false", "0"} else names
 
 
+DARK_AUTO = (21 * 60, 7 * 60)  # DARKMODE=auto: 9 pm to 7 am
+DAY_MINUTES = 24 * 60
+CLOCK_RE = re.compile(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?")
+
+
+def _clock(text: str) -> int | None:
+    """"18:00", "18", "6pm", "6:30am", "12am" -> minutes after midnight; None if it isn't a time of day."""
+    m = CLOCK_RE.fullmatch(text.strip())
+    if not m:
+        return None
+    hour, minute, half = int(m.group(1)), int(m.group(2) or 0), m.group(3)
+    if half:
+        if not 1 <= hour <= 12:
+            return None
+        hour = hour % 12 + (12 if half == "pm" else 0)
+    if hour > 23 or minute > 59:
+        return None
+    return hour * 60 + minute
+
+
+def dark_hours(text: str) -> tuple[int, int] | None:
+    """DARKMODE as the dark minutes of the day [from, to): off (or unset) -> None, on -> all day, auto -> 9 pm to
+    7 am, or a range such as 18:00-6:00, 18-6 or 6pm-6am (it may run past midnight)."""
+    value = text.strip().lower()
+    if value in ("", "off"):
+        return None
+    if value == "on":
+        return 0, DAY_MINUTES
+    if value == "auto":
+        return DARK_AUTO
+    start, dash, end = value.partition("-")
+    first, last = _clock(start), _clock(end)
+    if not dash or first is None or last is None or first == last:
+        raise ConfigError(f"DARKMODE must be off, on, auto or the dark hours such as 18:00-6:00, 18-6 or 6pm-6am, "
+                          f"not {text.strip()!r}.")
+    return first, last
+
+
 def online(model: str) -> str:
     """The model with OpenRouter's ":online" suffix, which gives it web search."""
     return model if model.endswith(":online") else f"{model}:online"
@@ -207,9 +245,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
     link_target = env.get("FINANCE_LINK_TARGET", "").strip().lower() or "yahoo"
     if link_target not in ("yahoo", "google", "tradingview"):
         raise ConfigError(f"FINANCE_LINK_TARGET must be yahoo, google or tradingview, not {link_target!r}.")
-    darkmode = env.get("DARKMODE", "").strip().lower() or "off"
-    if darkmode not in ("off", "on", "auto"):
-        raise ConfigError(f"DARKMODE must be off, on or auto, not {darkmode!r}.")
+    darkmode = dark_hours(env.get("DARKMODE", ""))
     recipients = _pairs(env.get("SHARESIGHT_HOLDING_NEWS_RECIPIENTS", ""))
     return Settings(
         telegram_token=token,

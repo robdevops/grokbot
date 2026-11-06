@@ -26,7 +26,6 @@ PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max
 DEFAULT_INTERVAL = {"1d": "5m", "5d": "30m", "1mo": "1d", "3mo": "1d", "6mo": "1wk", "1y": "1wk",
                     "2y": "1mo", "5y": "1mo", "10y": "3mo", "max": "3mo"}
 MAX_CHARTS, MAX_SERIES, MAX_POINTS = 5, 8, 2000
-NIGHT_FROM, NIGHT_TO = 21, 7  # the dark theme from 9 pm to 7 am (TZ), when the chart is drawn
 TOTAL_MAX = 24  # characters of a legend total
 CAPTION_HINT = 900  # Telegram captions hold 1024 characters; a longer reply continues in a text message
 HISTORY_TOOL = "chart"  # yahoo-finance2's MCP server, found by name on whichever server has it
@@ -73,13 +72,13 @@ def now(tz) -> datetime:
     return datetime.now(tz)
 
 
-def is_night(hour: int) -> bool:
-    return hour >= NIGHT_FROM or hour < NIGHT_TO
-
-
-def is_dark(mode: str, hour: int) -> bool:
-    """The dark theme? DARKMODE: "on" always, "auto" at night (9 pm to 7 am), "off" never."""
-    return mode == "on" or (mode == "auto" and is_night(hour))
+def is_dark(hours: tuple[int, int] | None, minute: int) -> bool:
+    """The dark theme at this minute of the day? `hours` is DARKMODE's [from, to), which may run past midnight; None
+    is never."""
+    if hours is None:
+        return False
+    start, end = hours
+    return start <= minute < end if start < end else minute >= start or minute < end
 
 
 def date_range(first: datetime, last: datetime) -> str:
@@ -408,7 +407,7 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
         series[0].total = pie_total(series[0], title)
     chart = Chart(title, series, str(args.get("left_label") or ""), str(args.get("right_label") or ""),
                   bool(args.get("invert_left")), bool(args.get("invert_right")), labels,
-                  dark=is_dark(ctx.st.darkmode, moment.hour))
+                  dark=is_dark(ctx.st.darkmode, moment.hour * 60 + moment.minute))
     for side in ("left", "right"):  # an axis of nothing but % changes labels its ticks with %
         on_side = [spec for s, spec in zip(series, specs, strict=True) if s.axis == side]
         setattr(chart, f"{side}_percent", bool(on_side) and all(spec.get("percent_change") for spec in on_side))
