@@ -151,7 +151,7 @@ def test_the_dark_theme_has_a_dark_background_and_light_text():
 
 
 def test_dark_hours_may_run_past_midnight_and_end_before_their_last_minute():
-    night = config.dark_hours("auto")  # 9 pm to 7 am
+    night = config.dark_hours("21-7")
     assert [charts.is_dark(night, h * 60) for h in (6, 7, 12, 20, 21, 23, 0)] == [True, False, False, False, True,
                                                                                     True, True]
     evening = config.dark_hours("18:30-22")  # within one day
@@ -160,7 +160,7 @@ def test_dark_hours_may_run_past_midnight_and_end_before_their_last_minute():
     assert not charts.is_dark(None, 0) and all(charts.is_dark(config.dark_hours("on"), m) for m in (0, 720, 1439))
 
 
-@pytest.mark.parametrize("mode, dark_at_22, dark_at_13", [("off", False, False), ("on", True, True), ("auto", True, False),
+@pytest.mark.parametrize("mode, dark_at_22, dark_at_13", [("off", False, False), ("on", True, True), ("21-7", True, False),
                                                           ("6pm-6am", True, False), ("12-14", False, True)])
 async def test_a_chart_follows_darkmode(env, store, monkeypatch, mode, dark_at_22, dark_at_13):
     from zoneinfo import ZoneInfo

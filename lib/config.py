@@ -21,7 +21,7 @@ ENV_VARS: dict[str, str] = {
     "MODEL": "Model ID (default grok-4.3 on xAI, deepseek/deepseek-v4.1-flash-1017 on OpenRouter).",
     "REASONING": "Reasoning effort: low, medium or high; empty = the model's default.",
     "SEARCH": "on|off. Web search (and X search on xAI). Default on.",
-    "DARKMODE": "Chart theme: off (default, light), on (dark), auto (dark from 9 pm to 7 am in TZ) or the dark hours, e.g. 18:00-6:00, 18-6 or 6pm-6am.",
+    "DARKMODE": "Chart theme: off (default, light), on (dark) or the dark hours in TZ, e.g. 18:00-6:00, 18-6 or 6pm-6am.",
     # Advanced and optional
     "ADMIN_ONLY": "on|off. On (default): only admins may DM the bot or get Sharesight data. Off: everyone may. /usage and /flushcache stay admin-only.",
     "DATA_DIR": "Directory for the bot's data (the database); Default: systemd's STATE_DIRECTORY, else the working directory.",
@@ -179,7 +179,6 @@ def _backfill(text: str) -> frozenset[str]:
     return frozenset() if names & {"off", "none", "false", "0"} else names
 
 
-DARK_AUTO = (21 * 60, 7 * 60)  # DARKMODE=auto: 9 pm to 7 am
 DAY_MINUTES = 24 * 60
 CLOCK_RE = re.compile(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?")
 
@@ -200,19 +199,16 @@ def _clock(text: str) -> int | None:
 
 
 def dark_hours(text: str) -> tuple[int, int] | None:
-    """DARKMODE as the dark minutes of the day [from, to): off (or unset) -> None, on -> all day, auto -> 9 pm to
-    7 am, or a range such as 18:00-6:00, 18-6 or 6pm-6am (it may run past midnight)."""
+    """DARKMODE as the dark minutes of the day [from, to): off (or unset) -> None, on -> all day, or a range such as 18:00-6:00, 18-6 or 6pm-6am (it may run past midnight)."""
     value = text.strip().lower()
     if value in ("", "off"):
         return None
     if value == "on":
         return 0, DAY_MINUTES
-    if value == "auto":
-        return DARK_AUTO
     start, dash, end = value.partition("-")
     first, last = _clock(start), _clock(end)
     if not dash or first is None or last is None or first == last:
-        raise ConfigError(f"DARKMODE must be off, on, auto or the dark hours such as 18:00-6:00, 18-6 or 6pm-6am, "
+        raise ConfigError(f"DARKMODE must be off, on or the dark hours such as 18:00-6:00, 18-6 or 6pm-6am, "
                           f"not {text.strip()!r}.")
     return first, last
 

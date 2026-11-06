@@ -18,7 +18,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `MODEL` | `grok-4.3` on xAI, `deepseek/deepseek-v4.1-flash-1017` on OpenRouter | Model ID. |
 | `REASONING` | the model's own | Reasoning effort: `low`, `medium` or `high`. |
 | `SEARCH` | `on` | `on` or `off`. Web search (and X search on xAI). |
-| `DARKMODE` | `off` | Chart theme: `off` draws light charts, `on` draws dark ones, `auto` draws dark ones from 9 pm to 7 am in `TZ`, and a range sets the dark hours yourself, in `TZ`: `18:00-6:00`, `18-6` or `6pm-6am` (it may run past midnight; it ends just before its last time). Before this setting existed, charts were always `auto`. |
+| `DARKMODE` | `off` | Chart theme: `off` draws light charts, `on` draws dark ones, and a range sets the dark hours, in `TZ`: `18:00-6:00`, `18-6` or `6pm-6am` (it may run past midnight; it ends just before its last time). Before this setting existed, charts were dark from 9 pm to 7 am (`21-7`). |
 
 ### Advanced and optional
 | Variable | Default | Meaning |
