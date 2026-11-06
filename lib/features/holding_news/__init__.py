@@ -27,7 +27,9 @@ from ...tickers import link_tickers
 from .text import (
     WINDOW_DEFAULT,
     as_bullets,
+    drop_notes,
     drop_repeats,
+    is_fund,
     is_nothing,
     known_symbols,
     news_codes,
@@ -66,11 +68,13 @@ async def holding_news_text(ctx: Ctx, usernames: list[str], holdings: dict[str, 
         now=ctx.now(), what=ctx.backend.search_what, already=already, hours=hours,
         holdings="\n".join(f"- {k}: {v}" for k, v in sorted(holdings.items())))
     answer = await ask(ctx, [{"type": "text", "text": prompt}], Route(), must_search=True,
-                       cache_key="holding-news", kind="holding-news")
+                       cache_key="holding-news", kind="holding-news",
+                       search_results=config.HOLDING_NEWS_SEARCH_RESULTS)
     raw = strip_disclaimer(answer.text)
     if is_nothing(raw):
         return None
-    news, dropped = drop_repeats(link_tickers(as_bullets(md_to_html(raw)), known=known_symbols(holdings)), digests)
+    bullets = drop_notes(as_bullets(md_to_html(raw)))
+    news, dropped = drop_repeats(link_tickers(bullets, known=known_symbols(holdings)), digests)
     for item in dropped:
         log.debug("Holding news: dropped a repeat of an article already sent: %s", item[:120])
     return news or None
@@ -113,12 +117,16 @@ async def _held(ctx: Ctx, server, username: str, portfolio_names: list[str]) -> 
         log.info("Holding news: @%s has unsubscribed from all of it", username)
         return None
     holdings = await current_holdings(server, portfolio_names)
-    return {k: v for k, v in holdings.items() if k.split(" ")[0].upper() not in muted}
+    funds = sorted(k for k, name in holdings.items() if is_fund(name))
+    if funds:
+        log.debug("Holding news: not searching %d ETFs and funds: %s", len(funds), ", ".join(funds))
+    return {k: v for k, v in holdings.items() if k.split(" ")[0].upper() not in muted and k not in funds}
 
 
 async def _check_together(ctx: Ctx, server, people: dict[str, list[str]], busy: list[str] | None) -> dict:
     """One search for everyone's holdings at once (a stock two people hold is searched once), then each person gets
-    the items about their own holdings. An item naming no holding goes to everyone rather than being lost."""
+    the items about their own holdings. An item naming no holding goes to everyone rather than being lost (the model's
+    notes about the search itself are dropped before that)."""
     held: dict[str, dict[str, str]] = {}
     try:
         for username, portfolio_names in people.items():

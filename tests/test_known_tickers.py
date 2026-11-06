@@ -3,7 +3,7 @@ import time
 
 import httpx
 
-from lib import config, quote_links, tickers
+from lib import config, holdings, quote_links, tickers
 from lib.context import Ctx
 from lib.features import known_tickers as kt
 
@@ -30,10 +30,14 @@ def test_the_ticker_column_is_read_and_share_classes_use_a_hyphen():
 class Sharesight(FakeMcp):
     async def call(self, tool, args):
         if tool == "list_portfolios":
-            return json.dumps({"portfolios": [{"name": "Bob", "id": 7}]})
-        rows = [["GM", "NYSE", "General Motors"], ["NXT", "ASX", "NextDC"], ["QBE", "ASX", "QBE Insurance"],
-                ["ZZZ", "MOON", "Unknown exchange"]]
-        return json.dumps({"report": {"holdings": {"columns": ["code", "market", "name"], "rows": rows}}})
+            return json.dumps({"portfolios": [{"name": "Bob", "id": 7, "consolidated": False},
+                                              {"name": "BobSMSF", "id": 8, "consolidated": False},
+                                              {"name": "All of Bob", "id": 9, "consolidated": True}]})
+        self.calls.append((tool, args))
+        rows = {7: [["GM", "NYSE", "General Motors"], ["NXT", "ASX", "NextDC"], ["ZZZ", "MOON", "Unknown exchange"]],
+                8: [["QBE", "ASX", "QBE Insurance"]], 9: [["BAD", "NYSE", "Read from the combined view"]]}
+        return json.dumps({"report": {"holdings": {"columns": ["code", "market", "name"],
+                                                   "rows": rows[args["portfolio_id"]]}}})
 
 
 def wikipedia(pages: dict[str, str], seen: list | None = None) -> httpx.AsyncClient:
@@ -56,7 +60,7 @@ def small_lists(monkeypatch):
 
 async def test_refresh_reads_the_api_with_a_contact_and_links_asx_codes_to_ax(env, store, monkeypatch, caplog):
     sp, ndx, asx = small_lists(monkeypatch)
-    st = config.load({**env, "PORTFOLIO_NAMES": "Bob"})
+    st = config.load(env)  # nothing to configure: the portfolios come from Sharesight
     ctx = Ctx(st, store, ScriptedBackend([]), registry(Sharesight("sharesight", gate="portfolio")), FakeBot())
     pages = {sp: page(["NVDA", "BRK.B", "QBE", "ALL", "JPM"]), ndx: page(["NVDA", "AMD"]),
              asx: page(["BHP", "A2M", "ALL", "QBE"], header="Code")}
@@ -67,6 +71,9 @@ async def test_refresh_reads_the_api_with_a_contact_and_links_asx_codes_to_ax(en
         assert seen[0].url.params["action"] == "parse" and "https://" in seen[0].headers["user-agent"]
         assert saved["indexes"]["ASX 200"] == ["BHP", "A2M", "ALL", "QBE"] and saved["exchanges"]["JPM"] == "NYSE"
         assert saved["held"] == {"GM": "GM", "NXT": "NXT.AX", "QBE": "QBE.AX"}  # MOON is no exchange we know
+        # every portfolio is read, but not the consolidated view (it repeats the others); all names route questions
+        assert saved["portfolios"] == ["Bob", "BobSMSF", "All of Bob"] and "BAD" not in saved["held"]
+        assert holdings.PORTFOLIO_NAMES == {"bob", "bobsmsf", "all of bob"}
         k = tickers.KNOWN
         assert k["BHP"] == "BHP.AX" and k["A2M"] == "A2M.AX" and k["NVDA"] == "NVDA" and k["BRK.B"] == "BRK-B"
         assert "ALL" not in k and k["QBE"] == "QBE.AX"  # on both exchanges: left out, unless a holding settles it
@@ -81,9 +88,12 @@ async def test_refresh_reads_the_api_with_a_contact_and_links_asx_codes_to_ax(en
         assert "HTTP 403: Please set a user-agent" in caplog.text  # why it was refused
         assert again["ts"] + config.KNOWN_TICKERS_REFRESH - time.time() <= config.KNOWN_TICKERS_RETRY + 5
         tickers.set_known({})
+        holdings.set_portfolio_names([])
         assert kt.load(ctx) == again and tickers.KNOWN["BHP"] == "BHP.AX"  # a restart has them from the kv table
+        assert "bobsmsf" in holdings.PORTFOLIO_NAMES
     finally:
         tickers.set_known(before)
+        holdings.set_portfolio_names([])
 
 
 def test_lists_saved_by_the_earlier_version_still_load():

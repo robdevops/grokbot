@@ -14,9 +14,9 @@ from html.parser import HTMLParser
 
 import httpx
 
-from .. import config, quote_links, tickers
+from .. import config, holdings, quote_links, tickers
 from ..context import Ctx
-from ..holdings import code_and_market, current_holdings
+from ..holdings import code_and_market, current_holdings, portfolios
 
 log = logging.getLogger("bot")
 KV_KEY = "known_tickers"
@@ -125,14 +125,15 @@ async def fetch_index(client: httpx.AsyncClient, name: str, title: str, suffix: 
     return found
 
 
-async def held_symbols(ctx: Ctx) -> tuple[dict[str, str], dict[str, str]] | None:
-    """The Sharesight holdings on exchanges we know: code -> Yahoo symbol ({"NXT": "NXT.AX", "GM": "GM"}) and, for US
-    ones, code -> exchange ({"GM": "NYSE"}); None if Sharesight isn't up or isn't set up."""
+async def held_symbols(ctx: Ctx) -> tuple[dict[str, str], dict[str, str], list[str]] | None:
+    """Every Sharesight portfolio's holdings on exchanges we know: code -> Yahoo symbol ({"NXT": "NXT.AX", "GM": "GM"}),
+    for US ones code -> exchange ({"GM": "NYSE"}), and the portfolios' names; None if Sharesight isn't up."""
     server = next((s for s in ctx.registry.up() if s.cfg.get("gate") == "portfolio"), None)
-    if server is None or not ctx.st.portfolio_names:
+    if server is None:
         return None
     try:
-        held = await current_holdings(server, sorted(ctx.st.portfolio_names))
+        names = [p["name"] for p in await portfolios(server) if p.get("name")]
+        held = await current_holdings(server, None)
     except Exception as e:  # the MCP server's own errors, bad JSON
         log.warning("Known tickers: couldn't read the holdings: %s", e)
         return None
@@ -144,7 +145,7 @@ async def held_symbols(ctx: Ctx) -> tuple[dict[str, str], dict[str, str]] | None
             exchanges[code] = market.upper()
         if symbol:
             symbols[code] = symbol
-    return symbols, exchanges
+    return symbols, exchanges, names
 
 
 def known(saved: dict) -> tuple[dict[str, str], set[str]]:
@@ -170,6 +171,7 @@ def apply(saved: dict) -> set[str]:
     """Make the saved lists the ones replies link; returns the ambiguous codes left out."""
     codes, ambiguous = known(saved)
     tickers.set_known(codes)
+    holdings.set_portfolio_names(saved.get("portfolios", []))
     exchanges = {c: x for c, x in saved.get("exchanges", {}).items() if x}
     quote_links.set_us_exchanges({**exchanges, **{c.replace("-", "."): x for c, x in exchanges.items() if "-" in c}})
     return ambiguous
@@ -201,15 +203,16 @@ async def refresh(ctx: Ctx, saved: dict, client: httpx.AsyncClient) -> dict:
     held = None if got is None else got[0]
     if got is not None:
         exchanges.update(got[1])
-    failed |= held is None and bool(ctx.st.portfolio_names) and any(
-        s.cfg.get("gate") == "portfolio" for s in ctx.registry.servers.values())
+    failed |= held is None and any(s.cfg.get("gate") == "portfolio" for s in ctx.registry.servers.values())
     ts = int(time.time()) - (config.KNOWN_TICKERS_REFRESH - config.KNOWN_TICKERS_RETRY if failed else 0)
     new = {"indexes": indexes, "held": saved.get("held", {}) if held is None else held, "exchanges": exchanges,
+           "portfolios": saved.get("portfolios", []) if got is None else got[2],
            "ts": ts}
     await asyncio.to_thread(ctx.store.kv_set, KV_KEY, json.dumps(new))
     ambiguous = apply(new)
-    log.info("Known tickers: %s, %d held, %d in all (%d on two exchanges left out), %d US with their exchange",
-             ", ".join(f"{len(v)} {k}" for k, v in indexes.items()) or "no index lists", len(new["held"]),
+    log.info("Known tickers: %s, %d held in %d portfolios, %d in all (%d on two exchanges left out), %d US with "
+             "their exchange", ", ".join(f"{len(v)} {k}" for k, v in indexes.items()) or "no index lists",
+             len(new["held"]), len(new["portfolios"]),
              len(tickers.KNOWN), len(ambiguous), len(exchanges))
     return new
 

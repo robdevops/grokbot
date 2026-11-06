@@ -130,6 +130,7 @@ The bar is high. Only material, price-moving events count: results or earnings, 
 
 If nothing qualifies, reply with exactly the word NOTHING, with no bullet or anything else. Otherwise reply with only the qualifying items as bullet points, one item per line, no intro and no blank lines between them. Start each line with "• ":
 • Name (TICKER): what happened, with one source link.
+Only news items: no notes about your search or its coverage.
 {already}
 It's now {now}."""
 

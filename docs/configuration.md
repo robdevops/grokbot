@@ -18,7 +18,7 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `MODEL` | `grok-4.3` on xAI, `deepseek/deepseek-v4.1-flash-1017` on OpenRouter | Model ID. |
 | `REASONING` | the model's own | Reasoning effort: `low`, `medium` or `high`. |
 | `SEARCH` | `on` | `on` or `off`. Web search (and X search on xAI). |
-| `DARKMODE` | `off` | Chart theme: `off` draws light charts, `on` draws dark ones, `auto` draws dark ones from 9 pm to 7 am in `TZ`. Before this setting existed, charts were always `auto`. |
+| `DARKMODE` | `off` | Chart theme: `off` draws light charts, `on` draws dark ones, and a range sets the dark hours, in `TZ`: `18:00-6:00`, `18-6` or `6pm-6am`. |
 
 ### Advanced and optional
 | Variable | Default | Meaning |
@@ -29,7 +29,6 @@ Set `TELEGRAM_BOT_TOKEN` and exactly one of the three LLM keys. With more than o
 | `HISTORY_MAX` | `10` | The most messages of chat history in the prompt. Once a chat is longer, the window holds half to all of that and its start only moves every half of it, so the prompt cache keeps working. |
 | `MAX_TOKENS` | `3000` | Reply cap in tokens, reasoning included. |
 | `MOVERS_BOTS` | empty (feature off) | Usernames of bots whose end-of-day big-movers lists get explained. |
-| `PORTFOLIO_NAMES` | the holding-news recipients' portfolio names | Comma list of Sharesight portfolio names; a message naming one is treated as a portfolio question (default: the recipients' portfolio names). |
 | `PERIOD_BACKFILL` | `all` | Comma list of Sharesight portfolio names (or `all`) whose returns per day, week, month, quarter and year are fetched into the local cache in the background (about 1,650 Sharesight calls per portfolio the first time, a few hours), so "best day since inception" answers instantly. List names to limit it, or `off` to disable. See [Caching Sharesight history](caching.md#caching-sharesight-history). |
 | `POST_TO_GROUPS_FROM_DM` | `off` | `on` or `off`. A group admin can have the bot post in that group from a DM. |
 | `SEARCH_MODEL` | `MODEL` with `:online` added | OpenRouter only: model that runs the searches (`:online` is what gives an OpenRouter model web search). Set but empty = no search model, so search is off. |

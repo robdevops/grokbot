@@ -82,6 +82,7 @@ async def _run_mcp(call: Call, registry: Registry) -> str:
             return f"Error: arguments for {tool} must be a JSON object."
         args.pop("_keep_sales", None)  # reserved for the bot's own tools
         args.pop("_bg", None)
+        args.pop("_raw", None)
         log.debug("MCP %s.%s %s", server.label, tool, brief_args(args))
         out = await server.call(tool, args)
         # A tiny result is usually an empty list or an error: show it, so "why did it say

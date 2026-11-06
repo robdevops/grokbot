@@ -1,10 +1,12 @@
 import asyncio
+import io
 import json
 from pathlib import Path
 from types import SimpleNamespace as N
 
 import pytest
 
+from lib.mcp import server
 from lib.mcp.results import diet, slim_result, squeeze_tables, table_records, tidy_sharesight
 from lib.mcp.schema import ToolDef, compact_description, compact_schema, looks_read_only
 from lib.mcp.server import MCPServer, Registry
@@ -251,6 +253,14 @@ async def test_bots_own_tools_are_not_truncated_but_the_models_are():
     assert "truncated" not in whole and len(whole) > 20
 
 
+async def test_a_result_the_bot_reads_itself_is_neither_slimmed_nor_cut():
+    s = MCPServer("yahoo", {}, timeout=5, max_output=20)
+    s.session = FakeSession()
+    raw = await s.call("chart", {"symbol": "NVDA", "_raw": True})
+    assert s.session.calls == [("chart", {"symbol": "NVDA"})]
+    assert json.loads(raw)["p"] == 1.23456789  # not rounded, and not truncated at 20 characters
+
+
 async def test_user_calls_describe_what_is_running_but_not_background_work():
     s = MCPServer("sharesight", {"max_concurrent": 2}, timeout=5, max_output=1000)
     gate = asyncio.Event()
@@ -395,3 +405,24 @@ async def test_a_chat_command_whose_tool_is_not_enabled_is_warned_about(caplog):
     assert "/a" not in caplog.text  # enabled: read-only
     assert "chat command /c calls delete_c, which is blocked or not read-only (list it in allowed_tools)" in caplog.text
     assert "chat command /x calls get_x, which matches no tool (did you mean 'get_" in caplog.text
+
+
+async def test_a_server_that_cant_be_reached_is_one_log_line_without_a_traceback(caplog):
+    s = MCPServer("yahoo", {"url": "http://127.0.0.1:1/mcp"}, timeout=5, max_output=100)
+    await s._run()  # nothing listens on port 1
+    [record] = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert not record.exc_info and "\n" not in record.getMessage()
+    assert record.getMessage().startswith("MCP server yahoo failed: ConnectError")
+
+
+def test_a_failure_is_described_in_one_line():
+    import httpx
+
+    request = httpx.Request("POST", "http://127.0.0.1:3000/mcp")
+    unauthorised = httpx.HTTPStatusError("Client error '401 Unauthorized'\nFor more information check: ...",
+                                         request=request, response=httpx.Response(401, request=request))
+    errlog = io.StringIO("node: something\n  went wrong\n")
+    said = server.describe_failure(BaseExceptionGroup("tasks", [unauthorised]), errlog)
+    assert said == "HTTP 401 Unauthorized from http://127.0.0.1:3000/mcp; stderr: node: something went wrong"
+    assert all(isinstance(x, server.EXPECTED_FAILURES) for x in (unauthorised, httpx.InvalidURL("Invalid port"),
+                                                                 FileNotFoundError("npx")))

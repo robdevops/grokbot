@@ -90,13 +90,7 @@ def test_admin_only_is_on_unless_turned_off(env):
 
 def test_no_names_in_code_defaults(env):
     s = config.load(env)
-    assert s.holding_news_recipients == {} and s.movers_bots == frozenset() and s.portfolio_names == frozenset()
-
-
-def test_portfolio_names_default_to_the_recipients_portfolios_and_can_be_overridden(env):
-    base = {**env, "SHARESIGHT_HOLDING_NEWS_RECIPIENTS": "Bob:me, BobSMSF:me"}
-    assert config.load(base).portfolio_names == {"bob", "bobsmsf"}
-    assert config.load({**base, "PORTFOLIO_NAMES": "Family Trust, Bob"}).portfolio_names == {"family trust", "bob"}
+    assert s.holding_news_recipients == {} and s.movers_bots == frozenset()
 
 
 def test_movers_bots_normalised(env):
@@ -114,12 +108,24 @@ def test_a_zai_key_alone_is_no_longer_a_provider():
         config.load({"TELEGRAM_BOT_TOKEN": "1:x", "ZAI_API_KEY": "c"})
 
 
-def test_darkmode_defaults_to_off_and_takes_on_and_auto_in_any_case():
+def test_darkmode_defaults_to_off_and_takes_on_or_the_dark_hours_in_any_case():
     base = {"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "k"}
-    assert config.load(base).darkmode == "off"
-    assert [config.load({**base, "DARKMODE": v}).darkmode for v in ("on", "AUTO", " Off ", "")] == ["on", "auto", "off", "off"]
-    with pytest.raises(config.ConfigError, match="DARKMODE must be off, on or auto"):
-        config.load({**base, "DARKMODE": "night"})
+    assert config.load(base).darkmode is None
+    assert [config.load({**base, "DARKMODE": v}).darkmode for v in ("ON", " Off ", "")] == [(0, 1440), None, None]
+
+
+@pytest.mark.parametrize("text, hours", [
+    ("18:00-6:00", (18 * 60, 6 * 60)), ("18-6", (18 * 60, 6 * 60)), ("6pm-6am", (18 * 60, 6 * 60)),
+    ("6PM - 6AM", (18 * 60, 6 * 60)), ("20:30-23:15", (20 * 60 + 30, 23 * 60 + 15)),
+    ("12am-12pm", (0, 12 * 60)), ("9:30pm-7", (21 * 60 + 30, 7 * 60))])
+def test_darkmode_hours_in_24_hour_or_am_pm_form(text, hours):
+    assert config.dark_hours(text) == hours
+
+
+@pytest.mark.parametrize("text", ["auto", "night", "18", "18-", "25-6", "18:60-6", "13pm-6am", "0am-6", "6-6", "6pm-18"])
+def test_darkmode_that_isnt_a_range_is_refused(text):
+    with pytest.raises(config.ConfigError, match="DARKMODE must be off, on or the dark hours"):
+        config.load({"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "k", "DARKMODE": text})
 
 
 def test_the_search_model_defaults_to_the_model_with_online_added(env):

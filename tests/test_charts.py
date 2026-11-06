@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import math
+import re
 from dataclasses import replace
 from datetime import date, datetime
 from types import SimpleNamespace as N
@@ -30,11 +31,11 @@ def fast_png(monkeypatch):
     monkeypatch.setattr(render, "png", lambda chart: b"\x89PNG\r\n\x1a\nfake")
 
 
-def history_json(closes, start=1, truncated=False):
-    rows = [{"Date": f"2026-01-{start + i:02d}T00:00:00-05:00", "Open": c, "Close": c} for i, c in enumerate(closes)]
-    body = {"ticker": "NVDA", "period": "1y", "interval": "1wk", "totalRecords": len(rows) + (5 if truncated else 0),
-            "data": rows, "returnedRecords": len(rows), "truncated": truncated}
-    return json.dumps(body)
+def history_json(closes, start=1):
+    """A yahoo-finance2 chart result: one quote a day at midnight New York time."""
+    quotes = [{"date": f"2026-01-{start + i:02d}T05:00:00.000Z", "open": c, "close": c} for i, c in enumerate(closes)]
+    return json.dumps({"result": {"meta": {"symbol": "NVDA", "exchangeTimezoneName": "America/New_York"},
+                                  "quotes": quotes}})
 
 
 def make(env, store, *servers):
@@ -149,18 +150,18 @@ def test_the_dark_theme_has_a_dark_background_and_light_text():
     assert title.text == "t" and title.color == render.THEMES["dark"].ink and title.bold
 
 
-def test_charts_are_dark_from_9pm_to_7am():
-    assert [charts.is_night(h) for h in (6, 7, 12, 20, 21, 23, 0)] == [True, False, False, False, True, True, True]
+def test_dark_hours_may_run_past_midnight_and_end_before_their_last_minute():
+    night = config.dark_hours("21-7")
+    assert [charts.is_dark(night, h * 60) for h in (6, 7, 12, 20, 21, 23, 0)] == [True, False, False, False, True,
+                                                                                    True, True]
+    evening = config.dark_hours("18:30-22")  # within one day
+    assert [charts.is_dark(evening, m) for m in (18 * 60 + 29, 18 * 60 + 30, 21 * 60 + 59, 22 * 60)] == [
+        False, True, True, False]
+    assert not charts.is_dark(None, 0) and all(charts.is_dark(config.dark_hours("on"), m) for m in (0, 720, 1439))
 
 
-def test_darkmode_off_is_never_dark_on_always_and_auto_only_at_night():
-    hours = (22, 13)
-    assert [charts.is_dark("off", h) for h in hours] == [False, False]
-    assert [charts.is_dark("on", h) for h in hours] == [True, True]
-    assert [charts.is_dark("auto", h) for h in hours] == [True, False]
-
-
-@pytest.mark.parametrize("mode, dark_at_22, dark_at_13", [("off", False, False), ("on", True, True), ("auto", True, False)])
+@pytest.mark.parametrize("mode, dark_at_22, dark_at_13", [("off", False, False), ("on", True, True), ("21-7", True, False),
+                                                          ("6pm-6am", True, False), ("12-14", False, True)])
 async def test_a_chart_follows_darkmode(env, store, monkeypatch, mode, dark_at_22, dark_at_13):
     from zoneinfo import ZoneInfo
     args = {"title": "t", "series": [{"name": "a", "x": [1, 2], "y": [1, 2]}]}
@@ -171,7 +172,7 @@ async def test_a_chart_follows_darkmode(env, store, monkeypatch, mode, dark_at_2
 
 
 async def test_totals_are_the_models_own_or_the_change_over_the_chart(env, store):
-    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
+    yahoo = FakeMcp("yahoo", tools=("chart",), reply=history_json([100, 120]))
     chart, _ = await charts.build(make(env, store, yahoo), {"title": "t", "series": [
         {"name": "Price", "ticker": "NVDA"},
         {"name": "Change", "ticker": "NVDA", "percent_change": True},
@@ -225,24 +226,41 @@ def test_default_interval_fits_yahoos_row_limit():
 
 
 async def test_a_ticker_series_is_fetched_as_json_and_summarised(env, store):
-    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 110, 120]))
+    yahoo = FakeMcp("yahoo", tools=("chart",), reply=history_json([100, 110, 120]))
     ctx = make(env, store, yahoo)
     chart, lines = await charts.build(ctx, {"title": "NVDA", "series": [{"name": "NVDA", "ticker": "NVDA"}]})
-    assert yahoo.calls == [("get_historical_prices",
-                            {"ticker": "NVDA", "period": "1y", "interval": "1wk", "response_format": "json"})]
+    [(tool, args)] = yahoo.calls
+    assert tool == "chart" and args["symbol"] == "NVDA" and args["_raw"] is True
+    assert args["queryOptions"]["interval"] == "1wk" and re.fullmatch(r"\d{4}-\d{2}-\d{2}", args["queryOptions"]["period1"])
     assert chart.series[0].y == [100, 110, 120] and chart.series[0].x[0] == datetime(2026, 1, 1)
     assert lines == ["NVDA (left axis, 3 points): 2026-01-01 100 -> 2026-01-03 120 (+20.0%), low 100, high 120"]
 
 
+@pytest.mark.parametrize("period, start", [("1y", "2025-11-05"), ("ytd", "2026-01-01"), ("max", "1970-01-01"),
+                                           ("1d", "2026-11-02")])
+def test_each_period_starts_where_yahoos_chart_wants_it(period, start):
+    assert charts.start_of(period, date(2026, 11, 6)) == start
+
+
+def test_a_day_chart_keeps_only_the_last_trading_day_in_the_exchanges_own_time():
+    # An ASX session runs 10:00-16:00 Sydney time, which is 23:00-05:00 UTC: two UTC dates, one trading day.
+    quotes = [{"date": d, "close": c} for d, c in (("2026-11-04T23:00:00.000Z", 1), ("2026-11-05T05:00:00.000Z", 2),
+                                                   ("2026-11-05T23:00:00.000Z", 3), ("2026-11-06T05:00:00.000Z", 4),
+                                                   ("2026-11-06T05:05:00.000Z", None))]
+    data = {"result": {"meta": {"exchangeTimezoneName": "Australia/Sydney"}, "quotes": quotes}}
+    assert charts.closes(data, "1d") == (["2026-11-06T10:00:00+11:00", "2026-11-06T16:00:00+11:00"], [3.0, 4.0])
+    assert len(charts.closes(data, "5d")[1]) == 4 and charts.closes(data, "1mo")[1] == [1.0, 2.0, 3.0, 4.0]
+
+
 async def test_percent_change_rebases_and_puts_percent_on_the_ticks(env, store):
-    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([50, 75], truncated=True))
+    yahoo = FakeMcp("yahoo", tools=("chart",), reply=history_json([50, 75]))
     ctx = make(env, store, yahoo)
     chart, lines = await charts.build(ctx, {"title": "t", "series": [
         {"name": "NVDA", "ticker": "NVDA", "percent_change": True},
         {"name": "Mine", "x": ["2026-01-01", "2026-01-02"], "y": [10, None], "axis": "right"}]})
     assert chart.series[0].y == [0.0, 50.0] and chart.left_percent and not chart.right_percent
     assert math.isnan(chart.series[1].y[1])
-    assert lines[0].endswith("high 50% (newest 2 of 7)") and lines[1].startswith("Mine (right axis, 1 points)")
+    assert lines[0].endswith("high 50%") and lines[1].startswith("Mine (right axis, 1 points)")
 
 
 @pytest.mark.parametrize("args, error", [
@@ -263,9 +281,9 @@ async def test_missing_price_server_or_a_tool_error_is_reported(env, store):
     _, make_chart = charts.tool(make(env, store), charts.Charts())
     args = {"title": "t", "series": [{"name": "a", "ticker": "ZZZZ"}]}
     assert "price history isn't available" in await make_chart(args)
-    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply="No historical data available for ZZZZ")
+    yahoo = FakeMcp("yahoo", tools=("chart",), reply="Tool error: Error: No data found, symbol may be delisted")
     _, make_chart = charts.tool(make(env, store, yahoo), charts.Charts())
-    assert await make_chart(args) == "Error: ZZZZ: No historical data available for ZZZZ"
+    assert await make_chart(args) == "Error: ZZZZ: Tool error: Error: No data found, symbol may be delisted"
 
 
 async def test_at_most_five_charts_per_reply(env, store):
@@ -282,7 +300,7 @@ CHART_CALL = [("1", "make_chart", json.dumps({"title": "NVDA, 1 year", "series":
 
 
 async def test_a_chart_request_gets_one_reply_the_photo_with_the_answer_as_caption(env, store):
-    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
+    yahoo = FakeMcp("yahoo", tools=("chart",), reply=history_json([100, 120]))
     ctx, backend, h = make_ctx(env, store, [step(calls=CHART_CALL, finish="tool_calls"), step("Up <b>20%</b>.")],
                                servers=(yahoo,))
     m = user_msg(ctx.bot, "@stockbot chart NVDA over the last year")
@@ -375,7 +393,7 @@ def shaded(markup):
 
 
 async def chart_reply(env, store, reply, args):
-    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=reply)
+    yahoo = FakeMcp("yahoo", tools=("chart",), reply=reply)
     ctx, _, h = make_ctx(env, store, [step(calls=[("1", "make_chart", json.dumps(args))], finish="tool_calls"),
                                       step("Up 20%.")], servers=(yahoo,))
     m = user_msg(ctx.bot, "@stockbot chart NVDA")
@@ -408,15 +426,14 @@ async def test_a_period_tap_redraws_without_the_model_and_its_own_period_restore
     yahoo.reply = history_json([50, 75])
     q = callback(sent, "ch:1mo")
     await buttons.on_button(ctx, N(callback_query=q), None)
-    assert yahoo.calls[-1] == ("get_historical_prices",
-                               {"ticker": "NVDA", "period": "1mo", "interval": "1d", "response_format": "json"})
+    assert yahoo.calls[-1][0] == "chart" and yahoo.calls[-1][1]["queryOptions"]["interval"] == "1d"
     [edit] = q.edits
     assert edit["media"].caption == "NVDA, 1 month" and edit["media"].media.input_file_content.startswith(b"\x89PNG")
     assert shaded(edit["reply_markup"]) == ["ch:1mo"] and store.chart_get(-100, 1001)[2] == "1mo"
     assert len(ctx.backend.seen) == 2  # the model's two steps for the first reply, none since
     q = callback(sent, "ch:reload")
     await buttons.on_button(ctx, N(callback_query=q), None)
-    assert yahoo.calls[-1][1]["period"] == "1mo" and q.edits[0]["media"].caption == "NVDA, 1 month"
+    assert yahoo.calls[-1] == yahoo.calls[-2] and q.edits[0]["media"].caption == "NVDA, 1 month"
     q = callback(sent, "ch:1y")
     await buttons.on_button(ctx, N(callback_query=q), None)
     assert q.edits[0]["media"].caption == "Up 20%." and q.answers == [None]
@@ -490,7 +507,7 @@ async def test_a_preload_chat_the_bot_cannot_post_in_stops_after_one_warning(env
     from telegram.error import Forbidden
     ctx, _, h = make_ctx({**env, **PRELOAD}, store, [step(calls=[("1", "make_chart", json.dumps(TICKER_CHART))],
                                                           finish="tool_calls"), step("Up.")],
-                         servers=(FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([1, 2])),))
+                         servers=(FakeMcp("yahoo", tools=("chart",), reply=history_json([1, 2])),))
     ctx.bot.fail_send[-900] = Forbidden("bot was blocked")
     await run(h, user_msg(ctx.bot, "@stockbot chart NVDA"))
     await settle()
@@ -531,7 +548,7 @@ def test_date_ranges_show_the_year_once():
 
 
 async def test_the_subtitle_says_what_the_chart_shows_and_when(env, store):
-    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
+    yahoo = FakeMcp("yahoo", tools=("chart",), reply=history_json([100, 120]))
     ctx = make(env, store, yahoo)
     sub = lambda *series, **kw: charts.build(ctx, {"title": "t", "series": list(series), **kw})  # noqa: E731
     chart, _ = await sub({"name": "A", "ticker": "A", "period": "1mo", "percent_change": True},
@@ -554,7 +571,7 @@ def test_the_subtitle_sits_under_the_title_and_the_date_is_not_repeated_bottom_r
 
 
 async def test_the_source_is_the_models_else_yahoo_for_tickers_else_none(env, store):
-    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
+    yahoo = FakeMcp("yahoo", tools=("chart",), reply=history_json([100, 120]))
     ctx = make(env, store, yahoo)
     build = lambda *series, **kw: charts.build(ctx, {"title": "t", "series": list(series), **kw})  # noqa: E731
     mine = {"name": "Mine", "x": ["a", "b"], "y": [1, 2]}
@@ -582,7 +599,7 @@ def test_the_source_sits_bottom_left_in_quiet_type_under_the_x_labels(dark):
 
 
 async def test_a_chart_with_no_source_asks_the_model_for_one(env, store):
-    ctx = make(env, store, FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120])))
+    ctx = make(env, store, FakeMcp("yahoo", tools=("chart",), reply=history_json([100, 120])))
     _, make_chart = charts.tool(ctx, charts.Charts())
     out = await make_chart({"title": "t", "series": [{"name": "Mine", "x": ["a", "b"], "y": [1, 2]}]})
     assert "give `source`" in out
@@ -599,7 +616,7 @@ def test_the_line_at_zero_is_as_light_as_the_other_rules():
 
 
 async def test_a_total_that_is_not_a_figure_is_dropped_and_computed_ones_win(env, store):
-    yahoo = FakeMcp("yahoo", tools=("get_historical_prices",), reply=history_json([100, 120]))
+    yahoo = FakeMcp("yahoo", tools=("chart",), reply=history_json([100, 120]))
     chart, _ = await charts.build(make(env, store, yahoo), {"title": "t", "series": [
         {"name": "NVDA", "ticker": "NVDA", "total": "NVDA"},  # the model repeated the name
         {"name": "Pct", "ticker": "NVDA", "percent_change": True, "total": "+99%"},

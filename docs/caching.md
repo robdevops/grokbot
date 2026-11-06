@@ -35,8 +35,9 @@ Each answer's log line shows the cached percentage.
   followed by stocks, shares, positions, account, cash, balance, returns, gains, performance, dividends,
   winners, losers, P&L, investments, funds, ETFs, trades or watchlist ("my biggest winner" counts);
   weaker words (performance, gains, positions, winners, losers, P&L) when no ticker is named; and
-  any name in `PORTFOLIO_NAMES` (default: the portfolio names in `SHARESIGHT_HOLDING_NEWS_RECIPIENTS`),
-  matched as a whole word, so listing a first name makes every mention of it a portfolio question.
+  the name of any Sharesight portfolio (read from Sharesight's `list_portfolios` once a day and kept in the
+  database, nothing to configure), matched as a whole word, so a portfolio named after a person makes every
+  mention of that name a portfolio question.
   If a message got fewer tools than exist and the model needs more, it replies `NEEDS_TOOLS` and the
   bot asks again with everything on (the marker is never shown to anyone).
 - **Smaller tool definitions:** descriptions cut to 220 characters, parameter descriptions to their

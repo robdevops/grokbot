@@ -15,9 +15,11 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.shared.exceptions import McpError
 
 from .results import slim_result
 from .schema import ToolDef, compact_description, compact_schema, expand_env, looks_read_only
@@ -122,7 +124,10 @@ class MCPServer:
                         warmer.cancel()
         except Exception as e:
             self.error = describe_failure(e, errlog)
-            log.error("MCP server %s failed: %s", self.label, self.error, exc_info=True)
+            # A wrong URL, a refused or unauthorised connection, a missing command: one line says it all; anything
+            # else gets its traceback too.
+            expected = all(isinstance(x, EXPECTED_FAILURES) for x in _leaf_errors(e))
+            log.error("MCP server %s failed: %s", self.label, self.error, exc_info=not expected)
             if self.on_down and not self._stop.is_set():
                 await self.on_down(self)
         finally:
@@ -264,7 +269,8 @@ class MCPServer:
         holdings_only = bool(self.cfg.get("current_holdings_only"))
         keep_sales = args.get("_keep_sales")  # set by the bot's own tools (history), never by the model
         background = bool(args.get("_bg"))  # the period backfill, which must not hold up a user's request
-        args = {k: v for k, v in args.items() if k not in ("_keep_sales", "_bg")}
+        raw = bool(args.get("_raw"))  # the bot reads the result itself (a chart's prices): no slimming, no cap
+        args = {k: v for k, v in args.items() if k not in ("_keep_sales", "_bg", "_raw")}
         if holdings_only and tool == "get_performance_report":
             args = {**args, "include_sales": bool(keep_sales)}  # Sharesight's own switch for sold holdings
         if keep_sales:
@@ -282,9 +288,9 @@ class MCPServer:
         out = "\n".join(parts) or "(empty result)"
         if result.isError:
             out = "Tool error: " + out
-        else:
+        elif not raw:
             out = slim_result(out, self.cfg.get("slim", self.label), drop_closed=holdings_only)
-        if len(out) > self.max_output and not keep_sales:  # the cap protects the model's context; the bot's own tools aren't sent to it
+        if len(out) > self.max_output and not (keep_sales or raw):  # the cap protects the model's context; the bot's own tools aren't sent to it
             log.warning("MCP %s.%s result truncated (%d chars)", self.label, tool, len(out))
             out = out[:self.max_output] + f"\n...[truncated; {len(out)} chars total]"
         return out
@@ -358,14 +364,27 @@ def _leaf_errors(e: BaseException) -> list[BaseException]:
     return [e]
 
 
+# Failures to reach or start a server, as opposed to bugs: logged as one line, without a traceback.
+EXPECTED_FAILURES = (httpx.HTTPError, httpx.InvalidURL, OSError, TimeoutError, McpError)
+
+
+def _one_line(x: BaseException) -> str:
+    """An error as one line: httpx's status errors carry a second "For more information" line, which goes."""
+    if isinstance(x, httpx.HTTPStatusError):
+        return f"HTTP {x.response.status_code} {x.response.reason_phrase} from {x.request.url}"
+    text = str(x).split("\n")[0].strip()
+    return f"{type(x).__name__}: {text}" if text else type(x).__name__
+
+
 def describe_failure(e: BaseException, errlog) -> str:
-    parts = [f"{type(x).__name__}: {x}" for x in _leaf_errors(e)]
+    """The failure in one line: each real error, then the end of what a local server wrote to stderr."""
+    parts = [_one_line(x) for x in _leaf_errors(e)]
     try:
         errlog.flush()
         errlog.seek(0)
-        tail = errlog.read()[-800:].strip()
+        tail = " ".join(errlog.read()[-800:].split())
         if tail:
-            parts.append(tail)
+            parts.append(f"stderr: {tail}")
     except Exception:
         pass
-    return "\n".join(parts)[:1500]
+    return "; ".join(parts)[:1500]

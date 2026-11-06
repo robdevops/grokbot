@@ -10,7 +10,8 @@ import logging
 import math
 import re
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ...context import Ctx
 from ...mcp.schema import ToolDef
@@ -21,14 +22,17 @@ log = logging.getLogger("bot")
 
 CHART_WORDS = re.compile(r"\b(charts?|charting|graphs?|plot|plots|plotting|pies?|donuts?|visuali[sz]e|breakdowns?|break down|segments?)\b", re.I)
 PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max")
-# Yahoo's server returns at most ~90 rows in one call, so each period gets an interval that fits.
+# Each period gets an interval that gives a chart about 60-90 points.
 DEFAULT_INTERVAL = {"1d": "5m", "5d": "30m", "1mo": "1d", "3mo": "1d", "6mo": "1wk", "1y": "1wk",
                     "2y": "1mo", "5y": "1mo", "10y": "3mo", "max": "3mo"}
 MAX_CHARTS, MAX_SERIES, MAX_POINTS = 5, 8, 2000
-NIGHT_FROM, NIGHT_TO = 21, 7  # the dark theme from 9 pm to 7 am (TZ), when the chart is drawn
 TOTAL_MAX = 24  # characters of a legend total
 CAPTION_HINT = 900  # Telegram captions hold 1024 characters; a longer reply continues in a text message
-HISTORY_TOOL = "get_historical_prices"
+HISTORY_TOOL = "chart"  # yahoo-finance2's MCP server, found by name on whichever server has it
+# How far back each period starts. 1d and 5d look back further and keep the last 1 or 5 trading days, so a weekend
+# or holiday still has a day to show.
+LOOKBACK_DAYS = {"1d": 4, "5d": 9, "1mo": 31, "3mo": 92, "6mo": 183, "1y": 366, "2y": 731, "5y": 1827, "10y": 3653}
+TRADING_DAYS = {"1d": 1, "5d": 5}
 
 TOOL = ToolDef(
     "make_chart",
@@ -68,13 +72,13 @@ def now(tz) -> datetime:
     return datetime.now(tz)
 
 
-def is_night(hour: int) -> bool:
-    return hour >= NIGHT_FROM or hour < NIGHT_TO
-
-
-def is_dark(mode: str, hour: int) -> bool:
-    """The dark theme? DARKMODE: "on" always, "auto" at night (9 pm to 7 am), "off" never."""
-    return mode == "on" or (mode == "auto" and is_night(hour))
+def is_dark(hours: tuple[int, int] | None, minute: int) -> bool:
+    """The dark theme at this minute of the day? `hours` is DARKMODE's [from, to), which may run past midnight; None
+    is never."""
+    if hours is None:
+        return False
+    start, end = hours
+    return start <= minute < end if start < end else minute >= start or minute < end
 
 
 def date_range(first: datetime, last: datetime) -> str:
@@ -290,25 +294,54 @@ def percent_change(y: list[float]) -> list[float]:
     return [(v / base - 1) * 100 for v in y]
 
 
-async def price_history(ctx: Ctx, ticker: str, period: str, interval: str) -> tuple[list[str], list[float], str]:
-    """Closing prices of a Yahoo symbol from the MCP server that has get_historical_prices; a note if cut short."""
+def start_of(period: str, today: date) -> str:
+    """The first day of a period, as Yahoo's chart wants it (period1)."""
+    if period == "ytd":
+        return date(today.year, 1, 1).isoformat()
+    if period == "max":
+        return "1970-01-01"
+    return (today - timedelta(days=LOOKBACK_DAYS[period])).isoformat()
+
+
+def _zone(name) -> ZoneInfo:
+    try:
+        return ZoneInfo(str(name or "UTC"))
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo("UTC")
+
+
+def closes(data: dict, period: str) -> tuple[list[str], list[float]]:
+    """Dates (in the exchange's time zone) and closing prices from a chart result; 1d and 5d keep only their last
+    trading days."""
+    result = data.get("result", data)
+    tz = _zone((result.get("meta") or {}).get("exchangeTimezoneName"))
+    rows = [(datetime.fromisoformat(q["date"]).astimezone(tz), float(q["close"])) for q in result.get("quotes") or []
+            if isinstance(q, dict) and isinstance(q.get("date"), str) and isinstance(q.get("close"), (int, float))]
+    keep = TRADING_DAYS.get(period)
+    if keep:
+        days = sorted({when.date() for when, _ in rows})[-keep:]
+        rows = [(when, c) for when, c in rows if when.date() in days]
+    return [when.isoformat() for when, _ in rows], [c for _, c in rows]
+
+
+async def price_history(ctx: Ctx, ticker: str, period: str, interval: str,
+                        today: date) -> tuple[list[str], list[float]]:
+    """Dates and closing prices of a Yahoo symbol from the MCP server that has the chart tool."""
     server = next((s for s in ctx.registry.up() if HISTORY_TOOL in s.fn_names.values()), None)
     if server is None:
         raise ChartError("price history isn't available right now; pass x and y values instead")
     try:
-        out = await server.call(HISTORY_TOOL, {"ticker": ticker, "period": period, "interval": interval,
-                                               "response_format": "json"})
+        out = await server.call(HISTORY_TOOL, {"symbol": ticker, "queryOptions": {
+            "period1": start_of(period, today), "interval": interval}, "_raw": True})
     except TimeoutError:
         raise ChartError(f"{ticker}: the price history timed out") from None
     try:
-        data = json.loads(out)
-        rows = [r for r in data["data"] if isinstance(r, dict) and r.get("Close") is not None]
-    except (ValueError, KeyError, TypeError):
+        x, y = closes(json.loads(out), period)
+    except (ValueError, KeyError, TypeError, AttributeError):
         raise ChartError(f"{ticker}: {' '.join(out.split())[:200]}") from None
-    if not rows:
+    if not y:
         raise ChartError(f"{ticker}: no price history for period {period}, interval {interval}")
-    note = f" (newest {data.get('returnedRecords')} of {data.get('totalRecords')})" if data.get("truncated") else ""
-    return [r.get("Date") or r.get("Datetime") or "" for r in rows], [r["Close"] for r in rows], note
+    return x, y
 
 
 def check_shape(title: str, specs) -> None:
@@ -332,7 +365,7 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
                          "make one chart for each breakdown")
     moment = now(ctx.st.tz)
     today = moment.date()
-    fetches, series, notes = [], [], [""] * len(specs)
+    fetches, series = [], []
     for i, spec in enumerate(specs):
         if not isinstance(spec, dict) or not str(spec.get("name") or "").strip():
             raise ChartError(f"series {i + 1} needs a name")
@@ -344,7 +377,8 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
             period = spec.get("period") or "1y"
             if period not in PERIODS:
                 raise ChartError(f"{spec['name']}: period is one of {', '.join(PERIODS)}")
-            fetches.append((i, price_history(ctx, str(spec["ticker"]).strip(), period, default_interval(period, today))))
+            fetches.append((i, price_history(ctx, str(spec["ticker"]).strip(), period, default_interval(period, today),
+                                                today)))
         else:
             x, y = spec.get("x"), spec.get("y")
             if not isinstance(x, list) or not isinstance(y, list) or not x or len(x) != len(y):
@@ -354,7 +388,7 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
             series[i].x, series[i].y = list(x), as_y(y)
     pie = any(s.kind == "pie" for s in series)
     for (i, _), got in zip(fetches, await asyncio.gather(*(f for _, f in fetches)), strict=True):
-        series[i].x, series[i].y, notes[i] = got[0], as_y(got[1]), got[2]
+        series[i].x, series[i].y = got[0], as_y(got[1])
     if pie:
         series[0].x = [str(v) for v in series[0].x]  # names, even when they look like years
         if not render.pie_slices(series[0]):
@@ -373,14 +407,14 @@ async def build(ctx: Ctx, args: dict) -> tuple[Chart, list[str]]:
         series[0].total = pie_total(series[0], title)
     chart = Chart(title, series, str(args.get("left_label") or ""), str(args.get("right_label") or ""),
                   bool(args.get("invert_left")), bool(args.get("invert_right")), labels,
-                  dark=is_dark(ctx.st.darkmode, moment.hour))
+                  dark=is_dark(ctx.st.darkmode, moment.hour * 60 + moment.minute))
     for side in ("left", "right"):  # an axis of nothing but % changes labels its ticks with %
         on_side = [spec for s, spec in zip(series, specs, strict=True) if s.axis == side]
         setattr(chart, f"{side}_percent", bool(on_side) and all(spec.get("percent_change") for spec in on_side))
     chart.source = source_for(args, specs)
     chart.subtitle = "Ring shows share of total" if pie else subtitle_for(
         specs, series, chart.left_percent and not any(s.axis == "right" for s in series))
-    return chart, [pie_summary(s) if pie else summary(s, specs[i].get("percent_change"), notes[i])
+    return chart, [pie_summary(s) if pie else summary(s, specs[i].get("percent_change"))
                    for i, s in enumerate(series)]
 
 
@@ -420,7 +454,7 @@ def pie_summary(s: Series) -> str:
         f"{name} {render.share(y, whole)}" for name, y in slices)
 
 
-def summary(s: Series, pct: bool, note: str) -> str:
+def summary(s: Series, pct: bool) -> str:
     """First and last point, change, low and high: the model hasn't seen fetched prices."""
     points = [(x, y) for x, y in zip(s.x, s.y, strict=True) if not math.isnan(y)]
     if not points:
@@ -430,7 +464,7 @@ def summary(s: Series, pct: bool, note: str) -> str:
     change = "" if pct or y0 == 0 else f" ({(y1 / y0 - 1) * 100:+.1f}%)"
     low, high = min(y for _, y in points), max(y for _, y in points)
     return (f"{s.name} ({s.axis} axis, {len(points)} points): {_x(x0)} {_fmt(y0)}{unit} -> {_x(x1)} {_fmt(y1)}{unit}"
-            f"{change}, low {_fmt(low)}{unit}, high {_fmt(high)}{unit}{note}")
+            f"{change}, low {_fmt(low)}{unit}, high {_fmt(high)}{unit}")
 
 
 class Charts:

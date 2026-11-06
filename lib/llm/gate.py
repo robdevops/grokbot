@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from .. import holdings
 from ..config import Settings
 from ..mcp.server import MCPServer, Registry
 from ..tickers import COMBINED_RE, is_ticker
@@ -74,7 +75,7 @@ def _names_re(names: frozenset[str]) -> re.Pattern | None:
 def is_portfolio_question(text: str, st: Settings) -> bool:
     if PORTFOLIO_STRONG.search(text) or PORTFOLIO_MY.search(text):
         return True
-    names = _names_re(st.portfolio_names)
+    names = _names_re(frozenset(holdings.PORTFOLIO_NAMES))
     if names and names.search(text):
         return True
     return bool(PORTFOLIO_WEAK.search(text)) and not _has_ticker(text)
