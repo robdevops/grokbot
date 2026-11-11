@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html
 import re
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from itertools import accumulate
 
 from .config import MAX_TG_MESSAGE
@@ -26,7 +26,8 @@ HTML_TAG_RE = re.compile(r"<(/?)([a-z][a-z0-9-]*)\b[^>]*>", re.I)
 # Telegram's limits, in characters of parsed text (`visible_len`)
 TG_TEXT_LIMIT = 4096
 TG_CAPTION_LIMIT = 1024
-ENTITY_RE = re.compile(r"&(?:#\d+|#x[0-9a-f]+|[a-z]+);", re.I)
+# The entities Telegram decodes; any other "&name;" it shows as typed (and counts every character of)
+ENTITY_RE = re.compile(r"&(?:lt|gt|amp|quot|#\d+|#x[0-9a-f]+);", re.I)
 
 # Telegram's own tags, plus one half-written tag at the end of the text. A bare "<" in prose
 # ("<5% from ATH") is not a tag and must survive.
@@ -106,16 +107,17 @@ def split_html(text: str, size: int = MAX_TG_MESSAGE) -> list[str]:
         upto = _visible_upto(text)
         if upto[-1] <= size:
             break
-        room = max(bisect_right(upto, size) - 1, 1)  # the longest prefix that fits
+        fits = bisect_right(upto, size) - 1  # the longest prefix that fits...
+        room = max(bisect_left(upto, upto[fits]), 1)  # ...without the tags after it: they open the next message
         cut = text.rfind("\n", 0, room)
         if cut <= 0:
             cut = room
+        amp = text.rfind("&", max(0, cut - 10), cut)
+        if amp != -1 and (m := ENTITY_RE.match(text, amp)) and m.end() > cut:
+            cut = amp  # inside an entity (a bare "&", as in a URL's query, is not one)
         lt = text.rfind("<", 0, cut)
         if lt > text.rfind(">", 0, cut) and re.match(r"</?[a-zA-Z]", text[lt:lt + 3]):
             cut = lt  # inside a tag (a bare "<" in prose is not one)
-        amp = text.rfind("&", max(0, cut - 10), cut)
-        if amp != -1 and ";" not in text[amp:cut]:
-            cut = amp  # inside an entity
         cut = max(cut, 1)
         head, text = reopen + text[:cut], text[cut:].lstrip()
         stack = _open_tags(head)

@@ -86,3 +86,20 @@ def test_split_html_long_links_still_split_at_the_visible_limit():
     chunks = t.split_html(body, 1000)
     assert len(chunks) > 1 and all(t.visible_len(c) <= 1000 and _balanced(c) for c in chunks)
     assert sum(t.visible_len(c) for c in chunks) >= t.visible_len(body) - len(chunks)
+
+
+def test_split_html_never_cuts_inside_a_link_with_a_raw_ampersand():
+    for n in range(985, 1001):
+        body = "x" * n + '<a href="https://ex.com/?q=1&p=2">[1]</a>' + " tail" * 50
+        chunks = t.split_html(body, 1000)
+        assert all(_balanced(c) and not re.search(r"<[^>]*$", c) and not re.match(r"[^<]*>", c) for c in chunks), n
+        assert all(t.visible_len(c) <= 1000 for c in chunks)
+    chunks = t.split_html("x" * 20 + '<a href="https://e.com/?a=1&b=2">link</a>' + "y" * 20, 20)
+    assert all(_balanced(c) for c in chunks) and "".join(chunks).count('href="https://e.com/?a=1&b=2"') >= 1
+
+
+def test_entities_telegram_does_not_decode_count_in_full():
+    assert t.visible_len("a&nbsp;b &mdash; &amp; &#36;") == len("a&nbsp;b &mdash; & $")
+    body = "Revenue&nbsp;up&nbsp;5%&mdash;margins&nbsp;flat\n" * 120
+    chunks = t.split_html(body)
+    assert len(chunks) > 1 and all(len(c) <= 4000 for c in chunks)
