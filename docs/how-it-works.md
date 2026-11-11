@@ -125,6 +125,8 @@ saving tokens every round; a required parameter is never hidden); `gate` (`portf
   numbered link, `[1]`, `[2]`, in order of appearance, the same URL keeping its number. Links with a
   real label, and anything in `<code>` or `<pre>`, are left alone.
 - Long answers are split under Telegram's limit without cutting a tag or entity; tags still open at
-  a split are closed and re-opened in the next message. If Telegram rejects the markup the reply is
-  re-sent as plain text.
+  a split are closed and re-opened in the next message. The limit counts the text as Telegram does,
+  after the markup is parsed, so link URLs (tickers, citations) don't count and a reply full of links
+  is not split early. If Telegram rejects the markup the reply is re-sent as plain text, its links
+  as "label (url)", or as their labels alone where the URLs would push it over the limit.
 - Replies are sent silently, without link previews. The bot never @-tags the movers bots.

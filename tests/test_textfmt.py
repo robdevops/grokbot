@@ -8,6 +8,12 @@ def test_plain_text():
         "Hi link (https://x.com/a?b=1&c=2) <5%"
 
 
+def test_plain_text_drops_urls_past_the_limit():
+    text = "<b>Hi</b> " + '<a href="https://x.com/' + "p" * 200 + '">[1]</a>'
+    assert t.plain_text(text, 4096).endswith(")")
+    assert t.plain_text(text, 20) == "Hi [1]"
+
+
 def test_md_to_html_and_disclaimer():
     assert t.md_to_html("**bold** `c` [x](https://a.b/c)") == '<b>bold</b> <code>c</code> <a href="https://a.b/c">x</a>'
     assert t.strip_disclaimer("Buy it. Not financial advice.") == "Buy it."
@@ -38,7 +44,7 @@ def _balanced(chunk: str) -> bool:
 def test_split_html_keeps_tags_balanced():
     body = "<b>H</b>\n" + ("word " * 300 + '<a href="https://x.com/q?a=1&amp;b=2">l <b>b &amp; m</b></a> ') * 12
     chunks = t.split_html(body)
-    assert len(chunks) > 1 and all(len(c) <= 4096 and _balanced(c) for c in chunks)
+    assert len(chunks) > 1 and all(t.visible_len(c) <= 4096 and _balanced(c) for c in chunks)
     assert not any(re.search(r"<[^>]*$|&\w*$", c) for c in chunks)
     strip = lambda x: re.sub(r"\s+", "", t.plain_text(x))  # noqa: E731
     assert strip("".join(chunks)) == strip(body)
@@ -47,8 +53,36 @@ def test_split_html_keeps_tags_balanced():
 def test_split_html_edge_cases():
     assert t.split_html("short") == ["short"]
     cs = t.split_html("<a href='u'>" + "x" * 9000 + "</a>")
-    assert all(len(c) <= 4096 and _balanced(c) for c in cs)
+    assert all(t.visible_len(c) <= 4096 and _balanced(c) for c in cs)
     cs = t.split_html("<5% from ATH " * 500)
-    assert all(len(c) <= 4096 for c in cs)
+    assert all(t.visible_len(c) <= 4096 for c in cs)
     cs = t.split_html("<b>" * 20 + "x " * 3000 + "</b>" * 20)
-    assert len(cs) > 1 and all(len(c) <= 4096 and _balanced(c) for c in cs)
+    assert len(cs) > 1 and all(t.visible_len(c) <= 4096 and _balanced(c) for c in cs)
+
+
+def test_visible_len_counts_what_telegram_counts():
+    assert t.visible_len('<b>a</b> <a href="https://x.com/?a=1&amp;b=2">[1]</a>') == len("a [1]")
+    assert t.visible_len("a &amp; b &lt;5% &#36;") == len("a & b <5% $")
+    assert t.visible_len("📈 up") == 5  # an emoji is two UTF-16 units
+
+
+def test_split_html_does_not_count_link_urls():
+    # A reply like a cited answer: well under the limit as text, far over it as HTML.
+    line = '<b>Name</b> (<a href="https://finance.yahoo.com/quote/ABCD">ABCD</a>) - a fact[<a href="https://example.com/' \
+        + "x" * 200 + '">1</a>]\n'
+    body = line * 40
+    assert len(body) > 4096 and t.visible_len(body) < 4096
+    assert t.split_html(body) == [body]
+
+
+def test_split_html_measures_emoji_as_two():
+    chunks = t.split_html("📈 " * 3000, 1000)
+    assert len(chunks) > 1 and all(t.visible_len(c) <= 1000 for c in chunks)
+    assert "".join(chunks).count("📈") == 3000
+
+
+def test_split_html_long_links_still_split_at_the_visible_limit():
+    body = ('<a href="https://example.com/' + "u" * 300 + '">' + "word " * 20 + "</a>\n") * 100
+    chunks = t.split_html(body, 1000)
+    assert len(chunks) > 1 and all(t.visible_len(c) <= 1000 and _balanced(c) for c in chunks)
+    assert sum(t.visible_len(c) for c in chunks) >= t.visible_len(body) - len(chunks)

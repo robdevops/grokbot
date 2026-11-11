@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import html
 import re
+from bisect import bisect_right
+from itertools import accumulate
 
 from .config import MAX_TG_MESSAGE
 
@@ -21,6 +23,10 @@ TRAILING_DISCLAIMER = re.compile(
 A_TAG_RE = re.compile(r'<a href="([^"]*)">(.*?)</a>')
 ANY_TAG_RE = re.compile(r"<[^>]+>")
 HTML_TAG_RE = re.compile(r"<(/?)([a-z][a-z0-9-]*)\b[^>]*>", re.I)
+# Telegram's limits, in characters of parsed text (`visible_len`)
+TG_TEXT_LIMIT = 4096
+TG_CAPTION_LIMIT = 1024
+ENTITY_RE = re.compile(r"&(?:#\d+|#x[0-9a-f]+|[a-z]+);", re.I)
 
 # Telegram's own tags, plus one half-written tag at the end of the text. A bare "<" in prose
 # ("<5% from ATH") is not a tag and must survive.
@@ -51,17 +57,44 @@ def md_to_html(text: str) -> str:
     return MD_CODE.sub(r"<code>\1</code>", text)
 
 
-def plain_text(text: str) -> str:
-    """Telegram HTML as plain text: links become "label (url)", other tags are dropped."""
-    return html.unescape(ANY_TAG_RE.sub("", A_TAG_RE.sub(r"\2 (\1)", text)))
+def plain_text(text: str, limit: int | None = None) -> str:
+    """Telegram HTML as plain text: links become "label (url)", other tags are dropped. Past `limit` characters
+    (Telegram's count) the links lose their URLs, so text that fitted as HTML still fits as plain text."""
+    plain = html.unescape(ANY_TAG_RE.sub("", A_TAG_RE.sub(r"\2 (\1)", text)))
+    if limit is not None and _units(plain) > limit:
+        return html.unescape(ANY_TAG_RE.sub("", text))
+    return plain
+
+
+def _units(text: str) -> int:
+    """Length as Telegram counts it: UTF-16 code units, so an emoji is 2."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _visible_upto(text: str) -> list[int]:
+    """Characters Telegram counts in text[:i], for every i: tags count nothing, an entity counts as the character it
+    stands for."""
+    widths = [2 if ord(c) > 0xFFFF else 1 for c in text]
+    for m in ENTITY_RE.finditer(text):
+        widths[m.start():m.end()] = [_units(html.unescape(m.group()))] + [0] * (m.end() - m.start() - 1)
+    for m in HTML_TAG_RE.finditer(text):  # after entities: an &amp; inside an href counts nothing
+        widths[m.start():m.end()] = [0] * (m.end() - m.start())
+    return list(accumulate(widths, initial=0))
+
+
+def visible_len(text: str) -> int:
+    """How long Telegram takes this HTML to be (its message and caption limits count the parsed text, not the
+    markup): links count only their label, however long the URL."""
+    return _visible_upto(text)[-1]
 
 
 def is_parse_error(e: Exception) -> bool:
     return "parse entities" in str(e).lower()
 
 
-def split_html(text: str, size: int = MAX_TG_MESSAGE - 96) -> list[str]:
-    """Split Telegram HTML into messages of at most `size` characters.
+def split_html(text: str, size: int = MAX_TG_MESSAGE) -> list[str]:
+    """Split Telegram HTML into messages of at most `size` characters as Telegram counts them (`visible_len`: the
+    markup and link URLs don't count, so a reply full of links is not split early).
 
     Cuts at a newline where it can, never inside a tag or an entity, and keeps every message
     well-formed: tags still open at a cut are closed there and re-opened at the start of the
@@ -70,9 +103,10 @@ def split_html(text: str, size: int = MAX_TG_MESSAGE - 96) -> list[str]:
     stack: list[tuple[str, str]] = []  # (name, opening tag) still open after the last chunk
     while True:
         reopen = "".join(tag for _, tag in stack)
-        if len(reopen) + len(text) <= size:
+        upto = _visible_upto(text)
+        if upto[-1] <= size:
             break
-        room = max(size - len(reopen) - sum(len(n) + 3 for n, _ in stack) - 32, 200)
+        room = max(bisect_right(upto, size) - 1, 1)  # the longest prefix that fits
         cut = text.rfind("\n", 0, room)
         if cut <= 0:
             cut = room

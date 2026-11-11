@@ -13,7 +13,7 @@ from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from ...context import Ctx
-from ...textfmt import is_parse_error, plain_text
+from ...textfmt import TG_CAPTION_LIMIT, is_parse_error, plain_text
 from . import ChartError, build, render
 
 log = logging.getLogger("bot")
@@ -80,7 +80,7 @@ async def upload(ctx: Ctx, chat_id: int, message_id: int, images: list[bytes], l
 async def swap(query, photo, caption: str, markup):
     """Replace the picture (and keep the model's caption), HTML first and plain text if Telegram rejects it."""
     for html_ok in (True, False):
-        text = (caption if html_ok else plain_text(caption)) or None
+        text = (caption if html_ok else plain_text(caption, TG_CAPTION_LIMIT)) or None
         try:
             return await query.edit_message_media(
                 InputMediaPhoto(photo, caption=text, parse_mode=ParseMode.HTML if html_ok and text else None),

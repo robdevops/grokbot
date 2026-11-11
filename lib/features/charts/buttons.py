@@ -15,7 +15,7 @@ from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from ...context import Ctx
-from ...textfmt import is_parse_error, plain_text
+from ...textfmt import TG_CAPTION_LIMIT, is_parse_error, plain_text
 from . import ChartError, build, render
 
 log = logging.getLogger("bot")
@@ -155,7 +155,7 @@ async def on_button(ctx: Ctx, update: Update, context: ContextTypes.DEFAULT_TYPE
     image = await asyncio.to_thread(render.png, chart)
     caption = model_caption if original else caption_for(chart)
     for html_ok in (True, False):
-        text = (caption if html_ok else plain_text(caption)) or None
+        text = (caption if html_ok else plain_text(caption, TG_CAPTION_LIMIT)) or None
         try:
             await query.edit_message_media(InputMediaPhoto(image, caption=text, parse_mode=ParseMode.HTML if html_ok and text else None),
                                            reply_markup=keyboard(period))
