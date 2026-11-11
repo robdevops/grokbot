@@ -13,6 +13,16 @@ from lib.store import Store
 BASE_ENV = {"TELEGRAM_BOT_TOKEN": "1:x", "OPENROUTER_API_KEY": "key", "ADMIN_ONLY": "off"}  # admin-only has its own tests
 
 
+@pytest.fixture(autouse=True)
+def _us_exchanges():
+    """The known-tickers refresh fills quote_links.US_EXCHANGES; put it back so a later test on the same worker
+    doesn't find NVDA placed on NASDAQ."""
+    from lib import quote_links
+    before = dict(quote_links.US_EXCHANGES)
+    yield
+    quote_links.set_us_exchanges(before)
+
+
 @pytest.fixture
 def env():
     return dict(BASE_ENV)

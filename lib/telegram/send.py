@@ -10,7 +10,7 @@ from telegram.constants import ParseMode
 from telegram.error import BadRequest, TelegramError
 
 from ..store import Store
-from ..textfmt import is_parse_error, plain_text, split_html
+from ..textfmt import TG_CAPTION_LIMIT, TG_TEXT_LIMIT, is_parse_error, plain_text, split_html
 
 log = logging.getLogger("bot")
 # Otherwise a list of Yahoo-linked tickers gets a big preview card under it.
@@ -28,7 +28,7 @@ async def send_html(bot, chat_id: int, text: str, reply_markup=None):
         if not is_parse_error(e):
             raise
         return await bot.send_message(
-            chat_id, plain_text(text), link_preview_options=NO_PREVIEW,
+            chat_id, plain_text(text, TG_TEXT_LIMIT), link_preview_options=NO_PREVIEW,
             disable_notification=True, reply_markup=reply_markup)
 
 
@@ -44,7 +44,7 @@ async def reply_html(msg: Message, text: str, *, quote: bool = True, reply_marku
         log.warning("Bad HTML from the model, sending as plain text: %s", e)
         log.debug("The text that failed: %r", text)
         return await msg.reply_text(
-            plain_text(text), do_quote=quote, disable_notification=True,
+            plain_text(text, TG_TEXT_LIMIT), do_quote=quote, disable_notification=True,
             link_preview_options=NO_PREVIEW, reply_markup=reply_markup)
 
 
@@ -81,7 +81,7 @@ async def reply_with_photo(msg: Message, photo: bytes, html_text: str, store: St
 async def _send_photo(msg: Message, photo: bytes, caption: str, quote: bool, markup) -> Message:
     kw = {"do_quote": quote, "disable_notification": True, "reply_markup": markup}
     for html_ok in (True, False):  # Telegram HTML, then plain text if it is rejected
-        text = (caption if html_ok else plain_text(caption)) or None
+        text = (caption if html_ok else plain_text(caption, TG_CAPTION_LIMIT)) or None
         try:
             return await msg.reply_photo(photo, caption=text, parse_mode=ParseMode.HTML if html_ok and text else None, **kw)
         except BadRequest as e:

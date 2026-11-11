@@ -18,7 +18,7 @@ from ..features.periods import backfill
 from ..features.periods.windows import describe_scope, flush_scope
 from ..msgtext import log_preview
 from ..store import is_dm
-from ..textfmt import is_parse_error, plain_text
+from ..textfmt import TG_TEXT_LIMIT, is_parse_error, plain_text
 from .access import is_admin
 from .draft import keep_typing, start_typing
 from .send import NO_PREVIEW, reply_chunks, reply_html
@@ -103,7 +103,7 @@ async def edit_in_place(query, text: str, markup) -> None:
     for html_ok in (True, False):
         try:
             await query.edit_message_text(
-                text if html_ok else plain_text(text), parse_mode=ParseMode.HTML if html_ok else None,
+                text if html_ok else plain_text(text, TG_TEXT_LIMIT), parse_mode=ParseMode.HTML if html_ok else None,
                 reply_markup=markup, link_preview_options=NO_PREVIEW)
             return
         except BadRequest as e:

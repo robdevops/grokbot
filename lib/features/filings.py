@@ -17,7 +17,7 @@ from ..ask import ask
 from ..context import Ctx
 from ..llm.gate import Route
 from ..prompts import FILING_PROMPT
-from ..textfmt import md_to_html, split_html
+from ..textfmt import md_to_html, split_html, visible_len
 
 log = logging.getLogger("bot")
 
@@ -179,8 +179,8 @@ async def build(ctx: Ctx, kind: Kind, ticker: str, section: str, chat_id: int) -
     if not text:
         return None, False
     text, note = cut_note(text)
-    body, room = to_html(oldest_first(text) if kind.oldest_first else text), LIMIT - len(note)
-    keep = len(body) <= room
+    body, room = to_html(oldest_first(text) if kind.oldest_first else text), LIMIT - visible_len(note)
+    keep = visible_len(body) <= room
     if not keep and not kind.via_model:
         short = await summarise(ctx, kind, ticker, section, room, chat_id)
         body, keep = short or body, bool(short)
